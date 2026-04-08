@@ -2383,7 +2383,8 @@ dependencies = [
 
 [[package]]
 name = "wf-config"
-version = "0.1.0"
+version = "0.1.2"
+source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v0.1.2#56f162fbb975a6f40c9364c515a5ba252b4cde57"
 dependencies = [
  "anyhow",
  "glob",
@@ -2398,7 +2399,8 @@ dependencies = [
 
 [[package]]
 name = "wf-core"
-version = "0.1.0"
+version = "0.1.2"
+source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v0.1.2#56f162fbb975a6f40c9364c515a5ba252b4cde57"
 dependencies = [
  "anyhow",
  "arrow",
@@ -2421,7 +2423,8 @@ dependencies = [
 
 [[package]]
 name = "wf-engine"
-version = "0.1.0"
+version = "0.1.2"
+source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v0.1.2#56f162fbb975a6f40c9364c515a5ba252b4cde57"
 dependencies = [
  "anyhow",
  "clap",
@@ -2434,7 +2437,8 @@ dependencies = [
 
 [[package]]
 name = "wf-lang"
-version = "0.1.0"
+version = "0.1.2"
+source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v0.1.2#56f162fbb975a6f40c9364c515a5ba252b4cde57"
 dependencies = [
  "anyhow",
  "regex-syntax",
@@ -2443,7 +2447,8 @@ dependencies = [
 
 [[package]]
 name = "wf-runtime"
-version = "0.1.0"
+version = "0.1.2"
+source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v0.1.2#56f162fbb975a6f40c9364c515a5ba252b4cde57"
 dependencies = [
  "anyhow",
  "arrow",
@@ -2470,6 +2475,7 @@ dependencies = [
 [[package]]
 name = "wf-vars"
 version = "0.1.0"
+source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v0.1.2#56f162fbb975a6f40c9364c515a5ba252b4cde57"
 dependencies = [
  "anyhow",
  "toml 0.9.12+spec-1.1.0",

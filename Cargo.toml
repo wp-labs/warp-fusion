@@ -10,6 +10,11 @@ license = "Apache-2.0"
 serde = { version = "1.0", features = ["derive"] }
 anyhow = "1.0"
 winnow = "0.7"
+wf-engine = { git = "https://github.com/wp-labs/wp-reactor.git", tag = "v0.1.2" }
+wf-core = { git = "https://github.com/wp-labs/wp-reactor.git", tag = "v0.1.2" }
+wf-config = { git = "https://github.com/wp-labs/wp-reactor.git", tag = "v0.1.2" }
+wf-lang = { git = "https://github.com/wp-labs/wp-reactor.git", tag = "v0.1.2" }
+wf-vars = { git = "https://github.com/wp-labs/wp-reactor.git", tag = "v0.1.2" }
 
 [package]
 name = "warp-fusion"
@@ -24,7 +29,7 @@ path = "src/main.rs"
 [dependencies]
 anyhow.workspace = true
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "signal"] }
-wf-engine = { path = "../wp-reactor/crates/wf-engine" }
+wf-engine.workspace = true
 
 [dev-dependencies]
 tempfile = "3"

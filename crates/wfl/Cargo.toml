@@ -13,11 +13,11 @@ name = "wfl"
 path = "src/lib.rs"
 
 [dependencies]
-wf-config = { path = "../../../wp-reactor/crates/wf-config" }
-wf-lang = { path = "../../../wp-reactor/crates/wf-lang" }
-wf-core = { path = "../../../wp-reactor/crates/wf-core" }
+wf-config.workspace = true
+wf-lang.workspace = true
+wf-core.workspace = true
 wfgen = { path = "../wfgen" }
-wf-vars = { path = "../../../wp-reactor/crates/wf-vars" }
+wf-vars.workspace = true
 tree-sitter = "0.22"
 tree-sitter-wfl = { git = "https://github.com/wp-labs/tree-sitter-wfl.git", branch = "main"}
 anyhow.workspace = true

@@ -9,10 +9,10 @@ name = "wfgen"
 path = "src/main.rs"
 
 [dependencies]
-wf-core = { path = "../../../wp-reactor/crates/wf-core" }
-wf-config = { path = "../../../wp-reactor/crates/wf-config" }
-wf-lang = { path = "../../../wp-reactor/crates/wf-lang" }
-wf-vars = { path = "../../../wp-reactor/crates/wf-vars" }
+wf-core.workspace = true
+wf-config.workspace = true
+wf-lang.workspace = true
+wf-vars.workspace = true
 winnow = { workspace = true }
 anyhow = { workspace = true }
 serde = { workspace = true }

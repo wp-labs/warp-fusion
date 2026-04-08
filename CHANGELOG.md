@@ -10,7 +10,9 @@ layout.
 
 ### Changed
 
-- Reserved for changes after `0.1.0`.
+- Switched `wp-reactor` crate reuse from local path dependencies to the GitHub
+  repository `https://github.com/wp-labs/wp-reactor.git` pinned at tag
+  `v0.1.2`.
 
 ## [0.1.0]
 
@@ -28,7 +30,7 @@ layout.
   rendered config output, variable inspection, origins tracing, and expanded
   diff reporting.
 - Wired the workspace to reuse core runtime and language crates from the
-  adjacent `wp-reactor` repository through path dependencies.
+  shared `wp-reactor` codebase.
 
 ### Notes
 

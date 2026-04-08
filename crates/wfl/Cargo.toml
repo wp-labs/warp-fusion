@@ -1,0 +1,26 @@
+[package]
+name = "wfl"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "wfl"
+path = "src/main.rs"
+
+[lib]
+name = "wfl"
+path = "src/lib.rs"
+
+[dependencies]
+wf-config = { path = "../../../wp-reactor/crates/wf-config" }
+wf-lang = { path = "../../../wp-reactor/crates/wf-lang" }
+wf-core = { path = "../../../wp-reactor/crates/wf-core" }
+wfgen = { path = "../wfgen" }
+wf-vars = { path = "../../../wp-reactor/crates/wf-vars" }
+tree-sitter = "0.22"
+tree-sitter-wfl = { git = "https://github.com/wp-labs/tree-sitter-wfl.git", branch = "main"}
+anyhow.workspace = true
+clap = { version = "4", features = ["derive"] }
+serde_json = "1"
+chrono = "0.4"

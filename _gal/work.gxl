@@ -1,0 +1,50 @@
+extern mod rust,ver { path = "@{PATH}"; }
+
+mod envs  {
+   env _common  : rust_env.init   {
+    root      = ".";
+    prj_key   = "you-proj" ;
+    target_name = "bin-name";
+
+  }
+
+  #[usage(desp="use debug ",color="blue")]
+  env debug :  _common,rust_env.debug {
+  }
+  #[usage(desp="use debug ",color="blue")]
+  env release :  _common,rust_env.release{
+  }
+
+  #[usage(desp="default mamcos", color="green")]
+  env default    : envs._common,debug;
+}
+
+mod main  {
+      bld_bins = "target/${ENV_BUILD_NAME}" ;
+      HOME_BIN = "${HOME}/bin" ;
+
+    #[auto_load(entry)]
+    flow __into | conf {
+    }
+    #[task(name="config")]
+    flow conf  {
+    }
+
+  #[task(name="${ENV_PRJ_KEY}@build")]
+  flow ver.use | conf | rust_flow.build | @build | _pub_local {
+      gx.echo(  "${MAIN_HOME_BIN}" );
+  }
+  #[usage(desp="lint code")]
+  flow lint | rust_flow.lint {} ;
+
+  #[task(name="test")]
+  flow build  |   @test  {
+    gx.cmd ( "cargo test --all ${ENV_BUILD_FLAG}", log : "1" , out:"true"  );
+  }
+
+  #[task(name="pub to local")]
+  flow _pub_local   {
+    gx.cmd (  "mkdir -p ${MAIN_HOME_BIN}" );
+    gx.cmd (  "cp ${MAIN_BLD_BINS}/${ENV_TARGET_NAME} ${MAIN_HOME_BIN}/"  );
+  }
+}

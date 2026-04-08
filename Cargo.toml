@@ -18,7 +18,7 @@ wf-vars = { git = "https://github.com/wp-labs/wp-reactor.git", tag = "v0.1.2" }
 
 [package]
 name = "warp-fusion"
-version = "0.1.1" #@gxl:set(version)
+version = "0.1.2" #@gxl:set(version)
 edition.workspace = true
 license.workspace = true
 

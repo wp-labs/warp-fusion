@@ -1,0 +1,57 @@
+version: 2
+
+# ===========================================================================
+# WarpParse Dependabot Configuration - Alpha Only
+# ===========================================================================
+#
+# Dependabot only targets `alpha`.
+# `alpha` is used as the integration branch for dependency updates.
+#
+# ===========================================================================
+
+updates:
+  # Cargo dependencies are updated only on alpha.
+  - package-ecosystem: cargo
+    directory: "/"
+    target-branch: alpha
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: Asia/Shanghai
+    open-pull-requests-limit: 10
+    labels:
+      - "📦 dependencies"
+      - "alpha"
+
+    groups:
+      # Group wp-labs dependencies together
+      wp-dependencies:
+        patterns:
+          - "wp-*"
+        update-types:
+          - "minor"
+          - "patch"
+
+      # Group external dependencies
+      external-deps:
+        patterns:
+          - "*"
+        exclude-patterns:
+          - "wp-*"
+        update-types:
+          - "minor"
+          - "patch"
+
+    # Alpha: No ignore rules - accept everything for fast iteration
+
+  # GitHub Actions updates are also routed to alpha.
+  - package-ecosystem: github-actions
+    directory: "/"
+    target-branch: alpha
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 5
+    labels:
+      - "📦 dependencies"
+      - "ci"

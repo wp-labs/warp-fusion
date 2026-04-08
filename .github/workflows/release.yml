@@ -1,0 +1,425 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*.*.*"]
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build-matrix:
+    name: Build ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+      attestations: write
+      id-token: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            can-run: true
+          - os: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
+            can-run: true
+          - os: macos-14
+            target: aarch64-apple-darwin
+            can-run: true
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+          targets: ${{ matrix.target }}
+
+      - name: Cargo build
+        env:
+          MACOSX_DEPLOYMENT_TARGET: ${{ runner.os == 'macOS' && '11.0' || '' }}
+        run: cargo build --release --target ${{ matrix.target }}
+
+      - name: Show version
+        if: matrix.can-run == true
+        run: ./target/${{ matrix.target }}/release/wparse --version
+
+      - name: Determine wp-examples branch
+        if: matrix.can-run == true
+        id: examples-branch
+        run: |
+          VERSION="${{ github.ref_name }}"
+          if [[ "$VERSION" == *"-alpha"* ]]; then
+            BRANCH="alpha"
+          elif [[ "$VERSION" == *"-beta"* ]]; then
+            BRANCH="beta"
+          else
+            BRANCH="main"
+          fi
+          echo "branch=$BRANCH" >> $GITHUB_OUTPUT
+          echo "Using wp-examples branch: $BRANCH"
+
+      - name: Clone wp-examples
+        if: matrix.can-run == true
+        run: |
+          git clone \
+            --branch "${{ steps.examples-branch.outputs.branch }}" \
+            --single-branch \
+            https://github.com/wp-labs/wp-examples \
+            /tmp/wp-examples
+
+      - name: Run integration tests
+        if: matrix.can-run == true
+        run: |
+          export PATH="$PWD/target/${{ matrix.target }}/release:$PATH"
+          cd /tmp/wp-examples/core
+          bash run_all.sh
+
+      - name: Package artifacts
+        run: |
+          set -euo pipefail
+          ARTIFACT="${{ github.event.repository.name }}-${{ github.ref_name }}-${{ matrix.target }}"
+          mkdir -p artifacts
+          cp -av target/${{ matrix.target }}/release/wparse artifacts/
+          cp -av target/${{ matrix.target }}/release/wpgen artifacts/
+          cp -av target/${{ matrix.target }}/release/wprescue artifacts/
+          cp -av target/${{ matrix.target }}/release/wproj artifacts/
+          tar -czf "${ARTIFACT}.tar.gz" artifacts
+
+      - name: Attest Build Provenance
+        uses: actions/attest-build-provenance@v3
+        continue-on-error: true
+        with:
+          subject-path: ${{ github.event.repository.name }}-${{ github.ref_name }}-${{ matrix.target }}.tar.gz
+
+      - uses: actions/upload-artifact@v6
+        with:
+          name: ${{ github.event.repository.name }}-${{ github.ref_name }}-${{ matrix.target }}
+          path: ${{ github.event.repository.name }}-${{ github.ref_name }}-${{ matrix.target }}.tar.gz
+          if-no-files-found: error
+          retention-days: 7
+
+  docker-build:
+    needs: [build-matrix]
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+      packages: write
+      attestations: write
+      id-token: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Download amd64 artifact
+        uses: actions/download-artifact@v7
+        with:
+          name: ${{ github.event.repository.name }}-${{ github.ref_name }}-x86_64-unknown-linux-gnu
+          path: docker-build/amd64-tar
+
+      - name: Download arm64 artifact
+        uses: actions/download-artifact@v7
+        with:
+          name: ${{ github.event.repository.name }}-${{ github.ref_name }}-aarch64-unknown-linux-gnu
+          path: docker-build/arm64-tar
+
+      - name: Extract binaries
+        run: |
+          set -euo pipefail
+          cd docker-build
+          cd amd64-tar && tar -xzf *.tar.gz && cd ..
+          mkdir -p amd64
+          mv amd64-tar/artifacts/* amd64/
+          chmod +x amd64/*
+          rm -rf amd64-tar
+          cd arm64-tar && tar -xzf *.tar.gz && cd ..
+          mkdir -p arm64
+          mv arm64-tar/artifacts/* arm64/
+          chmod +x arm64/*
+          rm -rf arm64-tar
+          cp ../docker/Dockerfile .
+          cp -r ../docker/default_setting .
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata (tags, labels)
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=raw,value=latest
+
+      - name: Build and push Docker image
+        id: push
+        uses: docker/build-push-action@v6
+        with:
+          context: docker-build
+          file: docker-build/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
+      - name: Generate artifact attestation
+        uses: actions/attest-build-provenance@v3
+        continue-on-error: true
+        with:
+          subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: true
+
+  release:
+    needs: [build-matrix, docker-build]
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Determine branch
+        id: branch
+        run: |
+          VERSION="${{ github.ref_name }}"
+          if [[ "$VERSION" == *"-alpha"* ]]; then
+            BRANCH="alpha"
+          elif [[ "$VERSION" == *"-beta"* ]]; then
+            BRANCH="beta"
+          else
+            BRANCH="main"
+          fi
+          echo "branch=$BRANCH" >> $GITHUB_OUTPUT
+          echo "Using branch: $BRANCH"
+
+      - name: Extract changelog
+        id: changelog
+        run: |
+          bash scripts/extract-changelog.sh ${{ github.ref_name }}
+
+          # Read the extracted changelogs
+          CHANGELOG_ZH=$(cat /tmp/changelog-zh.md)
+          CHANGELOG_EN=$(cat /tmp/changelog-en.md)
+
+          # Save to output (escape for multiline)
+          echo "changelog_zh<<EOF" >> $GITHUB_OUTPUT
+          echo "$CHANGELOG_ZH" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+          echo "changelog_en<<EOF" >> $GITHUB_OUTPUT
+          echo "$CHANGELOG_EN" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Download Artifact
+        uses: actions/download-artifact@v7
+        with:
+          path: artifacts
+          pattern: warp-parse-*
+          merge-multiple: true
+
+      - name: Release
+        uses: softprops/action-gh-release@a06a81a03ee405af7f2048a818ed3f03bbf83c7b
+        with:
+          name: ${{ github.ref_name }}
+          tag_name: ${{ github.ref_name }}
+          generate_release_notes: false
+          fail_on_unmatched_files: true
+          body: |
+            # WarpParse ${{ github.ref_name }}
+
+            ${{ steps.changelog.outputs.changelog_en }}
+
+            ---
+
+            <details>
+            <summary>中文版 Changelog / Chinese Version</summary>
+
+            ${{ steps.changelog.outputs.changelog_zh }}
+
+            </details>
+
+            ---
+
+            ## 📦 Installation
+
+            ### Binary Downloads
+            Download the pre-built binaries for your platform from the assets below.
+
+            ### Quick Install Script
+            ```bash
+            curl -sSf https://get.warpparse.ai/inst-x.sh | bash -s -- wparse ${{ steps.branch.outputs.branch }}
+            ```
+
+            ### Docker Image
+            Pull and run the Docker image:
+            ```shell
+            # Pull the specific version
+            docker pull ghcr.io/${{ github.repository }}:${{ github.ref_name }}
+
+            # Or pull the latest version
+            docker pull ghcr.io/${{ github.repository }}:latest
+
+            # Run the container
+            docker run --rm ghcr.io/${{ github.repository }}:${{ github.ref_name }} wparse --help
+            ```
+
+            ## 🔐 Verification
+
+            All artifacts are signed with this repo's identity using Sigstore.
+            You can verify the signatures using the GitHub CLI:
+
+            ```shell
+            gh attestation verify --owner ${{ github.repository_owner }} <artifact-file>
+            ```
+
+            ## 📚 Documentation
+
+            - [Release Management](https://github.com/wp-labs/warp-parse/blob/${{ steps.branch.outputs.branch }}/docs/RELEASE_MANAGEMENT.md)
+            - [User Guide](https://github.com/wp-labs/warp-parse/tree/${{ steps.branch.outputs.branch }}/docs/user-guide)
+            - [Performance Benchmarks](https://github.com/wp-labs/warp-parse/blob/${{ steps.branch.outputs.branch }}/docs/performance.md)
+
+            ## 🐛 Found an Issue?
+
+            Please report it at: https://github.com/wp-labs/warp-parse/issues
+
+          token: ${{ secrets.GITHUB_TOKEN }}
+          prerelease: ${{ contains(github.ref, '-alpha') || contains(github.ref, '-beta') }}
+          files: artifacts/*
+
+  update-wp-install-manifest:
+    needs: [release]
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+    concurrency:
+      group: wp-install-updates
+      cancel-in-progress: false
+    steps:
+      - name: Determine channel
+        id: meta
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF_NAME}"
+          if [[ "$TAG" == *"-alpha"* ]]; then
+            CHANNEL="alpha"
+          elif [[ "$TAG" == *"-beta"* ]]; then
+            CHANNEL="beta"
+          else
+            CHANNEL="stable"
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "channel=$CHANNEL" >> "$GITHUB_OUTPUT"
+
+      - name: Ensure wp-install token exists
+        env:
+          WP_INSTALL_TOKEN: ${{ secrets.WP_INSTALL_TOKEN }}
+        run: |
+          if [[ -z "${WP_INSTALL_TOKEN}" ]]; then
+            echo "missing required secret: WP_INSTALL_TOKEN"
+            exit 1
+          fi
+
+      - name: Fetch release metadata
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${{ steps.meta.outputs.tag }}" > /tmp/release.json
+
+      - name: Build assets map and validate
+        run: |
+          set -euo pipefail
+          jq -c '
+            [ .assets[]
+              | select(.name | test("^warp-parse-v[^/]+-(aarch64-apple-darwin|aarch64-unknown-linux-gnu|x86_64-unknown-linux-gnu)\\.tar\\.gz$"))
+              | {
+                  key: (.name | capture("-(?<target>aarch64-apple-darwin|aarch64-unknown-linux-gnu|x86_64-unknown-linux-gnu)\\.tar\\.gz$").target),
+                  value: {
+                    url: .browser_download_url,
+                    sha256: ((.digest // "") | sub("^sha256:"; "") | ascii_downcase)
+                  }
+                }
+            ] | from_entries
+          ' /tmp/release.json > /tmp/assets.json
+
+          jq -e '
+            (keys | sort) == ["aarch64-apple-darwin","aarch64-unknown-linux-gnu","x86_64-unknown-linux-gnu"] and
+            (to_entries | all(.value.url | startswith("https://github.com/wp-labs/warp-parse/releases/download/"))) and
+            (to_entries | all(.value.sha256 | test("^[0-9a-f]{64}$")))
+          ' /tmp/assets.json >/dev/null
+
+      - name: Checkout wp-install
+        uses: actions/checkout@v6
+        with:
+          repository: wp-labs/wp-install
+          token: ${{ secrets.WP_INSTALL_TOKEN }}
+          path: wp-install
+
+      - name: Update manifest and history
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.meta.outputs.tag }}"
+          CHANNEL="${{ steps.meta.outputs.channel }}"
+          PUBLISHED_AT="$(jq -r '.published_at // empty' /tmp/release.json)"
+          if [[ -z "$PUBLISHED_AT" ]]; then
+            PUBLISHED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          fi
+
+          cd wp-install
+          MANIFEST="updates/${CHANNEL}/manifest.json"
+          HISTORY="updates/${CHANNEL}/versions/${TAG}.json"
+          mkdir -p "$(dirname "$MANIFEST")" "$(dirname "$HISTORY")"
+
+          jq -n \
+            --arg version "$TAG" \
+            --arg channel "$CHANNEL" \
+            --arg published_at "$PUBLISHED_AT" \
+            --arg git_ref "$TAG" \
+            --arg git_commit "${GITHUB_SHA}" \
+            --slurpfile assets /tmp/assets.json \
+            '{
+              version: $version,
+              channel: $channel,
+              published_at: $published_at,
+              git_ref: $git_ref,
+              git_commit: $git_commit,
+              assets: $assets[0]
+            }' > "$MANIFEST"
+
+          cp "$MANIFEST" "$HISTORY"
+
+      - name: Commit and push metadata repo
+        run: |
+          set -euo pipefail
+          cd wp-install
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add updates
+          if git diff --cached --quiet; then
+            echo "no manifest changes"
+            exit 0
+          fi
+          git commit -m "chore(updates): ${{ steps.meta.outputs.tag }} (${{ steps.meta.outputs.channel }})"
+          git push

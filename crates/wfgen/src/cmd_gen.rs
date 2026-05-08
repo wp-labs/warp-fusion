@@ -1,12 +1,13 @@
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 
-use anyhow::Context;
+use orion_error::conversion::SourceErr;
 use rand::SeedableRng;
 use rand::rngs::StdRng;
 
 use wfgen::datagen::fault_gen::apply_faults;
 use wfgen::datagen::generate;
+use wfgen::error::{self, WfgenReason, WfgenResult};
 use wfgen::loader::load_from_uses;
 use wfgen::oracle::{extract_oracle_tolerances, run_oracle};
 use wfgen::output::arrow_ipc::write_arrow_ipc;
@@ -27,21 +28,27 @@ pub(crate) fn run(
     no_oracle: bool,
     send: bool,
     addr: String,
-) -> anyhow::Result<()> {
+) -> WfgenResult<()> {
     let normalized_format = match format.as_str() {
         "jsonl" => "jsonl",
         "arrow" | "arrow-ipc" | "ipc" => "arrow",
         _ => "",
     };
     if normalized_format.is_empty() {
-        anyhow::bail!(
-            "unsupported format: '{}'. Supported: 'jsonl', 'arrow' ('arrow-ipc' alias).",
-            format
+        return error::fail(
+            WfgenReason::Validation,
+            format!(
+                "unsupported format: '{}'. Supported: 'jsonl', 'arrow' ('arrow-ipc' alias).",
+                format
+            ),
         );
     }
 
-    let wfg_content = std::fs::read_to_string(&scenario).context("reading .wfg file")?;
-    let wfg = parse_wfg(&wfg_content).context("parsing .wfg file")?;
+    let wfg_content = std::fs::read_to_string(&scenario).source_err(
+        WfgenReason::Io,
+        format!("reading .wfg file: {}", scenario.display()),
+    )?;
+    let wfg = parse_wfg(&wfg_content)?;
     let output_case = scenario
         .file_stem()
         .map(|s| s.to_string_lossy().to_string())
@@ -58,7 +65,10 @@ pub(crate) fn run(
         for e in &errors {
             eprintln!("  {}", e);
         }
-        anyhow::bail!("{} validation error(s) found", errors.len());
+        return error::fail(
+            WfgenReason::Validation,
+            format!("{} validation error(s) found", errors.len()),
+        );
     }
 
     // Compile WFL rules
@@ -86,15 +96,16 @@ pub(crate) fn run(
     if !compile_errors.is_empty() {
         if expected_requested {
             for e in &compile_errors {
-                eprintln!("Error: WFL compilation failed: {}", e);
+                eprintln!("Error: WFL compilation failed: {}", e.report().render());
             }
-            anyhow::bail!(
+            return error::fail(
+                WfgenReason::Validation,
                 "WFL compilation failed while expected output is enabled; \
-                 fix the WFL errors or use --no-oracle"
+                 fix the WFL errors or use --no-oracle",
             );
         } else {
             for e in &compile_errors {
-                eprintln!("Warning: WFL compilation failed: {}", e);
+                eprintln!("Warning: WFL compilation failed: {}", e.report().render());
             }
         }
     }
@@ -107,10 +118,12 @@ pub(crate) fn run(
     let mut expected_alert_count = 0;
     if expected_enabled {
         let start = wfg.scenario.time_clause.start.parse().map_err(|e| {
-            anyhow::anyhow!(
-                "invalid start time '{}': {}",
-                wfg.scenario.time_clause.start,
-                e
+            error::error(
+                WfgenReason::Generation,
+                format!(
+                    "invalid start time '{}': {}",
+                    wfg.scenario.time_clause.start, e
+                ),
             )
         })?;
         let duration = wfg.scenario.time_clause.duration;
@@ -148,8 +161,12 @@ pub(crate) fn run(
             .map(extract_oracle_tolerances)
             .unwrap_or_default();
         let meta_file = out.join(format!("{}.except.meta.jsonl", output_case));
-        let meta_json = serde_json::to_string(&tolerances)?;
-        std::fs::write(&meta_file, meta_json)?;
+        let meta_json = serde_json::to_string(&tolerances).source_err(
+            WfgenReason::Serialization,
+            "serializing oracle tolerance metadata",
+        )?;
+        std::fs::write(&meta_file, meta_json)
+            .source_err(WfgenReason::Io, format!("writing {}", meta_file.display()))?;
         println!("Expected meta -> {}", meta_file.display());
     }
     let _ = expected_alert_count;
@@ -169,10 +186,12 @@ pub(crate) fn run(
     // so verify can compare clean vs faulted outcomes.
     if expected_enabled && has_faults {
         let start = wfg.scenario.time_clause.start.parse().map_err(|e| {
-            anyhow::anyhow!(
-                "invalid start time '{}': {}",
-                wfg.scenario.time_clause.start,
-                e
+            error::error(
+                WfgenReason::Generation,
+                format!(
+                    "invalid start time '{}': {}",
+                    wfg.scenario.time_clause.start, e
+                ),
             )
         })?;
         let duration = wfg.scenario.time_clause.duration;

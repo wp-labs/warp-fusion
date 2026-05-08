@@ -1,4 +1,5 @@
 pub mod datagen;
+pub mod error;
 pub mod loader;
 pub mod oracle;
 pub mod output;

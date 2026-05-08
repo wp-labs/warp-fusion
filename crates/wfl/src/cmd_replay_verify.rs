@@ -2,8 +2,9 @@ use std::io::{BufReader, IsTerminal};
 use std::path::Path;
 use std::path::PathBuf;
 
-use anyhow::Context;
+use orion_error::conversion::SourceErr;
 
+use crate::error::{self, WflReason, WflResult, WflStructExt};
 use wf_vars::ConfigVarContext;
 use wfgen::oracle::OracleTolerances;
 use wfgen::output::jsonl::read_oracle_jsonl;
@@ -27,26 +28,26 @@ pub fn run(
     time_tolerance: Option<f64>,
     meta: Option<PathBuf>,
     format: String,
-) -> anyhow::Result<()> {
+) -> WflResult<()> {
     use wf_config::project::{load_schemas, load_wfl_with_context, parse_vars};
 
     let resolved = resolve_paths(file, case.as_deref(), &data_dir, input, expected, meta)?;
 
-    let cwd = std::env::current_dir()?;
-    let mut var_map = parse_vars(&vars)?;
+    let cwd = std::env::current_dir().source_err(WflReason::Io, "reading cwd")?;
+    let mut var_map = parse_vars(&vars).wfl()?;
     var_map
         .entry("WORK_DIR".to_string())
         .or_insert_with(|| cwd.to_string_lossy().to_string());
     let ctx = ConfigVarContext::from_explicit_vars(var_map);
     let color = std::io::stderr().is_terminal();
 
-    let all_schemas = load_schemas(&schemas, &cwd)?;
-    let source = load_wfl_with_context(&resolved.file, &ctx, Some(&cwd))?;
+    let all_schemas = load_schemas(&schemas, &cwd).wfl()?;
+    let source = load_wfl_with_context(&resolved.file, &ctx, Some(&cwd)).wfl()?;
 
-    let reader = BufReader::new(
-        std::fs::File::open(&resolved.input)
-            .map_err(|e| anyhow::anyhow!("failed to open {}: {}", resolved.input.display(), e))?,
-    );
+    let reader = BufReader::new(std::fs::File::open(&resolved.input).source_err(
+        WflReason::Io,
+        format!("opening {}", resolved.input.display()),
+    )?);
     let replay = crate::cmd_replay::replay_events_for_verify(&source, &all_schemas, reader, color)?;
 
     let actual: Vec<ActualAlert> = replay
@@ -62,14 +63,17 @@ pub fn run(
         })
         .collect();
 
-    let expected_alerts = read_oracle_jsonl(&resolved.expected)
-        .with_context(|| format!("reading expected: {}", resolved.expected.display()))?;
+    let expected_alerts = read_oracle_jsonl(&resolved.expected).wfl()?;
 
     let base_tolerances = if let Some(meta_path) = &resolved.meta {
-        let content = std::fs::read_to_string(meta_path)
-            .with_context(|| format!("reading meta: {}", meta_path.display()))?;
-        serde_json::from_str::<OracleTolerances>(&content)
-            .with_context(|| format!("parsing meta: {}", meta_path.display()))?
+        let content = std::fs::read_to_string(meta_path).source_err(
+            WflReason::Io,
+            format!("reading meta: {}", meta_path.display()),
+        )?;
+        serde_json::from_str::<OracleTolerances>(&content).source_err(
+            WflReason::Serialization,
+            format!("parsing meta: {}", meta_path.display()),
+        )?
     } else {
         OracleTolerances::default()
     };
@@ -119,7 +123,8 @@ pub fn run(
             println!("{}", report.to_markdown());
         }
         _ => {
-            let json = serde_json::to_string_pretty(&report)?;
+            let json = serde_json::to_string_pretty(&report)
+                .source_err(WflReason::Serialization, "serializing verify report")?;
             println!("{}", json);
         }
     }
@@ -145,7 +150,7 @@ fn resolve_paths(
     input: Option<PathBuf>,
     expected: Option<PathBuf>,
     meta: Option<PathBuf>,
-) -> anyhow::Result<ResolvedPaths> {
+) -> WflResult<ResolvedPaths> {
     let resolved_file = resolve_rule_file(file, case)?;
 
     if let Some(case_name) = case {
@@ -169,13 +174,15 @@ fn resolve_paths(
     }
 
     let input_path = input.ok_or_else(|| {
-        anyhow::anyhow!(
-            "missing --input. Provide --input/--expected, or use --case <name> [--data-dir <dir>]."
+        error::error(
+            WflReason::Verify,
+            "missing --input. Provide --input/--expected, or use --case <name> [--data-dir <dir>].",
         )
     })?;
     let expected_path = expected.ok_or_else(|| {
-        anyhow::anyhow!(
-            "missing --expected. Provide --input/--expected, or use --case <name> [--data-dir <dir>]."
+        error::error(
+            WflReason::Verify,
+            "missing --expected. Provide --input/--expected, or use --case <name> [--data-dir <dir>].",
         )
     })?;
 
@@ -187,13 +194,16 @@ fn resolve_paths(
     })
 }
 
-fn resolve_rule_file(file: Option<PathBuf>, case: Option<&str>) -> anyhow::Result<PathBuf> {
+fn resolve_rule_file(file: Option<PathBuf>, case: Option<&str>) -> WflResult<PathBuf> {
     if let Some(path) = file {
         return Ok(path);
     }
 
     let case_name = case.ok_or_else(|| {
-        anyhow::anyhow!("missing rule file. Provide <file>, or use --case so rule can be auto-resolved from rules/<case>.wfl.")
+        error::error(
+            WflReason::Verify,
+            "missing rule file. Provide <file>, or use --case so rule can be auto-resolved from rules/<case>.wfl.",
+        )
     })?;
 
     // 1) Exact: rules/<case>.wfl
@@ -212,8 +222,11 @@ fn resolve_rule_file(file: Option<PathBuf>, case: Option<&str>) -> anyhow::Resul
         }
     }
 
-    anyhow::bail!(
-        "failed to auto-resolve rule file for case `{}`. Tried rules/<case>.wfl and trimmed variants. Please pass the rule file explicitly.",
-        case_name
-    );
+    error::fail(
+        WflReason::Verify,
+        format!(
+            "failed to auto-resolve rule file for case `{}`. Tried rules/<case>.wfl and trimmed variants. Please pass the rule file explicitly.",
+            case_name
+        ),
+    )
 }

@@ -1,11 +1,8 @@
 use std::path::PathBuf;
 
-use anyhow::Result;
 use clap::{Parser, Subcommand};
 
-mod cmd_explain;
-mod cmd_fmt;
-mod cmd_lint;
+use wfl::error::WflResult;
 
 #[derive(Parser)]
 #[command(name = "wfl", about = "WarpFusion project tools for rule developers")]
@@ -147,16 +144,23 @@ enum Commands {
     },
 }
 
-fn main() -> Result<()> {
+fn main() {
+    if let Err(err) = run_cli() {
+        eprintln!("{}", err.report().render());
+        std::process::exit(1);
+    }
+}
+
+fn run_cli() -> WflResult<()> {
     let cli = Cli::parse();
 
     match cli.command {
         Commands::Explain { file, schemas, var } => {
-            cmd_explain::run(file, schemas, var)?;
+            wfl::cmd_explain::run(file, schemas, var)?;
         }
 
         Commands::Lint { file, schemas, var } => {
-            cmd_lint::run(file, schemas, var)?;
+            wfl::cmd_lint::run(file, schemas, var)?;
         }
 
         Commands::Fmt {
@@ -164,7 +168,7 @@ fn main() -> Result<()> {
             write,
             check,
         } => {
-            cmd_fmt::run(files, write, check)?;
+            wfl::cmd_fmt::run(files, write, check)?;
         }
 
         Commands::Replay {

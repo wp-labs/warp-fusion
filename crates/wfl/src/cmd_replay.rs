@@ -2,9 +2,10 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use std::io::{BufRead, BufReader, IsTerminal};
 use std::path::PathBuf;
 
-use anyhow::Result;
 use chrono::DateTime;
+use orion_error::conversion::SourceErr;
 
+use crate::error::{self, WflReason, WflResult, WflStructExt};
 use wf_core::alert::OutputRecord;
 use wf_core::rule::{
     CepStateMachine, CloseReason, Event, RuleExecutor, StepResult, Value, WindowLookup,
@@ -31,23 +32,28 @@ pub struct ReplayResult {
 }
 
 /// CLI entry point: load files → replay → print output.
-pub fn run(file: PathBuf, schemas: Vec<String>, input: PathBuf, vars: Vec<String>) -> Result<()> {
+pub fn run(
+    file: PathBuf,
+    schemas: Vec<String>,
+    input: PathBuf,
+    vars: Vec<String>,
+) -> WflResult<()> {
     use wf_config::project::{load_schemas, load_wfl_with_context, parse_vars};
 
-    let cwd = std::env::current_dir()?;
-    let mut var_map = parse_vars(&vars)?;
+    let cwd = std::env::current_dir().source_err(WflReason::Io, "reading cwd")?;
+    let mut var_map = parse_vars(&vars).wfl()?;
     var_map
         .entry("WORK_DIR".to_string())
         .or_insert_with(|| cwd.to_string_lossy().to_string());
     let ctx = ConfigVarContext::from_explicit_vars(var_map);
     let color = std::io::stderr().is_terminal();
 
-    let all_schemas = load_schemas(&schemas, &cwd)?;
-    let source = load_wfl_with_context(&file, &ctx, Some(&cwd))?;
+    let all_schemas = load_schemas(&schemas, &cwd).wfl()?;
+    let source = load_wfl_with_context(&file, &ctx, Some(&cwd)).wfl()?;
 
     let reader = BufReader::new(
         std::fs::File::open(&input)
-            .map_err(|e| anyhow::anyhow!("failed to open {}: {}", input.display(), e))?,
+            .source_err(WflReason::Io, format!("opening {}", input.display()))?,
     );
 
     let result = replay_events(&source, &all_schemas, reader, color)?;
@@ -55,7 +61,12 @@ pub fn run(file: PathBuf, schemas: Vec<String>, input: PathBuf, vars: Vec<String
     for alert in &result.alerts {
         match serde_json::to_string(alert) {
             Ok(s) => println!("{}", s),
-            Err(e) => eprintln!("ERROR: failed to serialize alert: {}", e),
+            Err(e) => {
+                return Err(error::error(
+                    WflReason::Serialization,
+                    format!("failed to serialize alert: {e}"),
+                ));
+            }
         }
     }
 
@@ -99,7 +110,7 @@ pub fn replay_events<R: BufRead>(
     schemas: &[WindowSchema],
     reader: R,
     color: bool,
-) -> Result<ReplayResult> {
+) -> WflResult<ReplayResult> {
     replay_events_impl(
         wfl_source,
         schemas,
@@ -122,7 +133,7 @@ pub fn replay_events_for_verify<R: BufRead>(
     schemas: &[WindowSchema],
     reader: R,
     color: bool,
-) -> Result<ReplayResult> {
+) -> WflResult<ReplayResult> {
     replay_events_impl(
         wfl_source,
         schemas,
@@ -141,10 +152,9 @@ fn replay_events_impl<R: BufRead>(
     reader: R,
     color: bool,
     options: ReplayExecOptions,
-) -> Result<ReplayResult> {
-    let wfl_file =
-        wf_lang::parse_wfl(wfl_source).map_err(|e| anyhow::anyhow!("parse error: {e}"))?;
-    let plans = wf_lang::compile_wfl(&wfl_file, schemas)?;
+) -> WflResult<ReplayResult> {
+    let wfl_file = wf_lang::parse_wfl(wfl_source).wfl()?;
+    let plans = wf_lang::compile_wfl(&wfl_file, schemas).wfl()?;
 
     if plans.is_empty() {
         return Ok(ReplayResult {
@@ -217,7 +227,7 @@ fn replay_with_plans<R: BufRead>(
     reader: R,
     color: bool,
     options: ReplayExecOptions,
-) -> Result<ReplayResult> {
+) -> WflResult<ReplayResult> {
     // Build stream -> window mapping from schemas
     let stream_to_windows: HashMap<String, Vec<String>> = build_stream_to_windows_map(schemas);
 
@@ -259,7 +269,7 @@ fn replay_with_plans<R: BufRead>(
 
     // -- Event loop --
     for line_result in reader.lines() {
-        let line = line_result?;
+        let line = line_result.source_err(WflReason::Io, "reading replay input")?;
         let line = line.trim();
         if line.is_empty() {
             continue;

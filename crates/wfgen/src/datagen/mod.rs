@@ -15,6 +15,7 @@ use rand::rngs::StdRng;
 use wf_lang::WindowSchema;
 use wf_lang::plan::RulePlan;
 
+use crate::error::{self, WfgenReason, WfgenResult};
 use crate::wfg_ast::WfgFile;
 use inject_gen::generate_inject_events;
 use stream_gen::{GenEvent, generate_stream_events};
@@ -34,12 +35,15 @@ pub fn generate(
     wfg: &WfgFile,
     schemas: &[WindowSchema],
     rule_plans: &[RulePlan],
-) -> anyhow::Result<GenResult> {
+) -> WfgenResult<GenResult> {
     let scenario = &wfg.scenario;
 
     // Parse start time
     let start: DateTime<Utc> = scenario.time_clause.start.parse().map_err(|e| {
-        anyhow::anyhow!("invalid start time '{}': {}", scenario.time_clause.start, e)
+        error::error(
+            WfgenReason::Generation,
+            format!("invalid start time '{}': {}", scenario.time_clause.start, e),
+        )
     })?;
 
     let duration = scenario.time_clause.duration;
@@ -72,7 +76,10 @@ pub fn generate(
         .sum();
 
     if total_rate == 0.0 {
-        return Err(anyhow::anyhow!("total rate across all streams is 0"));
+        return error::fail(
+            WfgenReason::Validation,
+            "total rate across all streams is 0",
+        );
     }
 
     let mut remaining = total;
@@ -99,7 +106,12 @@ pub fn generate(
         let schema = schemas
             .iter()
             .find(|s| s.name == stream.window)
-            .ok_or_else(|| anyhow::anyhow!("schema not found for window '{}'", stream.window))?;
+            .ok_or_else(|| {
+                error::error(
+                    WfgenReason::Validation,
+                    format!("schema not found for window '{}'", stream.window),
+                )
+            })?;
 
         let events = generate_stream_events(stream, schema, bg_count, &start, &duration, &mut rng);
         if !events.is_empty() {

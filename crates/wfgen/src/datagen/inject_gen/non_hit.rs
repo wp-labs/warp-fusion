@@ -8,6 +8,7 @@ use wf_lang::WindowSchema;
 use super::helpers::{build_event_fields, generate_key_values};
 use super::structures::RuleStructure;
 use crate::datagen::stream_gen::GenEvent;
+use crate::error::{self, WfgenReason, WfgenResult};
 use crate::wfg_ast::StreamBlock;
 
 #[allow(clippy::too_many_arguments)]
@@ -21,7 +22,7 @@ pub(super) fn generate_non_hit_events(
     duration: &Duration,
     rng: &mut StdRng,
     inject_counts: &mut HashMap<String, u64>,
-) -> anyhow::Result<Vec<GenEvent>> {
+) -> WfgenResult<Vec<GenEvent>> {
     let mut events = Vec::new();
     let dur_nanos = duration.as_nanos() as i64;
 
@@ -44,7 +45,12 @@ pub(super) fn generate_non_hit_events(
         let schema = schemas
             .iter()
             .find(|s| s.name == step.window_name)
-            .ok_or_else(|| anyhow::anyhow!("schema not found for '{}'", step.window_name))?;
+            .ok_or_else(|| {
+                error::error(
+                    WfgenReason::Validation,
+                    format!("schema not found for '{}'", step.window_name),
+                )
+            })?;
 
         let stream_block = scenario_streams
             .iter()

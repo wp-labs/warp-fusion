@@ -7,12 +7,13 @@ use wf_lang::plan::WindowSpec;
 use super::structures::{
     AliasMap, InjectOverrides, InjectUseStepOverrides, RuleStructure, StepInfo,
 };
+use crate::error::{self, WfgenReason, WfgenResult};
 use crate::wfg_ast::{InjectLine, ParamValue};
 
 pub(super) fn extract_rule_structure(
     rule_plan: &RulePlan,
     alias_map: &AliasMap,
-) -> anyhow::Result<RuleStructure> {
+) -> WfgenResult<RuleStructure> {
     let window_dur = match rule_plan.match_plan.window_spec {
         WindowSpec::Sliding(d) | WindowSpec::Fixed(d) | WindowSpec::Session(d) => d,
     };
@@ -30,7 +31,7 @@ pub(super) fn extract_rule_structure(
         let branch = step_plan
             .branches
             .first()
-            .ok_or_else(|| anyhow::anyhow!("step has no branches"))?;
+            .ok_or_else(|| error::error(WfgenReason::Validation, "step has no branches"))?;
 
         let bind_alias = &branch.source;
 
@@ -41,9 +42,12 @@ pub(super) fn extract_rule_structure(
             None => continue,
         };
 
-        let threshold = eval_const_threshold(&branch.agg.threshold)
-            .ok_or_else(|| anyhow::anyhow!("cannot evaluate threshold as constant"))?
-            as u64;
+        let threshold = eval_const_threshold(&branch.agg.threshold).ok_or_else(|| {
+            error::error(
+                WfgenReason::Validation,
+                "cannot evaluate threshold as constant",
+            )
+        })? as u64;
 
         // Extract filter constraints from the corresponding bind
         let filter_overrides = rule_plan
@@ -65,10 +69,13 @@ pub(super) fn extract_rule_structure(
     }
 
     if steps.is_empty() {
-        anyhow::bail!(
-            "no inject streams map to any step in rule '{}'; \
-             at least one inject alias must match a rule bind alias",
-            rule_plan.name
+        return error::fail(
+            WfgenReason::Validation,
+            format!(
+                "no inject streams map to any step in rule '{}'; \
+                 at least one inject alias must match a rule bind alias",
+                rule_plan.name
+            ),
         );
     }
 

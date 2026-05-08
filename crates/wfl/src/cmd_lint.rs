@@ -2,8 +2,9 @@ use std::io::{IsTerminal, Write};
 use std::path::PathBuf;
 use std::process;
 
-use anyhow::Result;
+use orion_error::conversion::SourceErr;
 
+use crate::error::{WflReason, WflResult, WflStructExt};
 use wf_lang::{CheckError, Severity};
 
 use wf_config::project::{load_schemas, load_wfl_with_context, parse_vars};
@@ -29,9 +30,9 @@ fn print_diag(diag: &CheckError, color: bool) {
     }
 }
 
-pub fn run(file: PathBuf, schemas: Vec<String>, vars: Vec<String>) -> Result<()> {
-    let cwd = std::env::current_dir()?;
-    let mut var_map = parse_vars(&vars)?;
+pub fn run(file: PathBuf, schemas: Vec<String>, vars: Vec<String>) -> WflResult<()> {
+    let cwd = std::env::current_dir().source_err(WflReason::Io, "reading cwd")?;
+    let mut var_map = parse_vars(&vars).wfl()?;
     var_map
         .entry("WORK_DIR".to_string())
         .or_insert_with(|| cwd.to_string_lossy().to_string());
@@ -39,13 +40,13 @@ pub fn run(file: PathBuf, schemas: Vec<String>, vars: Vec<String>) -> Result<()>
     let color = std::io::stderr().is_terminal();
 
     // Load schemas
-    let all_schemas = load_schemas(&schemas, &cwd)?;
+    let all_schemas = load_schemas(&schemas, &cwd).wfl()?;
 
     // Load and preprocess the .wfl file
-    let source = load_wfl_with_context(&file, &ctx, Some(&cwd))?;
+    let source = load_wfl_with_context(&file, &ctx, Some(&cwd)).wfl()?;
 
     // Parse
-    let wfl_file = wf_lang::parse_wfl(&source).map_err(|e| anyhow::anyhow!("parse error: {e}"))?;
+    let wfl_file = wf_lang::parse_wfl(&source).wfl()?;
 
     // Run error-level checks
     let errors = wf_lang::check_wfl(&wfl_file, &all_schemas);

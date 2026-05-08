@@ -12,7 +12,12 @@ layout.
 
 - Switched `wp-reactor` crate reuse from local path dependencies to the GitHub
   repository `https://github.com/wp-labs/wp-reactor.git` pinned at tag
-  `v0.1.2`.
+  `v0.1.3`.
+- Updated `wfusion`, `wfl`, and `wfgen` CLI boundaries to render structured
+  `orion-error` reports directly.
+- Replaced the previous unstructured tool result usage in `wfl` and `wfgen`
+  with `StructError`-backed result types while preserving lower-layer
+  `wp-reactor` structured errors.
 
 ## [0.1.0]
 

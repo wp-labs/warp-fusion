@@ -8,7 +8,7 @@
 
 变更记录见 [CHANGELOG.md](./CHANGELOG.md)。
 
-核心运行时库来自 `https://github.com/wp-labs/wp-reactor.git` 的 `v0.1.2` tag，
+核心运行时库来自 `https://github.com/wp-labs/wp-reactor.git` 的 `v0.1.3` tag，
 这里通过 git dependency 复用 `wf-engine`、`wf-config`、`wf-lang`、`wf-core`
 和 `wf-vars` 等 crate。
 

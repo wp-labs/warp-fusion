@@ -14,6 +14,7 @@ use std::time::Duration;
 use wf_lang::WindowSchema;
 use wf_lang::plan::RulePlan;
 
+use crate::error::{self, WfgenReason, WfgenResult};
 use crate::wfg_ast::WfgFile;
 
 use dispatch::{build_alias_map, compute_stream_totals};
@@ -31,7 +32,7 @@ pub fn generate_inject_events(
     start: &DateTime<Utc>,
     duration: &Duration,
     rng: &mut StdRng,
-) -> anyhow::Result<InjectGenResult> {
+) -> WfgenResult<InjectGenResult> {
     let scenario = &wfg.scenario;
     let stream_totals = compute_stream_totals(scenario);
 
@@ -69,14 +70,17 @@ pub fn generate_inject_events(
 fn resolve_rule_plan<'a>(
     inject_rule: &str,
     rule_plans: &'a [RulePlan],
-) -> anyhow::Result<&'a RulePlan> {
+) -> WfgenResult<&'a RulePlan> {
     if inject_rule.is_empty() {
         if rule_plans.len() == 1 {
             return Ok(&rule_plans[0]);
         }
-        anyhow::bail!(
-            "injection target rule is ambiguous: expect(...) is missing and {} rules are loaded",
-            rule_plans.len()
+        return error::fail(
+            WfgenReason::Validation,
+            format!(
+                "injection target rule is ambiguous: expect(...) is missing and {} rules are loaded",
+                rule_plans.len()
+            ),
         );
     }
 
@@ -84,9 +88,12 @@ fn resolve_rule_plan<'a>(
         .iter()
         .find(|p| p.name == inject_rule)
         .ok_or_else(|| {
-            anyhow::anyhow!(
-                "inject references rule '{}' not found in compiled plans",
-                inject_rule
+            error::error(
+                WfgenReason::Validation,
+                format!(
+                    "inject references rule '{}' not found in compiled plans",
+                    inject_rule
+                ),
             )
         })
 }

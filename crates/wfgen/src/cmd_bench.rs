@@ -1,9 +1,10 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-use anyhow::Context;
+use orion_error::conversion::SourceErr;
 
 use wfgen::datagen::generate;
+use wfgen::error::{self, WfgenReason, WfgenResult};
 use wfgen::loader::load_from_uses;
 use wfgen::wfg_parser::parse_wfg;
 
@@ -17,9 +18,12 @@ pub(crate) fn run(
     bench_duration: Option<String>,
     send: bool,
     addr: String,
-) -> anyhow::Result<()> {
-    let wfg_content = std::fs::read_to_string(&scenario).context("reading .wfg file")?;
-    let wfg = parse_wfg(&wfg_content).context("parsing .wfg file")?;
+) -> WfgenResult<()> {
+    let wfg_content = std::fs::read_to_string(&scenario).source_err(
+        WfgenReason::Io,
+        format!("reading .wfg file: {}", scenario.display()),
+    )?;
+    let wfg = parse_wfg(&wfg_content)?;
 
     let (mut schemas, mut wfl_files) = load_from_uses(&wfg, &scenario, &HashMap::new())?;
     schemas.extend(load_ws_files(&ws)?);
@@ -31,7 +35,7 @@ pub(crate) fn run(
         match wf_lang::compile_wfl(wfl_file, &schemas) {
             Ok(plans) => rule_plans.extend(plans),
             Err(e) => {
-                eprintln!("Warning: WFL compilation failed: {}", e);
+                eprintln!("Warning: WFL compilation failed: {}", e.report().render());
             }
         }
     }
@@ -56,8 +60,14 @@ pub(crate) fn run(
             while wall_start.elapsed() < target_dur {
                 let result = generate(&wfg, &schemas, &rule_plans)?;
                 if let Some(stream) = stream.as_mut() {
-                    let sent = send_events_with_stream(&result.events, &schemas, stream)
-                        .with_context(|| format!("sending bench iteration {}", iterations + 1))?;
+                    let sent = send_events_with_stream(&result.events, &schemas, stream).map_err(
+                        |err| {
+                            err.with_context(
+                                orion_error::OperationContext::doing("sending bench iteration")
+                                    .with_field("iteration", iterations + 1),
+                            )
+                        },
+                    )?;
                     total_frames += sent as u64;
                 }
                 total_events += result.events.len() as u64;
@@ -112,10 +122,10 @@ pub(crate) fn run(
 }
 
 /// Parse a human-friendly duration string (e.g. "30s", "2m", "1h") into `std::time::Duration`.
-fn parse_bench_duration(s: &str) -> anyhow::Result<std::time::Duration> {
+fn parse_bench_duration(s: &str) -> WfgenResult<std::time::Duration> {
     let s = s.trim();
     if s.is_empty() {
-        anyhow::bail!("empty duration string");
+        return error::fail(WfgenReason::Validation, "empty duration string");
     }
 
     let (num_str, suffix) = if let Some(stripped) = s.strip_suffix('s') {
@@ -129,9 +139,12 @@ fn parse_bench_duration(s: &str) -> anyhow::Result<std::time::Duration> {
         (s, "s")
     };
 
-    let value: f64 = num_str
-        .parse()
-        .map_err(|_| anyhow::anyhow!("invalid duration number: '{}'", num_str))?;
+    let value: f64 = num_str.parse().map_err(|_| {
+        error::error(
+            WfgenReason::Validation,
+            format!("invalid duration number: '{}'", num_str),
+        )
+    })?;
 
     let secs = match suffix {
         "s" => value,
@@ -141,7 +154,10 @@ fn parse_bench_duration(s: &str) -> anyhow::Result<std::time::Duration> {
     };
 
     if secs <= 0.0 {
-        anyhow::bail!("bench duration must be positive, got '{}'", s);
+        return error::fail(
+            WfgenReason::Validation,
+            format!("bench duration must be positive, got '{}'", s),
+        );
     }
 
     Ok(std::time::Duration::from_secs_f64(secs))

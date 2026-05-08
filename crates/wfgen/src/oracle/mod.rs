@@ -9,6 +9,7 @@ use wf_core::rule::{CepStateMachine, Event, RuleExecutor, StepResult, Value};
 use wf_lang::plan::{ConvPlan, RulePlan};
 
 use crate::datagen::stream_gen::GenEvent;
+use crate::error::WfgenResult;
 
 /// An oracle alert produced by the reference evaluator.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -42,7 +43,7 @@ pub fn run_oracle(
     scenario_start: &DateTime<Utc>,
     scenario_duration: &Duration,
     injected_rules: Option<&std::collections::HashSet<String>>,
-) -> anyhow::Result<OracleResult> {
+) -> WfgenResult<OracleResult> {
     if rule_plans.is_empty() {
         return Ok(OracleResult { alerts: vec![] });
     }

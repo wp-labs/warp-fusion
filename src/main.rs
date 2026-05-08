@@ -1,4 +1,7 @@
 #[tokio::main]
-async fn main() -> anyhow::Result<()> {
-    wf_engine::run_cli().await
+async fn main() {
+    if let Err(err) = wf_engine::run_cli().await {
+        eprintln!("{}", err.report().render());
+        std::process::exit(1);
+    }
 }

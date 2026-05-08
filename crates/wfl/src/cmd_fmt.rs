@@ -2,16 +2,18 @@ use std::io::IsTerminal;
 use std::path::PathBuf;
 use std::process;
 
-use anyhow::Result;
+use orion_error::conversion::{SourceErr, SourceRawErr};
+
+use crate::error::{self, WflReason, WflResult};
 
 const GREEN: &str = "\x1b[1;32m";
 const RED: &str = "\x1b[1;31m";
 const YELLOW: &str = "\x1b[1;38;5;208m";
 const RESET: &str = "\x1b[0m";
 
-pub fn run(files: Vec<PathBuf>, write: bool, check: bool) -> Result<()> {
+pub fn run(files: Vec<PathBuf>, write: bool, check: bool) -> WflResult<()> {
     if files.is_empty() {
-        anyhow::bail!("no input files specified");
+        return error::fail(WflReason::Format, "no input files specified");
     }
 
     let color = std::io::stderr().is_terminal();
@@ -19,18 +21,23 @@ pub fn run(files: Vec<PathBuf>, write: bool, check: bool) -> Result<()> {
     let mut parser = tree_sitter::Parser::new();
     parser
         .set_language(&tree_sitter_wfl::language())
-        .map_err(|e| anyhow::anyhow!("failed to load WFL grammar: {e}"))?;
+        .source_raw_err(WflReason::Format, "failed to load WFL grammar")?;
 
     let mut any_diff = false;
 
     for file in &files {
         let source = std::fs::read_to_string(file)
-            .map_err(|e| anyhow::anyhow!("reading {}: {e}", file.display()))?;
+            .source_err(WflReason::Io, format!("reading {}", file.display()))?;
 
         // Parse with tree-sitter to validate syntax
-        let tree = parser
-            .parse(&source, None)
-            .ok_or_else(|| anyhow::anyhow!("failed to parse {}", file.display()))?;
+        let tree = parser.parse(&source, None).ok_or_else(|| {
+            error::error_at(
+                WflReason::Parse,
+                "failed to parse WFL source",
+                "format WFL",
+                file.display(),
+            )
+        })?;
 
         if tree.root_node().has_error() {
             if color {
@@ -59,7 +66,7 @@ pub fn run(files: Vec<PathBuf>, write: bool, check: bool) -> Result<()> {
         } else if write {
             if source != formatted {
                 std::fs::write(file, &formatted)
-                    .map_err(|e| anyhow::anyhow!("writing {}: {e}", file.display()))?;
+                    .source_err(WflReason::Io, format!("writing {}", file.display()))?;
                 if color {
                     eprintln!("{GREEN}formatted{RESET} {}", file.display());
                 } else {

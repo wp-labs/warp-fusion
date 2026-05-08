@@ -12,6 +12,7 @@ use super::near_miss::generate_near_miss_clusters;
 use super::non_hit::generate_non_hit_events;
 use super::structures::{AliasMap, RuleStructure};
 use crate::datagen::stream_gen::GenEvent;
+use crate::error::{self, WfgenReason, WfgenResult};
 use crate::wfg_ast::{InjectLine, InjectMode, StreamBlock};
 
 pub(super) fn compute_stream_totals(
@@ -51,7 +52,7 @@ pub(super) fn build_alias_map(
     inject_streams: &[String],
     scenario_streams: &[StreamBlock],
     rule_plan: &RulePlan,
-) -> anyhow::Result<AliasMap> {
+) -> WfgenResult<AliasMap> {
     let mut bind_to_scenario = HashMap::new();
 
     // New syntax uses stream names without exposing bind aliases.
@@ -62,7 +63,10 @@ pub(super) fn build_alias_map(
             .iter()
             .find(|s| &s.alias == stream_name)
             .ok_or_else(|| {
-                anyhow::anyhow!("inject stream '{}' not found in scenario", stream_name)
+                error::error(
+                    WfgenReason::Validation,
+                    format!("inject stream '{}' not found in scenario", stream_name),
+                )
             })?;
 
         let bind_alias = if rule_plan.binds.iter().any(|b| b.alias == *stream_name) {
@@ -74,18 +78,22 @@ pub(super) fn build_alias_map(
                 .filter(|b| b.window == stream_block.window)
                 .map(|b| b.alias.clone());
             let first = bind_iter.next().ok_or_else(|| {
-                anyhow::anyhow!(
-                    "inject stream '{}' cannot be mapped to any bind in rule '{}'",
-                    stream_name,
-                    rule_plan.name
+                error::error(
+                    WfgenReason::Validation,
+                    format!(
+                        "inject stream '{}' cannot be mapped to any bind in rule '{}'",
+                        stream_name, rule_plan.name
+                    ),
                 )
             })?;
             if bind_iter.next().is_some() {
-                anyhow::bail!(
-                    "inject stream '{}' maps to multiple binds in rule '{}'; \
-                     use explicit bind aliases in .wfg",
-                    stream_name,
-                    rule_plan.name
+                return error::fail(
+                    WfgenReason::Validation,
+                    format!(
+                        "inject stream '{}' maps to multiple binds in rule '{}'; \
+                         use explicit bind aliases in .wfg",
+                        stream_name, rule_plan.name
+                    ),
                 );
             }
             first
@@ -111,7 +119,7 @@ pub(super) fn generate_for_line(
     duration: &Duration,
     rng: &mut StdRng,
     inject_counts: &mut HashMap<String, u64>,
-) -> anyhow::Result<Vec<GenEvent>> {
+) -> WfgenResult<Vec<GenEvent>> {
     let overrides = extract_inject_overrides(inject_line);
 
     match inject_line.mode {

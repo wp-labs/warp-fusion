@@ -10,6 +10,8 @@ mod cmd_send;
 mod cmd_verify;
 mod tcp_send;
 
+use wfgen::error::WfgenResult;
+
 #[derive(Parser)]
 #[command(name = "wfgen", about = "WarpFusion test data generator")]
 struct Cli {
@@ -138,7 +140,14 @@ enum Commands {
     },
 }
 
-fn main() -> anyhow::Result<()> {
+fn main() {
+    if let Err(err) = run_cli() {
+        eprintln!("{}", err.report().render());
+        std::process::exit(1);
+    }
+}
+
+fn run_cli() -> WfgenResult<()> {
     let cli = Cli::parse();
 
     match cli.command {

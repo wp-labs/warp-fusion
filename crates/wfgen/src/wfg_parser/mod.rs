@@ -10,6 +10,7 @@ use winnow::prelude::*;
 
 use wf_lang::parse_utils::quoted_string;
 
+use crate::error::{self, WfgenReason, WfgenResult};
 use crate::wfg_ast::*;
 
 use self::primitives::ws_skip;
@@ -20,16 +21,21 @@ use self::scenario::scenario_decl;
 // ---------------------------------------------------------------------------
 
 /// Parse a `.wfg` scenario file from a string.
-pub fn parse_wfg(input: &str) -> anyhow::Result<WfgFile> {
+pub fn parse_wfg(input: &str) -> WfgenResult<WfgFile> {
     let mut rest = input;
-    let result = wfg_file(&mut rest).map_err(|e| anyhow::anyhow!("parse error: {e}"))?;
+    let result = wfg_file(&mut rest)
+        .map_err(|e| error::error(WfgenReason::Parse, format!("parse error: {e}")))?;
 
-    ws_skip(&mut rest).map_err(|e| anyhow::anyhow!("parse error: {e}"))?;
+    ws_skip(&mut rest)
+        .map_err(|e| error::error(WfgenReason::Parse, format!("parse error: {e}")))?;
     if !rest.is_empty() {
-        return Err(anyhow::anyhow!(
-            "unexpected trailing content: {:?}",
-            &rest[..rest.len().min(60)]
-        ));
+        return error::fail(
+            WfgenReason::Parse,
+            format!(
+                "unexpected trailing content: {:?}",
+                &rest[..rest.len().min(60)]
+            ),
+        );
     }
     Ok(result)
 }

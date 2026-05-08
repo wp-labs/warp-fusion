@@ -2,8 +2,9 @@ use std::io::IsTerminal;
 use std::path::PathBuf;
 use std::process;
 
-use anyhow::Result;
+use orion_error::conversion::SourceErr;
 
+use crate::error::{self, WflReason, WflResult, WflStructExt};
 use wf_config::project::{load_schemas, load_wfl_with_context, parse_vars};
 use wf_core::rule::contract::run_test;
 use wf_lang::ast::PermutationMode;
@@ -21,13 +22,13 @@ pub fn run(
     vars: Vec<String>,
     shuffle: bool,
     runs: Option<usize>,
-) -> Result<()> {
+) -> WflResult<()> {
     if let Some(0) = runs {
-        anyhow::bail!("--runs must be greater than 0");
+        return error::fail(WflReason::Validation, "--runs must be greater than 0");
     }
 
-    let cwd = std::env::current_dir()?;
-    let mut var_map = parse_vars(&vars)?;
+    let cwd = std::env::current_dir().source_err(WflReason::Io, "reading cwd")?;
+    let mut var_map = parse_vars(&vars).wfl()?;
     var_map
         .entry("WORK_DIR".to_string())
         .or_insert_with(|| cwd.to_string_lossy().to_string());
@@ -35,16 +36,16 @@ pub fn run(
     let color = std::io::stderr().is_terminal();
 
     // Load schemas
-    let all_schemas = load_schemas(&schemas, &cwd)?;
+    let all_schemas = load_schemas(&schemas, &cwd).wfl()?;
 
     // Load and preprocess the .wfl file
-    let source = load_wfl_with_context(&file, &ctx, Some(&cwd))?;
+    let source = load_wfl_with_context(&file, &ctx, Some(&cwd)).wfl()?;
 
     // Parse
-    let wfl_file = wf_lang::parse_wfl(&source).map_err(|e| anyhow::anyhow!("parse error: {e}"))?;
+    let wfl_file = wf_lang::parse_wfl(&source).wfl()?;
 
     // Compile rules into plans
-    let plans = wf_lang::compile_wfl(&wfl_file, &all_schemas)?;
+    let plans = wf_lang::compile_wfl(&wfl_file, &all_schemas).wfl()?;
 
     if wfl_file.tests.is_empty() {
         eprintln!("No tests found.");
@@ -130,10 +131,17 @@ pub fn run(
                 if color {
                     eprintln!(
                         "{RED}FAIL{RESET}  {} {DIM}({}){RESET} — error: {}",
-                        test.name, test.rule_name, e
+                        test.name,
+                        test.rule_name,
+                        e.report().render()
                     );
                 } else {
-                    eprintln!("FAIL  {} ({}) — error: {}", test.name, test.rule_name, e);
+                    eprintln!(
+                        "FAIL  {} ({}) — error: {}",
+                        test.name,
+                        test.rule_name,
+                        e.report().render()
+                    );
                 }
                 failed += 1;
             }

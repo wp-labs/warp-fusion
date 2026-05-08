@@ -2,21 +2,28 @@ use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, Write};
 use std::path::Path;
 
-use anyhow::{Context, anyhow};
 use chrono::{DateTime, SecondsFormat, Utc};
+use orion_error::conversion::SourceErr;
 
 use crate::datagen::stream_gen::GenEvent;
+use crate::error::{self, WfgenReason, WfgenResult};
 use crate::oracle::OracleAlert;
 use crate::verify::ActualAlert;
 
 /// Write events as JSONL (one JSON object per line).
-pub fn write_jsonl(events: &[GenEvent], output_path: &Path) -> anyhow::Result<()> {
+pub fn write_jsonl(events: &[GenEvent], output_path: &Path) -> WfgenResult<()> {
     // Create parent directories if needed
     if let Some(parent) = output_path.parent() {
-        std::fs::create_dir_all(parent)?;
+        std::fs::create_dir_all(parent).source_err(
+            WfgenReason::Io,
+            format!("creating output directory: {}", parent.display()),
+        )?;
     }
 
-    let file = File::create(output_path)?;
+    let file = File::create(output_path).source_err(
+        WfgenReason::Io,
+        format!("creating {}", output_path.display()),
+    )?;
     let mut writer = BufWriter::new(file);
 
     for event in events {
@@ -39,29 +46,51 @@ pub fn write_jsonl(events: &[GenEvent], output_path: &Path) -> anyhow::Result<()
             obj.insert(k.clone(), v.clone());
         }
 
-        let line = serde_json::to_string(&obj)?;
-        writeln!(writer, "{}", line)?;
+        let line = serde_json::to_string(&obj).source_err(
+            WfgenReason::Serialization,
+            "serializing generated event JSON",
+        )?;
+        writeln!(writer, "{}", line).source_err(
+            WfgenReason::Io,
+            format!("writing {}", output_path.display()),
+        )?;
     }
 
-    writer.flush()?;
+    writer.flush().source_err(
+        WfgenReason::Io,
+        format!("flushing {}", output_path.display()),
+    )?;
     Ok(())
 }
 
 /// Write oracle alerts as JSONL.
-pub fn write_oracle_jsonl(alerts: &[OracleAlert], output_path: &Path) -> anyhow::Result<()> {
+pub fn write_oracle_jsonl(alerts: &[OracleAlert], output_path: &Path) -> WfgenResult<()> {
     if let Some(parent) = output_path.parent() {
-        std::fs::create_dir_all(parent)?;
+        std::fs::create_dir_all(parent).source_err(
+            WfgenReason::Io,
+            format!("creating output directory: {}", parent.display()),
+        )?;
     }
 
-    let file = File::create(output_path)?;
+    let file = File::create(output_path).source_err(
+        WfgenReason::Io,
+        format!("creating {}", output_path.display()),
+    )?;
     let mut writer = BufWriter::new(file);
 
     for alert in alerts {
-        let line = serde_json::to_string(alert)?;
-        writeln!(writer, "{}", line)?;
+        let line = serde_json::to_string(alert)
+            .source_err(WfgenReason::Serialization, "serializing oracle alert JSON")?;
+        writeln!(writer, "{}", line).source_err(
+            WfgenReason::Io,
+            format!("writing {}", output_path.display()),
+        )?;
     }
 
-    writer.flush()?;
+    writer.flush().source_err(
+        WfgenReason::Io,
+        format!("flushing {}", output_path.display()),
+    )?;
     Ok(())
 }
 
@@ -69,18 +98,23 @@ pub fn write_oracle_jsonl(alerts: &[OracleAlert], output_path: &Path) -> anyhow:
 ///
 /// Expects each line to contain `_stream`, `_window`, `_timestamp` metadata
 /// fields plus the event payload fields.
-pub fn read_events_jsonl(path: &Path) -> anyhow::Result<Vec<GenEvent>> {
-    let file = File::open(path)?;
+pub fn read_events_jsonl(path: &Path) -> WfgenResult<Vec<GenEvent>> {
+    let file =
+        File::open(path).source_err(WfgenReason::Io, format!("opening {}", path.display()))?;
     let reader = BufReader::new(file);
     let mut events = Vec::new();
 
     for line in reader.lines() {
-        let line = line?;
+        let line = line.source_err(WfgenReason::Io, format!("reading {}", path.display()))?;
         if line.trim().is_empty() {
             continue;
         }
 
-        let obj: serde_json::Map<String, serde_json::Value> = serde_json::from_str(&line)?;
+        let obj: serde_json::Map<String, serde_json::Value> = serde_json::from_str(&line)
+            .source_err(
+                WfgenReason::Serialization,
+                format!("parsing {}", path.display()),
+            )?;
 
         let stream_name = obj
             .get("_stream")
@@ -119,18 +153,23 @@ pub fn read_events_jsonl(path: &Path) -> anyhow::Result<Vec<GenEvent>> {
 }
 
 /// Read actual alerts from a JSONL file.
-pub fn read_alerts_jsonl(path: &Path) -> anyhow::Result<Vec<ActualAlert>> {
-    let file = File::open(path)?;
+pub fn read_alerts_jsonl(path: &Path) -> WfgenResult<Vec<ActualAlert>> {
+    let file =
+        File::open(path).source_err(WfgenReason::Io, format!("opening {}", path.display()))?;
     let reader = BufReader::new(file);
     let mut alerts = Vec::new();
 
     for (line_no, line) in reader.lines().enumerate() {
-        let line = line?;
+        let line = line.source_err(WfgenReason::Io, format!("reading {}", path.display()))?;
         if line.trim().is_empty() {
             continue;
         }
-        let alert = parse_actual_alert_line(&line)
-            .with_context(|| format!("parsing actual alert JSONL line {}", line_no + 1))?;
+        let alert = parse_actual_alert_line(&line).map_err(|err| {
+            err.with_context(
+                orion_error::OperationContext::doing("parsing actual alert JSONL")
+                    .with_field("line", line_no + 1),
+            )
+        })?;
         alerts.push(alert);
     }
 
@@ -138,25 +177,30 @@ pub fn read_alerts_jsonl(path: &Path) -> anyhow::Result<Vec<ActualAlert>> {
 }
 
 /// Read oracle alerts from a JSONL file.
-pub fn read_oracle_jsonl(path: &Path) -> anyhow::Result<Vec<OracleAlert>> {
-    let file = File::open(path)?;
+pub fn read_oracle_jsonl(path: &Path) -> WfgenResult<Vec<OracleAlert>> {
+    let file =
+        File::open(path).source_err(WfgenReason::Io, format!("opening {}", path.display()))?;
     let reader = BufReader::new(file);
     let mut alerts = Vec::new();
 
     for line in reader.lines() {
-        let line = line?;
+        let line = line.source_err(WfgenReason::Io, format!("reading {}", path.display()))?;
         if line.trim().is_empty() {
             continue;
         }
-        let alert: OracleAlert = serde_json::from_str(&line)?;
+        let alert: OracleAlert = serde_json::from_str(&line).source_err(
+            WfgenReason::Serialization,
+            format!("parsing {}", path.display()),
+        )?;
         alerts.push(alert);
     }
 
     Ok(alerts)
 }
 
-fn parse_actual_alert_line(line: &str) -> anyhow::Result<ActualAlert> {
-    let obj: serde_json::Map<String, serde_json::Value> = serde_json::from_str(line)?;
+fn parse_actual_alert_line(line: &str) -> WfgenResult<ActualAlert> {
+    let obj: serde_json::Map<String, serde_json::Value> = serde_json::from_str(line)
+        .source_err(WfgenReason::Serialization, "parsing actual alert JSON")?;
 
     Ok(ActualAlert {
         rule_name: read_string(&obj, &["rule_name", "__wfu_rule_name"])?,
@@ -174,42 +218,55 @@ fn parse_actual_alert_line(line: &str) -> anyhow::Result<ActualAlert> {
 fn read_string(
     obj: &serde_json::Map<String, serde_json::Value>,
     keys: &[&str],
-) -> anyhow::Result<String> {
+) -> WfgenResult<String> {
     for key in keys {
         if let Some(value) = obj.get(*key) {
             return match value {
                 serde_json::Value::String(s) => Ok(s.clone()),
                 serde_json::Value::Number(n) => Ok(n.to_string()),
                 serde_json::Value::Bool(b) => Ok(b.to_string()),
-                _ => Err(anyhow!(
-                    "field `{key}` is not a scalar string-compatible value"
-                )),
+                _ => error::fail(
+                    WfgenReason::Serialization,
+                    format!("field `{key}` is not a scalar string-compatible value"),
+                ),
             };
         }
     }
 
-    Err(anyhow!("missing required field, tried {:?}", keys))
+    error::fail(
+        WfgenReason::Serialization,
+        format!("missing required field, tried {:?}", keys),
+    )
 }
 
-fn read_f64(
-    obj: &serde_json::Map<String, serde_json::Value>,
-    keys: &[&str],
-) -> anyhow::Result<f64> {
+fn read_f64(obj: &serde_json::Map<String, serde_json::Value>, keys: &[&str]) -> WfgenResult<f64> {
     for key in keys {
         if let Some(value) = obj.get(*key) {
             return match value {
-                serde_json::Value::Number(n) => n
-                    .as_f64()
-                    .ok_or_else(|| anyhow!("field `{key}` is not a finite f64-compatible number")),
-                serde_json::Value::String(s) => s
-                    .parse()
-                    .with_context(|| format!("field `{key}` is not a valid f64 string")),
-                _ => Err(anyhow!("field `{key}` is not numeric")),
+                serde_json::Value::Number(n) => n.as_f64().ok_or_else(|| {
+                    error::error(
+                        WfgenReason::Serialization,
+                        format!("field `{key}` is not a finite f64-compatible number"),
+                    )
+                }),
+                serde_json::Value::String(s) => s.parse().map_err(|e| {
+                    error::error(
+                        WfgenReason::Serialization,
+                        format!("field `{key}` is not a valid f64 string: {e}"),
+                    )
+                }),
+                _ => error::fail(
+                    WfgenReason::Serialization,
+                    format!("field `{key}` is not numeric"),
+                ),
             };
         }
     }
 
-    Err(anyhow!("missing required field, tried {:?}", keys))
+    error::fail(
+        WfgenReason::Serialization,
+        format!("missing required field, tried {:?}", keys),
+    )
 }
 
 #[cfg(test)]

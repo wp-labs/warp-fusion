@@ -8,6 +8,7 @@ use wf_lang::{BaseType, FieldType, WindowSchema};
 use super::structures::{InjectOverrides, InjectUseStepOverrides, StepInfo};
 use crate::datagen::field_gen::generate_field_value;
 use crate::datagen::stream_gen::GenEvent;
+use crate::error::{self, WfgenReason, WfgenResult};
 use crate::wfg_ast::StreamBlock;
 
 /// Compute the time window bounds for cluster generation.
@@ -89,7 +90,7 @@ pub(super) fn generate_cluster_events(
     start: &DateTime<Utc>,
     rng: &mut StdRng,
     out: &mut Vec<GenEvent>,
-) -> anyhow::Result<()> {
+) -> WfgenResult<()> {
     let step_predicate_overrides =
         map_use_predicates_to_rule_steps(use_step_overrides, step_event_counts);
 
@@ -110,7 +111,12 @@ pub(super) fn generate_cluster_events(
         let schema = schemas
             .iter()
             .find(|s| s.name == step.window_name)
-            .ok_or_else(|| anyhow::anyhow!("schema not found for '{}'", step.window_name))?;
+            .ok_or_else(|| {
+                error::error(
+                    WfgenReason::Validation,
+                    format!("schema not found for '{}'", step.window_name),
+                )
+            })?;
 
         let stream_block = scenario_streams
             .iter()

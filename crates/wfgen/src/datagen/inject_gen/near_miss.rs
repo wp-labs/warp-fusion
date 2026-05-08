@@ -11,6 +11,7 @@ use super::helpers::{
 };
 use super::structures::{InjectOverrides, RuleStructure};
 use crate::datagen::stream_gen::GenEvent;
+use crate::error::WfgenResult;
 use crate::wfg_ast::StreamBlock;
 
 #[allow(clippy::too_many_arguments)]
@@ -25,7 +26,7 @@ pub(super) fn generate_near_miss_clusters(
     rng: &mut StdRng,
     inject_counts: &mut HashMap<String, u64>,
     overrides: &InjectOverrides,
-) -> anyhow::Result<Vec<GenEvent>> {
+) -> WfgenResult<Vec<GenEvent>> {
     let steps = &rule_struct.steps;
     if steps.is_empty() {
         return Ok(Vec::new());

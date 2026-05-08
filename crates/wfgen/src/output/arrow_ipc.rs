@@ -10,23 +10,28 @@ use arrow::array::{
 use arrow::datatypes::{DataType, Field, Schema, TimeUnit};
 use arrow::ipc::writer::FileWriter;
 use chrono::{DateTime, SecondsFormat, Utc};
+use orion_error::conversion::SourceRawErr;
 
 use wf_lang::{BaseType, FieldType, WindowSchema};
 
 use crate::datagen::stream_gen::GenEvent;
+use crate::error::{self, WfgenReason, WfgenResult};
 
 /// Write events as Arrow IPC file.
 ///
 /// All fields are stored as UTF-8 strings (JSON-encoded for non-string values)
 /// with metadata columns `_stream`, `_window`, `_timestamp`.
-pub fn write_arrow_ipc(events: &[GenEvent], output_path: &Path) -> anyhow::Result<()> {
+pub fn write_arrow_ipc(events: &[GenEvent], output_path: &Path) -> WfgenResult<()> {
     if events.is_empty() {
-        anyhow::bail!("no events to write");
+        return error::fail(WfgenReason::Generation, "no events to write");
     }
 
     // Create parent directories if needed
     if let Some(parent) = output_path.parent() {
-        std::fs::create_dir_all(parent)?;
+        std::fs::create_dir_all(parent).source_raw_err(
+            WfgenReason::Io,
+            format!("creating output directory: {}", parent.display()),
+        )?;
     }
 
     // Collect all field names from events (preserving order from first event)
@@ -73,12 +78,21 @@ pub fn write_arrow_ipc(events: &[GenEvent], output_path: &Path) -> anyhow::Resul
         columns.push(Arc::new(array) as ArrayRef);
     }
 
-    let batch = RecordBatch::try_new(schema.clone(), columns)?;
+    let batch = RecordBatch::try_new(schema.clone(), columns)
+        .source_raw_err(WfgenReason::Serialization, "building Arrow record batch")?;
 
-    let file = File::create(output_path)?;
-    let mut writer = FileWriter::try_new(file, &schema)?;
-    writer.write(&batch)?;
-    writer.finish()?;
+    let file = File::create(output_path).source_raw_err(
+        WfgenReason::Io,
+        format!("creating {}", output_path.display()),
+    )?;
+    let mut writer = FileWriter::try_new(file, &schema)
+        .source_raw_err(WfgenReason::Serialization, "creating Arrow IPC writer")?;
+    writer
+        .write(&batch)
+        .source_raw_err(WfgenReason::Serialization, "writing Arrow IPC batch")?;
+    writer
+        .finish()
+        .source_raw_err(WfgenReason::Serialization, "finishing Arrow IPC writer")?;
 
     Ok(())
 }
@@ -91,7 +105,7 @@ pub fn write_arrow_ipc(events: &[GenEvent], output_path: &Path) -> anyhow::Resul
 pub fn events_to_typed_batches(
     events: &[GenEvent],
     schemas: &[WindowSchema],
-) -> anyhow::Result<Vec<(String, RecordBatch)>> {
+) -> WfgenResult<Vec<(String, RecordBatch)>> {
     let schema_by_window: HashMap<&str, &WindowSchema> =
         schemas.iter().map(|s| (s.name.as_str(), s)).collect();
     let mut groups: HashMap<&str, Vec<&GenEvent>> = HashMap::new();
@@ -105,15 +119,19 @@ pub fn events_to_typed_batches(
     let mut batches = Vec::new();
 
     for (window_name, group_events) in groups {
-        let schema = schema_by_window
-            .get(window_name)
-            .copied()
-            .ok_or_else(|| anyhow::anyhow!("schema not found for window '{window_name}'"))?;
+        let schema = schema_by_window.get(window_name).copied().ok_or_else(|| {
+            error::error(
+                WfgenReason::Validation,
+                format!("schema not found for window '{window_name}'"),
+            )
+        })?;
 
-        let stream_name = schema
-            .streams
-            .first()
-            .ok_or_else(|| anyhow::anyhow!("no stream defined for window '{window_name}'"))?;
+        let stream_name = schema.streams.first().ok_or_else(|| {
+            error::error(
+                WfgenReason::Validation,
+                format!("no stream defined for window '{window_name}'"),
+            )
+        })?;
 
         let arrow_fields: Vec<Field> = schema
             .fields
@@ -135,7 +153,10 @@ pub fn events_to_typed_batches(
         }
         let columns: Vec<ArrayRef> = builders.into_iter().map(ColumnBuilder::finish).collect();
 
-        let batch = RecordBatch::try_new(arrow_schema, columns)?;
+        let batch = RecordBatch::try_new(arrow_schema, columns).source_raw_err(
+            WfgenReason::Serialization,
+            "building typed Arrow record batch",
+        )?;
         batches.push((stream_name.clone(), batch));
     }
 

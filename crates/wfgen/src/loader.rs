@@ -1,11 +1,13 @@
 use std::collections::HashMap;
 use std::path::Path;
 
-use anyhow::Context;
+use orion_error::OperationContext;
+use orion_error::conversion::SourceErr;
 
 use wf_config::load_wfl_with_context;
 use wf_vars::ConfigVarContext;
 
+use crate::error::{self, WfgenReason, WfgenResult, WfgenStructExt};
 use crate::wfg_ast::WfgFile;
 use crate::wfg_parser::parse_wfg;
 
@@ -24,17 +26,19 @@ pub struct LoadedScenario {
 pub fn load_scenario(
     wfg_path: &Path,
     vars: &HashMap<String, String>,
-) -> anyhow::Result<LoadedScenario> {
-    let wfg_content = std::fs::read_to_string(wfg_path)
-        .with_context(|| format!("reading .wfg file: {}", wfg_path.display()))?;
+) -> WfgenResult<LoadedScenario> {
+    let wfg_content = std::fs::read_to_string(wfg_path).source_err(
+        WfgenReason::Io,
+        format!("reading .wfg file: {}", wfg_path.display()),
+    )?;
     let wfg = parse_wfg(&wfg_content)
-        .with_context(|| format!("parsing .wfg file: {}", wfg_path.display()))?;
+        .map_err(|err| err.with_context(OperationContext::at(wfg_path.display().to_string())))?;
 
     let (schemas, wfl_files) = load_from_uses(&wfg, wfg_path, vars)?;
 
     let mut rule_plans = Vec::new();
     for wfl_file in &wfl_files {
-        let plans = wf_lang::compile_wfl(wfl_file, &schemas).context("compiling .wfl rules")?;
+        let plans = wf_lang::compile_wfl(wfl_file, &schemas).wfgen()?;
         rule_plans.extend(plans);
     }
 
@@ -55,7 +59,7 @@ pub fn load_from_uses(
     wfg: &WfgFile,
     wfg_path: &Path,
     vars: &HashMap<String, String>,
-) -> anyhow::Result<(Vec<wf_lang::WindowSchema>, Vec<wf_lang::ast::WflFile>)> {
+) -> WfgenResult<(Vec<wf_lang::WindowSchema>, Vec<wf_lang::ast::WflFile>)> {
     let base_dir = wfg_path.parent().unwrap_or_else(|| Path::new("."));
     let mut wfl_vars = vars.clone();
     wfl_vars
@@ -72,25 +76,25 @@ pub fn load_from_uses(
 
         match ext {
             "wfs" => {
-                let content = std::fs::read_to_string(&resolved).with_context(|| {
-                    format!("reading .wfs from use declaration: {}", resolved.display())
-                })?;
-                let parsed = wf_lang::parse_wfs(&content)
-                    .with_context(|| format!("parsing .wfs: {}", resolved.display()))?;
+                let content = std::fs::read_to_string(&resolved).source_err(
+                    WfgenReason::Io,
+                    format!("reading .wfs from use declaration: {}", resolved.display()),
+                )?;
+                let parsed = wf_lang::parse_wfs(&content).wfgen()?;
                 schemas.extend(parsed);
             }
             "wfl" => {
-                let source = load_wfl_with_context(&resolved, &wfl_ctx, Some(base_dir))
-                    .with_context(|| format!("preprocessing .wfl: {}", resolved.display()))?;
-                let parsed = wf_lang::parse_wfl(&source)
-                    .with_context(|| format!("parsing .wfl: {}", resolved.display()))?;
+                let source = load_wfl_with_context(&resolved, &wfl_ctx, Some(base_dir)).wfgen()?;
+                let parsed = wf_lang::parse_wfl(&source).wfgen()?;
                 wfl_files.push(parsed);
             }
             other => {
-                anyhow::bail!(
-                    "unsupported file extension '{}' in use declaration: {}",
-                    other,
-                    use_decl.path
+                return error::fail(
+                    WfgenReason::Validation,
+                    format!(
+                        "unsupported file extension '{}' in use declaration: {}",
+                        other, use_decl.path
+                    ),
                 );
             }
         }

@@ -17,7 +17,7 @@ wf-runtime = { path = "../wp-reactor/crates/wf-runtime" }
 
 [package]
 name = "warp-fusion"
-version = "0.1.2" #@gxl:set(version)
+version = "0.1.3" #@gxl:set(version)
 edition.workspace = true
 license.workspace = true
 

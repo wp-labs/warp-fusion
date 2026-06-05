@@ -45,6 +45,7 @@ mod main  {
   #[task(name="pub to local")]
   flow _pub_local   {
     gx.cmd (  "mkdir -p ${MAIN_HOME_BIN}" );
-    gx.cmd (  "cp ${MAIN_BLD_BINS}/${ENV_TARGET_NAME} ${MAIN_HOME_BIN}/"  );
+    gx.cmd (  "cp ${MAIN_BLD_BINS}/wfl ${MAIN_HOME_BIN}/"  );
+    gx.cmd (  "cp ${MAIN_BLD_BINS}/wfusion ${MAIN_HOME_BIN}/"  );
   }
 }

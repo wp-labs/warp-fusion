@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use std::time::Duration;
 
 use chrono::{DateTime, Utc};
-use wf_core::rule::{CepStateMachine, Event, RuleExecutor, StepResult, Value};
+use wf_engine::match_engine::{CepStateMachine, Event, RuleExecutor, StepResult, Value};
 use wf_lang::plan::{ConvPlan, RulePlan};
 
 use crate::datagen::stream_gen::GenEvent;

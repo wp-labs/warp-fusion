@@ -6,13 +6,13 @@ use chrono::DateTime;
 use orion_error::conversion::SourceErr;
 
 use crate::error::{self, WflReason, WflResult, WflStructExt};
-use wf_core::alert::OutputRecord;
-use wf_core::rule::{
+use wf_engine::alert::OutputRecord;
+use wf_engine::match_engine::{
     CepStateMachine, CloseReason, Event, RuleExecutor, StepResult, Value, WindowLookup,
 };
 use wf_lang::WindowSchema;
 use wf_lang::plan::RulePlan;
-use wf_vars::ConfigVarContext;
+use wf_config::ConfigVarContext;
 
 const GREEN: &str = "\x1b[1;32m";
 const RED: &str = "\x1b[1;31m";
@@ -670,7 +670,7 @@ fn infer_event_watermark_nanos(
 #[allow(clippy::too_many_arguments)]
 fn handle_close_outputs_for_engine(
     engine_idx: usize,
-    close_outputs: &[wf_core::rule::CloseOutput],
+    close_outputs: &[wf_engine::match_engine::CloseOutput],
     routes: &HashMap<String, Vec<ConsumerRoute>>,
     engines: &mut [ReplayEngine],
     lookup: &NullWindowLookup,

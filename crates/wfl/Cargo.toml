@@ -15,9 +15,8 @@ path = "src/lib.rs"
 [dependencies]
 wf-config.workspace = true
 wf-lang.workspace = true
-wf-core.workspace = true
+wf-engine.workspace = true
 wfgen = { path = "../wfgen" }
-wf-vars.workspace = true
 tree-sitter = "0.22"
 tree-sitter-wfl = { git = "https://github.com/wp-labs/tree-sitter-wfl.git", branch = "main"}
 orion-error = { workspace = true }

@@ -2,7 +2,7 @@ use std::fmt::Display;
 
 use orion_error::conversion::{ConvErr, ToStructError};
 use orion_error::{OperationContext, OrionError, StructError, UnifiedReason};
-use wf_core::error::CoreReason;
+use wf_engine::error::CoreReason;
 
 #[derive(Debug, Clone, PartialEq, OrionError)]
 pub enum WfgenReason {
@@ -30,7 +30,7 @@ pub enum WfgenReason {
     #[orion_error(transparent)]
     Core(CoreReason),
     #[orion_error(transparent)]
-    Vars(wf_vars::VarsReason),
+    Vars(wf_config::VarsReason),
     #[orion_error(transparent)]
     General(UnifiedReason),
 }
@@ -53,8 +53,8 @@ impl From<CoreReason> for WfgenReason {
     }
 }
 
-impl From<wf_vars::VarsReason> for WfgenReason {
-    fn from(reason: wf_vars::VarsReason) -> Self {
+impl From<wf_config::VarsReason> for WfgenReason {
+    fn from(reason: wf_config::VarsReason) -> Self {
         Self::Vars(reason)
     }
 }

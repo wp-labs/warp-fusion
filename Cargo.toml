@@ -10,11 +10,10 @@ license = "Apache-2.0"
 serde = { version = "1.0", features = ["derive"] }
 winnow = "0.7"
 orion-error = { version = "0.8.1", features = ["derive", "serde_json", "toml", "tracing"] }
-wf-engine = { git = "https://github.com/wp-labs/wp-reactor.git", tag = "v0.1.3" }
-wf-core = { git = "https://github.com/wp-labs/wp-reactor.git", tag = "v0.1.3" }
-wf-config = { git = "https://github.com/wp-labs/wp-reactor.git", tag = "v0.1.3" }
-wf-lang = { git = "https://github.com/wp-labs/wp-reactor.git", tag = "v0.1.3" }
-wf-vars = { git = "https://github.com/wp-labs/wp-reactor.git", tag = "v0.1.3" }
+wf-engine = { path = "../wp-reactor/crates/wf-engine" }
+wf-config = { path = "../wp-reactor/crates/wf-config" }
+wf-lang = { path = "../wp-reactor/crates/wf-lang" }
+wf-runtime = { path = "../wp-reactor/crates/wf-runtime" }
 
 [package]
 name = "warp-fusion"
@@ -28,7 +27,7 @@ path = "src/main.rs"
 
 [dependencies]
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "signal"] }
-wf-engine.workspace = true
+wf-runtime.workspace = true
 
 [dev-dependencies]
 tempfile = "3"

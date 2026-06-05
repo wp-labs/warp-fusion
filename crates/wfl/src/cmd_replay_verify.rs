@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use orion_error::conversion::SourceErr;
 
 use crate::error::{self, WflReason, WflResult, WflStructExt};
-use wf_vars::ConfigVarContext;
+use wf_config::ConfigVarContext;
 use wfgen::oracle::OracleTolerances;
 use wfgen::output::jsonl::read_oracle_jsonl;
 use wfgen::verify::{ActualAlert, verify};

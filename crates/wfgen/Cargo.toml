@@ -9,10 +9,9 @@ name = "wfgen"
 path = "src/main.rs"
 
 [dependencies]
-wf-core.workspace = true
+wf-engine.workspace = true
 wf-config.workspace = true
 wf-lang.workspace = true
-wf-vars.workspace = true
 winnow = { workspace = true }
 orion-error = { workspace = true }
 serde = { workspace = true }

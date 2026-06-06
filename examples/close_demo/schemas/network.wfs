@@ -1,0 +1,19 @@
+window conn_events {
+    stream = "netflow"
+    time = event_time
+    over = 30m
+    fields {
+        sip: ip
+        dip: ip
+        dport: digit
+        bytes: digit
+        protocol: chars
+        action: chars
+        event_time: time
+    }
+}
+
+window network_alerts {
+    over = 0
+    fields { sip: ip  alert_type: chars  detail: chars }
+}

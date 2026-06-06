@@ -1,0 +1,12 @@
+version = "1.0"
+
+[sink_group]
+name = "default_infra"
+windows = ["*"]
+
+[[sink_group.sinks]]
+connect = "file_json"
+name = "default_out"
+
+[sink_group.sinks.params]
+file = "out/default.ndjson"

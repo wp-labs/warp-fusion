@@ -1,9 +1,18 @@
-# port_scan_whitelist — 端口扫描检测（排除已知漏扫工具）
+# port_scan_whitelist — 端口扫描检测（静态窗口白名单）
 # 运行: wfusion run -c examples/port_scan_whitelist/wfusion.toml --work-dir examples/port_scan_whitelist
 
 mode = "batch"
 sinks = "sinks"
 
+# 先加载白名单（静态窗口，一次性）
+[[sources]]
+type = "file"
+name = "seed_whitelist"
+path = "data/scanner_whitelist.ndjson"
+stream = "whitelist"
+format = "ndjson"
+
+# 再加载连接事件
 [[sources]]
 type = "file"
 name = "seed_netflow"
@@ -35,6 +44,11 @@ over_cap = "30m"
 mode = "local"
 max_window_bytes = "16MB"
 over_cap = "1h"
+
+[window.scanner_whitelist]
+mode = "replicated"
+max_window_bytes = "1MB"
+over_cap = "0s"
 
 [logging]
 level = "info"

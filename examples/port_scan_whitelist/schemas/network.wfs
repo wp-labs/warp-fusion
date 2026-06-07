@@ -17,3 +17,11 @@ window security_alerts {
     over = 0
     fields { sip: ip  alert_type: chars  detail: chars }
 }
+
+// 静态窗口：白名单 IP，over=0 表示不驱逐
+window scanner_whitelist {
+    stream = "whitelist"
+    time = added_at
+    over = 0
+    fields { sip: ip  added_at: time  note: chars }
+}

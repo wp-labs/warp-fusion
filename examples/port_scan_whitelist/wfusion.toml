@@ -1,0 +1,41 @@
+# port_scan_whitelist — 端口扫描检测（排除已知漏扫工具）
+# 运行: wfusion run -c examples/port_scan_whitelist/wfusion.toml --work-dir examples/port_scan_whitelist
+
+mode = "batch"
+sinks = "sinks"
+
+[[sources]]
+type = "file"
+name = "seed_netflow"
+path = "data/conn_events.ndjson"
+stream = "netflow"
+format = "ndjson"
+
+[runtime]
+executor_parallelism = 2
+rule_exec_timeout = "30s"
+schemas = "schemas/*.wfs"
+rules   = "rules/*.wfl"
+
+[window_defaults]
+evict_interval = "30s"
+max_window_bytes = "64MB"
+max_total_bytes = "256MB"
+evict_policy = "time_first"
+watermark = "1s"
+allowed_lateness = "0s"
+late_policy = "drop"
+
+[window.conn_events]
+mode = "local"
+max_window_bytes = "64MB"
+over_cap = "30m"
+
+[window.security_alerts]
+mode = "local"
+max_window_bytes = "16MB"
+over_cap = "1h"
+
+[logging]
+level = "info"
+format = "plain"

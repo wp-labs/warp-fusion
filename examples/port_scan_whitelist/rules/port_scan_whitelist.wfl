@@ -1,0 +1,71 @@
+use "network.wfs"
+
+// 端口扫描检测 —— 已知漏扫工具白名单
+//
+// 场景：生产环境有大量服务端口扫描流量，10.0.2.1 是已知漏扫工具。
+// 理想做法：在 event 声明中用 sip != "10.0.2.1" 排除。
+//
+// WFL 当前限制：不支持 IP 类型与字符串的 == / != 比较。
+// 需要在数据采集层通过 _stream 分流或 schema 扩展 tag 字段来实现白名单。
+// 这里规则聚焦端口扫描检测核心逻辑，白名单策略见注释和数据源配置。
+//
+// 实现思路：
+//   1. 数据采集时给漏扫器流量打不同的 _stream（如 "scanner_netflow"）
+//   2. 或 schema 中增加 tag:chars 字段，过滤 scanner_tag != "vuln_scanner"
+//   3. 或上游 agent 直接丢弃已知 scanner 的连接日志
+
+rule port_scan_whitelist {
+    events { c : conn_events && action == "syn" }
+    match<sip:5m> {
+        on event { c.dport | distinct | count >= 10; }
+    } -> score(80.0)
+    entity(ip, c.sip)
+    yield security_alerts (sip = c.sip, alert_type = "port_scan", detail = "distinct ports >= 10")
+}
+
+// 达到阈值 —— 正常告警
+test scan_detected for port_scan_whitelist {
+  input {
+    row(c, sip = "10.0.0.99", dip = "192.168.1.1", dport = "80", bytes = "100", protocol = "tcp", action = "syn", event_time = "2026-01-01T00:00:00Z");
+    row(c, sip = "10.0.0.99", dip = "192.168.1.1", dport = "443", bytes = "100", protocol = "tcp", action = "syn", event_time = "2026-01-01T00:00:01Z");
+    row(c, sip = "10.0.0.99", dip = "192.168.1.1", dport = "8080", bytes = "100", protocol = "tcp", action = "syn", event_time = "2026-01-01T00:00:02Z");
+    row(c, sip = "10.0.0.99", dip = "192.168.1.1", dport = "22", bytes = "100", protocol = "tcp", action = "syn", event_time = "2026-01-01T00:00:03Z");
+    row(c, sip = "10.0.0.99", dip = "192.168.1.1", dport = "3306", bytes = "100", protocol = "tcp", action = "syn", event_time = "2026-01-01T00:00:04Z");
+    row(c, sip = "10.0.0.99", dip = "192.168.1.1", dport = "5432", bytes = "100", protocol = "tcp", action = "syn", event_time = "2026-01-01T00:00:05Z");
+    row(c, sip = "10.0.0.99", dip = "192.168.1.1", dport = "6379", bytes = "100", protocol = "tcp", action = "syn", event_time = "2026-01-01T00:00:06Z");
+    row(c, sip = "10.0.0.99", dip = "192.168.1.1", dport = "27017", bytes = "100", protocol = "tcp", action = "syn", event_time = "2026-01-01T00:00:07Z");
+    row(c, sip = "10.0.0.99", dip = "192.168.1.1", dport = "9200", bytes = "100", protocol = "tcp", action = "syn", event_time = "2026-01-01T00:00:08Z");
+    row(c, sip = "10.0.0.99", dip = "192.168.1.1", dport = "11211", bytes = "100", protocol = "tcp", action = "syn", event_time = "2026-01-01T00:00:09Z");
+  }
+  expect {
+    hits == 1;
+    hit[0].score == 80.0;
+    hit[0].entity_id == "10.0.0.99";
+  }
+}
+
+// 未达阈值 —— 不告警
+test below_threshold for port_scan_whitelist {
+  input {
+    row(c, sip = "10.0.0.1", dip = "192.168.1.1", dport = "80", bytes = "100", protocol = "tcp", action = "syn", event_time = "2026-01-01T00:00:00Z");
+    row(c, sip = "10.0.0.1", dip = "192.168.1.1", dport = "80", bytes = "100", protocol = "tcp", action = "syn", event_time = "2026-01-01T00:00:01Z");
+    row(c, sip = "10.0.0.1", dip = "192.168.1.1", dport = "443", bytes = "100", protocol = "tcp", action = "syn", event_time = "2026-01-01T00:00:02Z");
+  }
+  expect {
+    hits == 0;
+  }
+}
+
+// 不同 IP 隔离 —— 不跨 IP 累计
+test isolated_by_sip for port_scan_whitelist {
+  input {
+    row(c, sip = "10.0.0.1", dip = "192.168.1.1", dport = "80", bytes = "100", protocol = "tcp", action = "syn", event_time = "2026-01-01T00:00:00Z");
+    row(c, sip = "10.0.0.1", dip = "192.168.1.1", dport = "443", bytes = "100", protocol = "tcp", action = "syn", event_time = "2026-01-01T00:00:01Z");
+    row(c, sip = "10.0.0.2", dip = "192.168.1.1", dport = "8080", bytes = "100", protocol = "tcp", action = "syn", event_time = "2026-01-01T00:00:02Z");
+    row(c, sip = "10.0.0.2", dip = "192.168.1.1", dport = "22", bytes = "100", protocol = "tcp", action = "syn", event_time = "2026-01-01T00:00:03Z");
+    row(c, sip = "10.0.0.2", dip = "192.168.1.1", dport = "3306", bytes = "100", protocol = "tcp", action = "syn", event_time = "2026-01-01T00:00:04Z");
+  }
+  expect {
+    hits == 0;
+  }
+}

@@ -549,9 +549,10 @@ fn route_event_once(
                 .executor
                 .execute_match_with_joins(&ctx, lookup)
             {
-                Ok(record) => {
+                Ok(Some(record)) => {
                     handle_output_record(record, queue, alerts, match_count);
                 }
+                Ok(None) => {}
                 Err(e) => {
                     if color {
                         eprintln!("{RED}ERROR{RESET}: execute_match failed: {}", e);

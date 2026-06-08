@@ -1,5 +1,6 @@
 [workspace]
 members = [".", "crates/wfgen", "crates/wfl"]
+default-members = [".", "crates/wfgen", "crates/wfl"]
 resolver = "2"
 
 [workspace.package]

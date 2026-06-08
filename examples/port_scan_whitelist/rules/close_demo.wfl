@@ -1,12 +1,23 @@
 use "network.wfs"
+
+// 端口扫描检测 —— 静态窗口白名单
+//
+// 架构：
+//   1. scanner_whitelist 窗口（over=0，静态）从 whitelist stream 加载白名单
+//   2. conn_events 窗口接收 netflow 事件
+//   3. anti join 排除白名单 IP
+//
+// 注：ANTI join 需要完整引擎运行时验证（WFL test runner 不支持跨窗口 join）。
+//     解析和编译已支持，运行时通过 execute_joins 返回 false 来排除匹配事件。
+
 rule port_scan_whitelist {
-    events { c : conn_events }
+    events { c : conn_events && action == "syn" }
     match<sip:5m> {
-        on event { c | count >= 1; }
-        and close { total: c | count >= 1; }
-    } -> score(70.0)
+        on event { c.dport | distinct | count >= 10; }
+    } -> score(80.0)
+    join scanner_whitelist anti on c.sip == scanner_whitelist.sip
     entity(ip, c.sip)
-    yield network_alerts (sip = c.sip, alert_type = "test", detail = "test")
+    yield security_alerts (sip = c.sip, alert_type = "port_scan", detail = "distinct ports >= 10")
 }
 
 test scan_detected for port_scan_whitelist {

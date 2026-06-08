@@ -1,10 +1,6 @@
-# port_scan_whitelist — 端口扫描检测（静态窗口白名单）
-# 运行: wfusion run -c examples/port_scan_whitelist/wfusion.toml --work-dir examples/port_scan_whitelist
-
 mode = "batch"
-sinks = "sinks"
+sinks = "../close_demo/sinks"
 
-# 先加载白名单（静态窗口，一次性）
 [[sources]]
 type = "file"
 name = "seed_whitelist"
@@ -12,11 +8,10 @@ path = "data/scanner_whitelist.ndjson"
 stream = "whitelist"
 format = "ndjson"
 
-# 再加载连接事件
 [[sources]]
 type = "file"
 name = "seed_netflow"
-path = "data/conn_events.ndjson"
+path = "data/close_events.ndjson"
 stream = "netflow"
 format = "ndjson"
 
@@ -24,7 +19,7 @@ format = "ndjson"
 executor_parallelism = 2
 rule_exec_timeout = "30s"
 schemas = "schemas/*.wfs"
-rules   = "rules/*.wfl"
+rules   = "rules/port_scan_whitelist.wfl"
 
 [window_defaults]
 evict_interval = "30s"
@@ -40,16 +35,16 @@ mode = "local"
 max_window_bytes = "64MB"
 over_cap = "30m"
 
-[window.security_alerts]
+[window.network_alerts]
 mode = "local"
 max_window_bytes = "16MB"
 over_cap = "1h"
 
 [window.scanner_whitelist]
-mode = "replicated"
+mode = "local"
 max_window_bytes = "1MB"
-over_cap = "0s"
+over_cap = "1h"
 
 [logging]
-level = "info"
+level = "debug"
 format = "plain"

@@ -33,18 +33,19 @@ mode = "local"
 max_window_bytes = "16MB"
 over_cap = "1h"
 
-
-[logging]
-level = "info"
-format = "plain"
-
-# Provider 窗口：config 段仅用于 schema 校验通过
+# Provider 窗口：table 指向 knowdb.toml 中的表
 [window.scanner_whitelist]
 mode = "local"
 max_window_bytes = "1MB"
 over_cap = "0s"
+table = "scanner_whitelist"
 
 [window.internal_ips]
 mode = "local"
 max_window_bytes = "1MB"
 over_cap = "0s"
+table = "internal_ips"
+
+[logging]
+level = "info"
+format = "plain"

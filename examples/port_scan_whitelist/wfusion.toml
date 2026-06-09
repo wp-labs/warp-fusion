@@ -1,5 +1,5 @@
 mode = "batch"
-sinks = "../close_demo/sinks"
+sinks = "sinks"
 
 [[sources]]
 type = "file"

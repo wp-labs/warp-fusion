@@ -9,4 +9,4 @@ connect = "file_json"
 name = "error_out"
 
 [sink_group.sinks.params]
-file = "out/error.ndjson"
+file = "error.ndjson"

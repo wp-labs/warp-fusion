@@ -1,7 +1,6 @@
 mode = "batch"
 sinks = "../close_demo/sinks"
 
-# 连接事件
 [[sources]]
 type = "file"
 name = "seed_netflow"
@@ -34,15 +33,12 @@ mode = "local"
 max_window_bytes = "16MB"
 over_cap = "1h"
 
+[logging]
+level = "debug"
+format = "plain"
+
+
 [window.scanner_whitelist]
 mode = "local"
 max_window_bytes = "1MB"
 over_cap = "0s"
-
-[logging]
-level = "info"
-format = "plain"
-
-# 知识库：白名单通过 knowdb.toml 直接加载到窗口
-[knowledge]
-knowdb = "knowdb.toml"

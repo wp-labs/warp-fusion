@@ -1,52 +1,71 @@
 use "network.wfs"
 
-// 端口扫描检测 —— 静态窗口白名单
+// close trigger 三模式演示：eos / timeout / flush
 //
-// 架构：
-//   1. scanner_whitelist 窗口（over=0，静态）从 whitelist stream 加载白名单
-//   2. conn_events 窗口接收 netflow 事件
-//   3. anti join 排除白名单 IP
+// event 声明：过滤 bytes >= 200 的事件（排除小包噪音）
+// match 子句：count >= 1 是 WFL 语法要求的最小 measure（等价于"来一条就命中"）
+// close 子句：累计 ≥ 2 个匹配事件才允许 close
 //
-// 注：ANTI join 需要完整引擎运行时验证（WFL test runner 不支持跨窗口 join）。
-//     解析和编译已支持，运行时通过 execute_joins 返回 false 来排除匹配事件。
+// 三个测试分别触发不同的 close 来源：
+//   - close_eos: 事件流结束（EOF）触发
+//   - close_timeout: 窗口超时（tick 6m > 5m window）触发
+//   - close_flush: 显式 flush 指令触发
 
-rule port_scan_whitelist {
-    events { c : conn_events && action == "syn" }
+rule close_demo {
+    events { c : conn_events && bytes >= 200 }
     match<sip:5m> {
-        on event { c.dport | distinct | count >= 10; }
-    } -> score(80.0)
-    join scanner_whitelist anti on c.sip == scanner_whitelist.sip
+        on event { c | count >= 1; }
+        and close { total: c | count >= 2; }
+    } -> score(70.0)
     entity(ip, c.sip)
-    yield security_alerts (sip = c.sip, alert_type = "port_scan", detail = "distinct ports >= 10")
+    yield network_alerts (sip = c.sip, alert_type = "close_demo", detail = "triggered")
 }
 
-test scan_detected for port_scan_whitelist {
+// 事件流结束 → eos close
+test close_eos for close_demo {
   input {
-    row(c, sip = "10.0.0.99", dip = "192.168.1.1", dport = "80", bytes = "100", protocol = "tcp", action = "syn", event_time = "2026-01-01T00:00:00Z");
-    row(c, sip = "10.0.0.99", dip = "192.168.1.1", dport = "443", bytes = "100", protocol = "tcp", action = "syn", event_time = "2026-01-01T00:00:01Z");
-    row(c, sip = "10.0.0.99", dip = "192.168.1.1", dport = "8080", bytes = "100", protocol = "tcp", action = "syn", event_time = "2026-01-01T00:00:02Z");
-    row(c, sip = "10.0.0.99", dip = "192.168.1.1", dport = "22", bytes = "100", protocol = "tcp", action = "syn", event_time = "2026-01-01T00:00:03Z");
-    row(c, sip = "10.0.0.99", dip = "192.168.1.1", dport = "3306", bytes = "100", protocol = "tcp", action = "syn", event_time = "2026-01-01T00:00:04Z");
-    row(c, sip = "10.0.0.99", dip = "192.168.1.1", dport = "5432", bytes = "100", protocol = "tcp", action = "syn", event_time = "2026-01-01T00:00:05Z");
-    row(c, sip = "10.0.0.99", dip = "192.168.1.1", dport = "6379", bytes = "100", protocol = "tcp", action = "syn", event_time = "2026-01-01T00:00:06Z");
-    row(c, sip = "10.0.0.99", dip = "192.168.1.1", dport = "27017", bytes = "100", protocol = "tcp", action = "syn", event_time = "2026-01-01T00:00:07Z");
-    row(c, sip = "10.0.0.99", dip = "192.168.1.1", dport = "9200", bytes = "100", protocol = "tcp", action = "syn", event_time = "2026-01-01T00:00:08Z");
-    row(c, sip = "10.0.0.99", dip = "192.168.1.1", dport = "11211", bytes = "100", protocol = "tcp", action = "syn", event_time = "2026-01-01T00:00:09Z");
+    row(c, sip = "10.0.0.1", dip = "192.168.1.1", dport = "80", bytes = "100", protocol = "tcp", action = "syn", event_time = "2026-01-01T00:00:00Z");
+    row(c, sip = "10.0.0.1", dip = "192.168.1.1", dport = "80", bytes = "200", protocol = "tcp", action = "syn", event_time = "2026-01-01T00:01:00Z");
+    row(c, sip = "10.0.0.1", dip = "192.168.1.1", dport = "80", bytes = "300", protocol = "tcp", action = "syn", event_time = "2026-01-01T00:02:00Z");
   }
   expect {
     hits == 1;
-    hit[0].score == 80.0;
-    hit[0].entity_id == "10.0.0.99";
+    hit[0].score == 70.0;
+    hit[0].origin == "close:eos";
+    hit[0].entity_id == "10.0.0.1";
   }
 }
 
-test below_threshold for port_scan_whitelist {
+// 窗口超时 → timeout close
+test close_timeout for close_demo {
   input {
-    row(c, sip = "10.0.0.1", dip = "192.168.1.1", dport = "80", bytes = "100", protocol = "tcp", action = "syn", event_time = "2026-01-01T00:00:00Z");
-    row(c, sip = "10.0.0.1", dip = "192.168.1.1", dport = "80", bytes = "100", protocol = "tcp", action = "syn", event_time = "2026-01-01T00:00:01Z");
-    row(c, sip = "10.0.0.1", dip = "192.168.1.1", dport = "443", bytes = "100", protocol = "tcp", action = "syn", event_time = "2026-01-01T00:00:02Z");
+    row(c, sip = "10.0.0.2", dip = "192.168.1.1", dport = "80", bytes = "100", protocol = "tcp", action = "syn", event_time = "2026-01-01T00:00:00Z");
+    row(c, sip = "10.0.0.2", dip = "192.168.1.1", dport = "80", bytes = "200", protocol = "tcp", action = "syn", event_time = "2026-01-01T00:01:00Z");
+    row(c, sip = "10.0.0.2", dip = "192.168.1.1", dport = "80", bytes = "300", protocol = "tcp", action = "syn", event_time = "2026-01-01T00:02:00Z");
+    tick(6m);
   }
   expect {
-    hits == 0;
+    hits == 1;
+    hit[0].score == 70.0;
+    hit[0].origin == "close:timeout";
+    hit[0].entity_id == "10.0.0.2";
+  }
+}
+
+// 显式 flush → flush close
+test close_flush for close_demo {
+  input {
+    row(c, sip = "10.0.0.3", dip = "192.168.1.1", dport = "80", bytes = "100", protocol = "tcp", action = "syn", event_time = "2026-01-01T00:00:00Z");
+    row(c, sip = "10.0.0.3", dip = "192.168.1.1", dport = "80", bytes = "200", protocol = "tcp", action = "syn", event_time = "2026-01-01T00:01:00Z");
+    row(c, sip = "10.0.0.3", dip = "192.168.1.1", dport = "80", bytes = "300", protocol = "tcp", action = "syn", event_time = "2026-01-01T00:02:00Z");
+  }
+  expect {
+    hits == 1;
+    hit[0].score == 70.0;
+    hit[0].origin == "close:flush";
+    hit[0].entity_id == "10.0.0.3";
+  }
+  options {
+    close_trigger = flush;
   }
 }

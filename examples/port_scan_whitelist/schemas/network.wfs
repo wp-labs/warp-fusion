@@ -22,7 +22,6 @@ window network_alerts {
     }
 }
 
-// 知识库窗口：stream 不是必须的，数据通过 knowdb 直接写入
 window scanner_whitelist {
     time = added_at
     over = 0

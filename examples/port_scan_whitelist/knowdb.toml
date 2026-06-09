@@ -10,3 +10,9 @@ name = "scanner_whitelist"
 dir = "whitelist"
 enabled = true
 columns.by_header = ["sip", "note"]
+
+[[tables]]
+name = "internal_ips"
+dir = "internal_ips"
+enabled = true
+columns.by_header = ["ip", "department", "owner", "segment"]

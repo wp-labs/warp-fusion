@@ -19,6 +19,8 @@ window network_alerts {
         sip: ip
         alert_type: chars
         detail: chars
+        department: chars
+        owner: chars
     }
 }
 
@@ -26,5 +28,14 @@ window<provider> scanner_whitelist {
     fields {
         sip: ip
         note: chars
+    }
+}
+
+window<provider> internal_ips {
+    fields {
+        ip: chars
+        department: chars
+        owner: chars
+        segment: chars
     }
 }

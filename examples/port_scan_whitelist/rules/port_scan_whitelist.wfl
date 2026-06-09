@@ -1,6 +1,10 @@
 use "network.wfs"
 
-// 端口扫描检测 —— 静态窗口白名单 + ANTI join 排除已知漏扫器
+// 端口扫描检测 + 白名单排除 + IP富化
+//
+// 1. distinct | count >= 10：检测端口扫描
+// 2. anti join scanner_whitelist：排除已知漏扫器
+// 3. snapshot join internal_ips：富化告警（部门、负责人）
 
 rule port_scan_whitelist {
     events { c : conn_events && action == "syn" }
@@ -9,11 +13,17 @@ rule port_scan_whitelist {
         and close { total: c | count >= 10; }
     } -> score(80.0)
     join scanner_whitelist anti on c.sip == scanner_whitelist.sip
+    join internal_ips snapshot on c.sip == internal_ips.ip
     entity(ip, c.sip)
-    yield network_alerts (sip = c.sip, alert_type = "port_scan", detail = "distinct ports >= 10")
+    yield network_alerts (
+        sip = c.sip,
+        alert_type = "port_scan",
+        detail = "distinct ports >= 10",
+        department = internal_ips.department,
+        owner = internal_ips.owner
+    )
 }
 
-// 攻击者扫 10 个不同端口 → 告警
 test scan_detected for port_scan_whitelist {
   input {
     row(c, sip = "10.0.0.99", dip = "192.168.1.1", dport = "80", bytes = "100", protocol = "tcp", action = "syn", event_time = "2026-01-01T00:00:00Z");
@@ -34,7 +44,6 @@ test scan_detected for port_scan_whitelist {
   }
 }
 
-// 不足 10 个不同端口 → 不告警
 test below_threshold for port_scan_whitelist {
   input {
     row(c, sip = "10.0.0.1", dip = "192.168.1.1", dport = "80", bytes = "100", protocol = "tcp", action = "syn", event_time = "2026-01-01T00:00:00Z");

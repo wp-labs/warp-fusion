@@ -1,0 +1,5 @@
+ip,department,owner,segment
+10.0.0.0/8,infra,admin,internal
+10.0.2.0/24,security,sec_team,scanner_subnet
+10.0.0.99,engineering,dev_ops,workstation
+10.0.5.5,engineering,dev_ops,workstation

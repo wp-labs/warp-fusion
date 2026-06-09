@@ -1,0 +1,27 @@
+// ---------------------------------------------------------------------------
+// wfl domain — flows
+// Crate: wfl
+// ---------------------------------------------------------------------------
+
+flow TestRuleFlow {
+  trigger TestRule
+
+  step Compile {
+    create TestResult {
+      name = TestRule.file
+      passed = TestRule.file
+    }
+  }
+}
+
+flow ReplayFlow {
+  trigger ReplayEvents
+  creates ReplayResult
+
+  step LoadSchemas {
+    create ReplayResult {
+      alerts = ReplayEvents.file
+      match_count = ReplayEvents.file
+    }
+  }
+}

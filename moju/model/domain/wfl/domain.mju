@@ -1,0 +1,43 @@
+// ---------------------------------------------------------------------------
+// wfl domain — WFL CLI tool (test, replay, explain, lint, fmt)
+// Crate: wfl
+// ---------------------------------------------------------------------------
+
+// -- Commands ---------------------------------------------------------------
+
+command TestRule {
+  file: String
+  schemas: List<String>
+  test_name: String
+}
+
+command ReplayEvents {
+  file: String
+  schemas: List<String>
+  input: String
+  event: String
+}
+
+command ExplainRule {
+  file: String
+  schemas: List<String>
+}
+
+command LintRule {
+  file: String
+  schemas: List<String>
+}
+
+// -- Types ------------------------------------------------------------------
+
+struct ReplayResult {
+  alerts: List<OutputRecord>
+  match_count: Int
+  error_count: Int
+}
+
+struct TestResult {
+  name: String
+  passed: Bool
+  details: String
+}

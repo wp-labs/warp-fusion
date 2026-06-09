@@ -1,0 +1,16 @@
+// ---------------------------------------------------------------------------
+// wfgen domain — flows
+// Crate: wfgen
+// ---------------------------------------------------------------------------
+
+flow GenFlow {
+  trigger GenData
+  creates GenConfig
+
+  step Build {
+    create GenConfig {
+      count = GenData.count
+      speed = GenData.speed
+    }
+  }
+}

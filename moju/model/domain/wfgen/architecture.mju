@@ -1,0 +1,18 @@
+// ---------------------------------------------------------------------------
+// wfgen domain — module architecture
+// Crate: wfgen
+// ---------------------------------------------------------------------------
+
+module WfgenCli {
+  layer Interface
+  owns GenData, SendData
+
+  responsible_for "Wfgen CLI: generate and send test data"
+}
+
+module WfgenCore {
+  layer Application
+  owns GenConfig
+
+  responsible_for "Test data generation engine with WFS/WFL-aware field values"
+}

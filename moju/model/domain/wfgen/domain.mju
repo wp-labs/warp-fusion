@@ -1,0 +1,23 @@
+// ---------------------------------------------------------------------------
+// wfgen domain — test data generator
+// Crate: wfgen
+// ---------------------------------------------------------------------------
+
+command GenData {
+  config: String
+  count: Int
+  speed: Int
+}
+
+command SendData {
+  config: String
+  addr: String
+}
+
+// -- Types ------------------------------------------------------------------
+
+struct GenConfig {
+  count: Int
+  speed: Int
+  output: String
+}

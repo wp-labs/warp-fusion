@@ -1,0 +1,10 @@
+verify GenOk for flow GenFlow {
+  given {
+    GenData.count = "1000"
+    GenData.speed = "10000"
+  }
+  when GenData
+  expect {
+    GenConfig.count == "1000"
+  }
+}

@@ -1,0 +1,10 @@
+verify TestOk for flow TestRuleFlow {
+  given {
+    TestRule.file = "test.wfl"
+    TestRule.schemas = "schemas/*.wfs"
+  }
+  when TestRule
+  expect {
+    TestResult.name == "test.wfl"
+  }
+}

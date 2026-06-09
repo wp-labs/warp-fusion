@@ -1,0 +1,18 @@
+// ---------------------------------------------------------------------------
+// wfl domain — module architecture
+// Crate: wfl
+// ---------------------------------------------------------------------------
+
+module WflCli {
+  layer Interface
+  owns TestRule, ReplayEvents, ExplainRule, LintRule
+
+  responsible_for "WFL CLI commands: test, replay, explain, lint, fmt"
+}
+
+module WflReplay {
+  layer Application
+  owns ReplayResult, TestResult
+
+  responsible_for "WFL rule replay engine with join support and event routing"
+}

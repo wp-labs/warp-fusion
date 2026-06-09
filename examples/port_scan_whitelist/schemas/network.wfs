@@ -22,12 +22,11 @@ window network_alerts {
     }
 }
 
+// Provider 窗口：数据由 knowdb.toml → ProviderWindow 加载
+// 不需要 stream/time/over，join 时从 HashMap 查询
 window scanner_whitelist {
-    time = added_at
-    over = 0
     fields {
         sip: ip
-        added_at: time
         note: chars
     }
 }

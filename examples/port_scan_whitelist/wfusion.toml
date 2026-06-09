@@ -33,12 +33,12 @@ mode = "local"
 max_window_bytes = "16MB"
 over_cap = "1h"
 
-[logging]
-level = "debug"
-format = "plain"
-
-
+# scanner_whitelist 是 ProviderWindow（knowdb 加载），此段仅用于 schema 校验通过
 [window.scanner_whitelist]
 mode = "local"
 max_window_bytes = "1MB"
 over_cap = "0s"
+
+[logging]
+level = "info"
+format = "plain"

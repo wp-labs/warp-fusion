@@ -1,5 +1,5 @@
-sip,added_at,note
-10.0.2.1,2026-01-01T00:00:00Z,vuln_scanner
-10.0.2.2,2026-01-01T00:00:00Z,internal_nessus
-10.0.2.3,2026-01-01T00:00:00Z,internal_openvas
-192.168.1.100,2026-01-01T00:00:00Z,ci_scan_tool
+sip,note
+10.0.2.1,vuln_scanner
+10.0.2.2,internal_nessus
+10.0.2.3,internal_openvas
+192.168.1.100,ci_scan_tool

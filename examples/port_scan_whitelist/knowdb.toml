@@ -3,10 +3,10 @@ base_dir = "."
 
 [csv]
 has_header = true
-delimiter  = ","
+delimiter = ","
 
 [[tables]]
 name = "scanner_whitelist"
-dir  = "whitelist"
+dir = "whitelist"
 enabled = true
-columns.by_header = ["sip", "added_at", "note"]
+columns.by_header = ["sip", "note"]

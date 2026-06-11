@@ -1,22 +1,7 @@
 mode = "batch"
+sources_dir = "topology/sources"
 sinks = "sinks"
 
-[[sources]]
-type = "file"
-key = "conn_source"
-
-[sources.params]
-path = "data/conn_events.ndjson"
-stream = "netflow"
-format = "ndjson"
-[[sources]]
-type = "file"
-key = "auth_source"
-
-[sources.params]
-path = "data/auth_events.ndjson"
-stream = "auth"
-format = "ndjson"
 [runtime]
 executor_parallelism = 2
 rule_exec_timeout = "30s"

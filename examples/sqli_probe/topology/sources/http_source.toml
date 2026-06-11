@@ -1,0 +1,7 @@
+type = "file"
+key = "http_source"
+
+[params]
+path = "data/http_events.ndjson"
+stream = "http"
+format = "ndjson"

@@ -1,0 +1,7 @@
+type = "file"
+key = "conn_source"
+
+[params]
+path = "data/conn_events.ndjson"
+stream = "netflow"
+format = "ndjson"

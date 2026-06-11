@@ -8,8 +8,8 @@
 [[sources]]
 type = "file"
 key = "events_source"            # 可选标识符（默认 file_{N}）
-enabled = true
 
+[sources.params]
 path = "data/events.ndjson"
 stream = "netflow"               # 匹配 schema 中的 window.stream
 format = "ndjson"                # ndjson | arrow_ipc
@@ -29,6 +29,7 @@ format = "ndjson"                # ndjson | arrow_ipc
 type = "tcp"
 key = "netflow_input"
 
+[sources.params]
 listen = "tcp://0.0.0.0:9800"
 ```
 
@@ -41,6 +42,7 @@ listen = "tcp://0.0.0.0:9800"
 type = "kafka"
 key = "netflow_kafka"
 
+[sources.params]
 brokers = "localhost:9092"
 topic = "netflow"
 group_id = "wfusion"
@@ -55,10 +57,14 @@ format = "ndjson"
 ```toml
 [[sources]]
 type = "tcp"
+
+[sources.params]
 listen = "tcp://0.0.0.0:9800"
 
 [[sources]]
 type = "file"
+
+[sources.params]
 path = "data/historical.ndjson"
 stream = "netflow"
 format = "ndjson"
@@ -66,8 +72,8 @@ format = "ndjson"
 
 ## 底层实现
 
-| type | 实现 |
-|------|------|
-| `file` | `wp_core_connectors::sources::batch::file::FileBatchSource` |
-| `tcp` | `wp_core_connectors::sources::batch::tcp::TcpBatchSource` |
-| `kafka` | 规划中（通过 `wp_core_connectors` 扩展） |
+| type | 实现 crate | 说明 |
+|------|-----------|------|
+| `file` | `wp_core_connectors` | `FileBatchSource` → NDJSON → Arrow RecordBatch |
+| `tcp` | `wp_core_connectors` | `TcpBatchSource` → Arrow IPC |
+| `kafka` | 规划中 | 通过 `wp_core_connectors` 扩展 |

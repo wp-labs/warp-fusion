@@ -72,7 +72,7 @@ format = "ndjson"
 
 ## 底层实现
 
-| connect | 实现 |
+| type | 实现 |
 |---------|------|
 | `file` | `wp_core_connectors::sources::batch::file::FileBatchSource` |
 | `tcp` | `wp_core_connectors::sources::batch::tcp::TcpBatchSource` |

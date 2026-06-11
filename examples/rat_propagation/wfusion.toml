@@ -1,6 +1,6 @@
 mode = "batch"
 sources_dir = "topology/sources"
-sinks = "sinks"
+sinks = "topology/sinks"
 
 [runtime]
 executor_parallelism = 2

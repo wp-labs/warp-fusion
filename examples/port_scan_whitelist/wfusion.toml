@@ -1,5 +1,5 @@
 mode = "batch"
-sinks = "sinks"
+sinks = "topology/sinks"
 
 [[sources]]
 type = "file"

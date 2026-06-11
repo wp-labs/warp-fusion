@@ -4,9 +4,12 @@ sinks = "sinks"
 [[sources]]
 type = "file"
 key = "http_source"
+
+[sources.params]
 path = "data/http_events.ndjson"
 stream = "http"
 format = "ndjson"
+
 
 [runtime]
 executor_parallelism = 2

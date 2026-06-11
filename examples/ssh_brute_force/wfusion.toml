@@ -4,9 +4,12 @@ sinks = "sinks"
 [[sources]]
 type = "file"
 key = "auth_source"
+
+[sources.params]
 path = "data/auth_events.ndjson"
 stream = "auth"
 format = "ndjson"
+
 
 [runtime]
 executor_parallelism = 2

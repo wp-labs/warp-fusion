@@ -4,9 +4,12 @@ sinks = "sinks"
 [[sources]]
 type = "file"
 key = "seed_netflow"
+
+[sources.params]
 path = "data/conn_events.ndjson"
 stream = "netflow"
 format = "ndjson"
+
 
 [runtime]
 executor_parallelism = 2

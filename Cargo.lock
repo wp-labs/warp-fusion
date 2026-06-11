@@ -3546,7 +3546,7 @@ dependencies = [
 [[package]]
 name = "wf-config"
 version = "0.1.5"
-source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v0.1.6#2e515912208c7e5d23b24d45e5f4a7a73b61366a"
+source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v0.1.6#13919cedc3a7756ae399d20e9f72382d4617ace3"
 dependencies = [
  "glob",
  "moju-derive",
@@ -3573,7 +3573,7 @@ dependencies = [
 [[package]]
 name = "wf-engine"
 version = "0.1.5"
-source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v0.1.6#2e515912208c7e5d23b24d45e5f4a7a73b61366a"
+source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v0.1.6#13919cedc3a7756ae399d20e9f72382d4617ace3"
 dependencies = [
  "arrow",
  "async-trait",
@@ -3597,7 +3597,7 @@ dependencies = [
 [[package]]
 name = "wf-lang"
 version = "0.1.5"
-source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v0.1.6#2e515912208c7e5d23b24d45e5f4a7a73b61366a"
+source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v0.1.6#13919cedc3a7756ae399d20e9f72382d4617ace3"
 dependencies = [
  "moju-derive",
  "orion-error",
@@ -3608,7 +3608,7 @@ dependencies = [
 [[package]]
 name = "wf-runtime"
 version = "0.1.5"
-source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v0.1.6#2e515912208c7e5d23b24d45e5f4a7a73b61366a"
+source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v0.1.6#13919cedc3a7756ae399d20e9f72382d4617ace3"
 dependencies = [
  "arrow",
  "clap",

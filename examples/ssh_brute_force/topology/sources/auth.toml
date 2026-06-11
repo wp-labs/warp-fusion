@@ -1,7 +1,6 @@
 type = "file"
 key = "auth_source"
 
-[params]
 path = "data/auth_events.ndjson"
 stream = "auth"
 format = "ndjson"

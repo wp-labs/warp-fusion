@@ -1,7 +1,6 @@
 type = "file"
 key = "seed_netflow"
 
-[params]
 path = "data/conn_events.ndjson"
 stream = "netflow"
 format = "ndjson"

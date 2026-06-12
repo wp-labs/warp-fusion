@@ -1,0 +1,6 @@
+type = "file"
+key = "auth_source"
+
+path = "data/auth_events.ndjson"
+stream = "auth"
+format = "ndjson"

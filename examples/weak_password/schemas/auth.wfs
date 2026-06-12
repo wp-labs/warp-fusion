@@ -1,0 +1,47 @@
+window auth_events {
+    stream = "auth"
+    time = event_time
+    over = 10m
+    fields {
+        sip: ip
+        dip: ip
+        dport: digit
+        service: chars
+        user: chars
+        password_hash: chars
+        result: chars
+        event_time: time
+    }
+}
+
+// 弱口令库 — 外部加载的已知弱口令/泄露凭据清单
+//
+// hash_value 覆盖三种场景：
+//   明文:         "123456"
+//   简单 Hash:     md5("123456") = "e10adc3949ba..."
+//   盐+Hash:      实际泄露的 "$6$abc123$xxx"
+//
+// password_masked 用于告警展示，不暴露完整凭据，如 "1*****"
+window weak_password_db {
+    stream = "password_audit"
+    over = 0
+    fields {
+        hash_value: chars
+        password_masked: chars
+        category: chars
+        note: chars
+    }
+}
+
+window security_alerts {
+    over = 0
+    fields {
+        sip: ip
+        dip: ip
+        user: chars
+        found_password: chars
+        category: chars
+        alert_type: chars
+        detail: chars
+    }
+}

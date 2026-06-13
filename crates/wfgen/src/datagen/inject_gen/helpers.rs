@@ -64,7 +64,7 @@ pub(super) fn compute_cluster_count(
         let stream_total = *stream_totals.get(&step.scenario_alias).unwrap_or(&0);
         let budget = (stream_total as f64 * percent / 100.0).round() as u64;
         if step.threshold > 0 {
-            let clusters = budget / step.threshold;
+            let clusters = budget.checked_div(step.threshold).unwrap_or(0);
             min_clusters = min_clusters.min(clusters);
         }
     }

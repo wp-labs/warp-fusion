@@ -62,7 +62,7 @@ pub fn generate(
             generate_inject_events(wfg, rule_plans, schemas, &start, &duration, &mut rng)?;
         inject_counts = inject_result.inject_counts;
         let mut inject_events = inject_result.events;
-        inject_events.sort_by(|a, b| a.timestamp.cmp(&b.timestamp));
+        inject_events.sort_by_key(|a| a.timestamp);
         if !inject_events.is_empty() {
             sorted_chunks.push(inject_events);
         }

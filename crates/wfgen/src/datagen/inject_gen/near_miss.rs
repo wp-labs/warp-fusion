@@ -51,7 +51,7 @@ pub(super) fn generate_near_miss_clusters(
         .unwrap_or(&0);
     let budget = (stream_total as f64 * percent / 100.0).round() as u64;
     let nm_count = near_miss_counts[nm_step_idx];
-    let num_clusters = if nm_count > 0 { budget / nm_count } else { 0 };
+    let num_clusters = budget.checked_div(nm_count).unwrap_or(0);
 
     if num_clusters == 0 {
         return Ok(Vec::new());

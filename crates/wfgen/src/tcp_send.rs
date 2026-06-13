@@ -3,10 +3,10 @@ use std::net::TcpStream;
 
 use orion_error::conversion::{SourceErr, SourceRawErr};
 
-use wf_lang::WindowSchema;
 use crate::datagen::stream_gen::GenEvent;
 use crate::error::{self, WfgenReason, WfgenResult};
 use crate::output::arrow_ipc::events_to_typed_batches;
+use wf_lang::WindowSchema;
 
 pub fn connect_sender(addr: &str) -> WfgenResult<TcpStream> {
     let stream = TcpStream::connect(addr).source_err(

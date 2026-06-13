@@ -5,10 +5,10 @@ use std::process;
 use orion_error::conversion::SourceErr;
 
 use crate::error::{self, WflReason, WflResult, WflStructExt};
+use wf_config::ConfigVarContext;
 use wf_config::project::{load_schemas, load_wfl_with_context, parse_vars};
 use wf_engine::match_engine::contract::run_test;
 use wf_lang::ast::PermutationMode;
-use wf_config::ConfigVarContext;
 
 const GREEN: &str = "\x1b[1;32m";
 const RED: &str = "\x1b[1;31m";

@@ -11,14 +11,12 @@ pub(super) fn validate_oracle_params(scenario: &ScenarioDecl) -> Vec<ValidationE
 
     for param in &oracle.params {
         match param.name.as_str() {
-            "time_tolerance" => {
-                if !matches!(&param.value, ParamValue::Duration(_)) {
-                    errors.push(ValidationError {
-                        code: "SV8",
-                        message: "oracle.time_tolerance must be a duration (e.g. 1s, 500ms)"
-                            .to_string(),
-                    });
-                }
+            "time_tolerance" if !matches!(&param.value, ParamValue::Duration(_)) => {
+                errors.push(ValidationError {
+                    code: "SV8",
+                    message: "oracle.time_tolerance must be a duration (e.g. 1s, 500ms)"
+                        .to_string(),
+                });
             }
             "score_tolerance" => match &param.value {
                 ParamValue::Number(n) if *n >= 0.0 => {}

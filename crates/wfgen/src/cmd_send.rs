@@ -11,12 +11,7 @@ use crate::wfg_parser::parse_wfg;
 use crate::cmd_helpers::load_ws_files;
 use crate::tcp_send::send_events;
 
-pub fn run(
-    scenario: PathBuf,
-    input: PathBuf,
-    addr: String,
-    ws: Vec<PathBuf>,
-) -> WfgenResult<()> {
+pub fn run(scenario: PathBuf, input: PathBuf, addr: String, ws: Vec<PathBuf>) -> WfgenResult<()> {
     let wfg_content = std::fs::read_to_string(&scenario).source_err(
         WfgenReason::Io,
         format!("reading .wfg file: {}", scenario.display()),

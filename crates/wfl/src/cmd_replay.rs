@@ -6,13 +6,13 @@ use chrono::DateTime;
 use orion_error::conversion::SourceErr;
 
 use crate::error::{self, WflReason, WflResult, WflStructExt};
+use wf_config::ConfigVarContext;
 use wf_engine::alert::OutputRecord;
 use wf_engine::match_engine::{
     CepStateMachine, CloseReason, Event, RuleExecutor, StepResult, Value, WindowLookup,
 };
 use wf_lang::WindowSchema;
 use wf_lang::plan::RulePlan;
-use wf_config::ConfigVarContext;
 
 const GREEN: &str = "\x1b[1;32m";
 const RED: &str = "\x1b[1;31m";

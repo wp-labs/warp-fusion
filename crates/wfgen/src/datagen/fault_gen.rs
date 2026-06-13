@@ -173,7 +173,7 @@ fn two_pass_transform(
     // Pass 2: Insert deferred (late) events at their target positions.
     // Sort deferred by target index in reverse so insertions don't shift
     // earlier targets.
-    deferred.sort_by(|a, b| b.1.cmp(&a.1));
+    deferred.sort_by_key(|b| std::cmp::Reverse(b.1));
     for (event, target_idx) in deferred {
         let idx = target_idx.min(result.len());
         result.insert(idx, event);

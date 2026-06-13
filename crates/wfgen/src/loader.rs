@@ -4,8 +4,8 @@ use std::path::Path;
 use orion_error::OperationContext;
 use orion_error::conversion::SourceErr;
 
-use wf_config::load_wfl_with_context;
 use wf_config::ConfigVarContext;
+use wf_config::load_wfl_with_context;
 
 use crate::error::{self, WfgenReason, WfgenResult, WfgenStructExt};
 use crate::wfg_ast::WfgFile;

@@ -216,56 +216,126 @@ async fn run_cli() -> CliResult<()> {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::Run { load, metrics, metrics_interval, metrics_listen } => {
-            run_engine_command(load, metrics, metrics_interval, metrics_listen).await?
-        }
-        Commands::Config { command } => {
-            run_config_command(command).await?
-        }
+        Commands::Run {
+            load,
+            metrics,
+            metrics_interval,
+            metrics_listen,
+        } => run_engine_command(load, metrics, metrics_interval, metrics_listen).await?,
+        Commands::Config { command } => run_config_command(command).await?,
         Commands::Scenario { command } => match command {
-            ScenarioCommands::Gen { scenario, format, out, ws, wfl, no_oracle, send, addr } => {
+            ScenarioCommands::Gen {
+                scenario,
+                format,
+                out,
+                ws,
+                wfl,
+                no_oracle,
+                send,
+                addr,
+            } => {
                 wfgen::cmd_gen::run(scenario, format, out, ws, wfl, no_oracle, send, addr)
                     .map_err(into_cli_error_from_wfgen)?;
             }
             ScenarioCommands::Lint { scenario, ws, wfl } => {
-                wfgen::cmd_lint::run(scenario, ws, wfl)
-                    .map_err(into_cli_error_from_wfgen)?;
+                wfgen::cmd_lint::run(scenario, ws, wfl).map_err(into_cli_error_from_wfgen)?;
             }
-            ScenarioCommands::Verify { expected, actual, score_tolerance, time_tolerance, meta, format } => {
-                wfgen::cmd_verify::run(expected, actual, score_tolerance, time_tolerance, meta, format)
-                    .map_err(into_cli_error_from_wfgen)?;
+            ScenarioCommands::Verify {
+                expected,
+                actual,
+                score_tolerance,
+                time_tolerance,
+                meta,
+                format,
+            } => {
+                wfgen::cmd_verify::run(
+                    expected,
+                    actual,
+                    score_tolerance,
+                    time_tolerance,
+                    meta,
+                    format,
+                )
+                .map_err(into_cli_error_from_wfgen)?;
             }
-            ScenarioCommands::Send { scenario, input, addr, ws } => {
+            ScenarioCommands::Send {
+                scenario,
+                input,
+                addr,
+                ws,
+            } => {
                 wfgen::cmd_send::run(scenario, input, addr, ws)
                     .map_err(into_cli_error_from_wfgen)?;
             }
-            ScenarioCommands::Bench { scenario, ws, wfl, duration, send, addr } => {
+            ScenarioCommands::Bench {
+                scenario,
+                ws,
+                wfl,
+                duration,
+                send,
+                addr,
+            } => {
                 wfgen::cmd_bench::run(scenario, ws, wfl, duration, send, addr)
                     .map_err(into_cli_error_from_wfgen)?;
             }
         },
         Commands::Rule { command } => match command {
             RuleCommands::Explain { file, schemas, var } => {
-                wfl::cmd_explain::run(file, schemas, var)
-                    .map_err(into_cli_error_from_wfl)?;
+                wfl::cmd_explain::run(file, schemas, var).map_err(into_cli_error_from_wfl)?;
             }
             RuleCommands::Lint { file, schemas, var } => {
-                wfl::cmd_lint::run(file, schemas, var)
-                    .map_err(into_cli_error_from_wfl)?;
+                wfl::cmd_lint::run(file, schemas, var).map_err(into_cli_error_from_wfl)?;
             }
-            RuleCommands::Fmt { files, write, check } => {
-                wfl::cmd_fmt::run(files, write, check)
-                    .map_err(into_cli_error_from_wfl)?;
+            RuleCommands::Fmt {
+                files,
+                write,
+                check,
+            } => {
+                wfl::cmd_fmt::run(files, write, check).map_err(into_cli_error_from_wfl)?;
             }
-            RuleCommands::Replay { file, schemas, input, var } => {
-                wfl::cmd_replay::run(file, schemas, input, var)
-                    .map_err(into_cli_error_from_wfl)?;
+            RuleCommands::Replay {
+                file,
+                schemas,
+                input,
+                var,
+            } => {
+                wfl::cmd_replay::run(file, schemas, input, var).map_err(into_cli_error_from_wfl)?;
             }
-            RuleCommands::ReplayVerify { file, case, data_dir, schemas, input, var, expected, score_tolerance, time_tolerance, meta, format } => {
-                wfl::cmd_replay_verify::run(file, case, data_dir, schemas, input, var, expected, score_tolerance, time_tolerance, meta, format)
-                    .map_err(into_cli_error_from_wfl)?;
+            RuleCommands::ReplayVerify {
+                file,
+                case,
+                data_dir,
+                schemas,
+                input,
+                var,
+                expected,
+                score_tolerance,
+                time_tolerance,
+                meta,
+                format,
+            } => {
+                wfl::cmd_replay_verify::run(
+                    file,
+                    case,
+                    data_dir,
+                    schemas,
+                    input,
+                    var,
+                    expected,
+                    score_tolerance,
+                    time_tolerance,
+                    meta,
+                    format,
+                )
+                .map_err(into_cli_error_from_wfl)?;
             }
-            RuleCommands::Test { file, schemas, var, shuffle, runs } => {
+            RuleCommands::Test {
+                file,
+                schemas,
+                var,
+                shuffle,
+                runs,
+            } => {
                 wfl::cmd_test::run(file, schemas, var, shuffle, runs)
                     .map_err(into_cli_error_from_wfl)?;
             }

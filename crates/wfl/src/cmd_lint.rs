@@ -7,8 +7,8 @@ use orion_error::conversion::SourceErr;
 use crate::error::{WflReason, WflResult, WflStructExt};
 use wf_lang::{CheckError, Severity};
 
-use wf_config::project::{load_schemas, load_wfl_with_context, parse_vars};
 use wf_config::ConfigVarContext;
+use wf_config::project::{load_schemas, load_wfl_with_context, parse_vars};
 
 fn print_diag(diag: &CheckError, color: bool) {
     let (prefix, code) = match diag.severity {

@@ -4,9 +4,9 @@ use std::path::PathBuf;
 use orion_error::conversion::SourceErr;
 
 use crate::error::{WflReason, WflResult, WflStructExt};
+use wf_config::ConfigVarContext;
 use wf_config::project::{load_schemas, load_wfl_with_context, parse_vars};
 use wf_lang::explain::RuleExplanation;
-use wf_config::ConfigVarContext;
 
 const BOLD: &str = "\x1b[1m";
 const GREEN: &str = "\x1b[1;32m";

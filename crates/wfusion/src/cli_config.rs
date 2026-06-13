@@ -9,7 +9,7 @@ use std::str::FromStr;
 use clap::{Args, Subcommand};
 use orion_error::conversion::{ConvErr, ConvStructError, SourceErr};
 
-use wf_config::{parse_vars, ConfigVarContext, FusionConfig, FusionConfigLoader, HumanDuration};
+use wf_config::{ConfigVarContext, FusionConfig, FusionConfigLoader, HumanDuration, parse_vars};
 use wf_runtime::{
     cli::error::{EngineError, EngineReason, EngineResult},
     error::RuntimeError,
@@ -22,7 +22,11 @@ use crate::error::{CliResult, into_cli_error};
 // -- CLI argument types ------------------------------------------------------
 
 #[derive(::moju_derive::MoJu, Args, Clone)]
-#[moju(kind = "struct", domain = "Orchestra", module = "Orchestra.EngineEntry")]
+#[moju(
+    kind = "struct",
+    domain = "Orchestra",
+    module = "Orchestra.EngineEntry"
+)]
 pub struct ConfigLoadArgs {
     #[arg(short, long, default_value = "conf/wfusion.toml")]
     pub config: PathBuf,
@@ -35,7 +39,11 @@ pub struct ConfigLoadArgs {
 }
 
 #[derive(::moju_derive::MoJu, Args, Clone, Default)]
-#[moju(kind = "struct", domain = "Orchestra", module = "Orchestra.EngineEntry")]
+#[moju(
+    kind = "struct",
+    domain = "Orchestra",
+    module = "Orchestra.EngineEntry"
+)]
 pub struct CompareConfigLoadArgs {
     #[arg(long = "to-config")]
     pub to_config: Option<PathBuf>,
@@ -48,21 +56,33 @@ pub struct CompareConfigLoadArgs {
 }
 
 #[derive(::moju_derive::MoJu, Args, Clone, Default)]
-#[moju(kind = "struct", domain = "Orchestra", module = "Orchestra.EngineEntry")]
+#[moju(
+    kind = "struct",
+    domain = "Orchestra",
+    module = "Orchestra.EngineEntry"
+)]
 pub struct PathFilterArgs {
     #[arg(long = "path-prefix")]
     pub path_prefix: Vec<String>,
 }
 
 #[derive(::moju_derive::MoJu, Args, Clone, Default)]
-#[moju(kind = "struct", domain = "Orchestra", module = "Orchestra.EngineEntry")]
+#[moju(
+    kind = "struct",
+    domain = "Orchestra",
+    module = "Orchestra.EngineEntry"
+)]
 pub struct VarFilterArgs {
     #[arg(long = "var-prefix")]
     pub var_prefix: Vec<String>,
 }
 
 #[derive(::moju_derive::MoJu)]
-#[moju(kind = "struct", domain = "Orchestra", module = "Orchestra.EngineEntry")]
+#[moju(
+    kind = "struct",
+    domain = "Orchestra",
+    module = "Orchestra.EngineEntry"
+)]
 struct ResolvedConfigLoad {
     config_path: PathBuf,
     overlay_paths: Vec<PathBuf>,
@@ -162,7 +182,9 @@ fn resolve_compare_config_load(
     compare: CompareConfigLoadArgs,
 ) -> EngineResult<ResolvedConfigLoad> {
     resolve_config_load_parts(
-        compare.to_config.unwrap_or_else(|| base.config_path.clone()),
+        compare
+            .to_config
+            .unwrap_or_else(|| base.config_path.clone()),
         compare.to_overlay,
         compare.to_var,
         compare.to_work_dir,
@@ -265,7 +287,10 @@ async fn run_config_inner(command: ConfigCommands) -> EngineResult<()> {
             }
         }
         ConfigCommands::Diff {
-            load, compare, filter, expanded,
+            load,
+            compare,
+            filter,
+            expanded,
         } => {
             let resolved = resolve_config_load(load)?;
             let compare_resolved = resolve_compare_config_load(&resolved, compare)?;
@@ -306,19 +331,35 @@ async fn run_config_inner(command: ConfigCommands) -> EngineResult<()> {
                 println!("path: {}", change.path);
                 println!(
                     "  old: {}",
-                    change.old_value.as_ref().map(format_value).unwrap_or_else(|| "<none>".to_string())
+                    change
+                        .old_value
+                        .as_ref()
+                        .map(format_value)
+                        .unwrap_or_else(|| "<none>".to_string())
                 );
                 println!(
                     "  new: {}",
-                    change.new_value.as_ref().map(format_value).unwrap_or_else(|| "<none>".to_string())
+                    change
+                        .new_value
+                        .as_ref()
+                        .map(format_value)
+                        .unwrap_or_else(|| "<none>".to_string())
                 );
                 println!(
                     "  old_origin: {}",
-                    change.old_origin.as_deref().map(|p| p.display().to_string()).unwrap_or_else(|| "<none>".to_string())
+                    change
+                        .old_origin
+                        .as_deref()
+                        .map(|p| p.display().to_string())
+                        .unwrap_or_else(|| "<none>".to_string())
                 );
                 println!(
                     "  new_origin: {}",
-                    change.new_origin.as_deref().map(|p| p.display().to_string()).unwrap_or_else(|| "<none>".to_string())
+                    change
+                        .new_origin
+                        .as_deref()
+                        .map(|p| p.display().to_string())
+                        .unwrap_or_else(|| "<none>".to_string())
                 );
             }
         }
@@ -373,7 +414,10 @@ async fn run_engine_inner(
     if let Some(listen_addr) = reactor.listen_addr() {
         tracing::info!(domain = "sys", listen = %listen_addr, "WarpFusion reactor started");
     } else {
-        tracing::info!(domain = "sys", "WarpFusion reactor started without tcp listener");
+        tracing::info!(
+            domain = "sys",
+            "WarpFusion reactor started without tcp listener"
+        );
     }
     if metrics_enabled {
         tracing::info!(

@@ -23,3 +23,5 @@ target
 .run*
 .report
 out_dat
+*.log
+*.dat

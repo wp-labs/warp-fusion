@@ -14,7 +14,7 @@ cleanup() {
 trap cleanup EXIT
 
 echo "============================================"
-echo "  Kafka Pipeline: wpgen → wparse → Kafka → wfusion → Kafka"
+echo "  Kafka Pipeline: wpgen → wparse → Kafka → wfusion → alerts"
 echo "============================================"
 echo ""
 
@@ -34,7 +34,10 @@ echo "   → data/in_dat/conn_events.ndjson"
 cd ..
 echo ""
 
-# 3. Start wfusion daemon first (consumes from Kafka)
+# 3. Use a fresh consumer group to always replay from beginning
+GROUP_ID="wfusion_$(date +%s)"
+sed -i '' "s/group_id = .*/group_id = \"$GROUP_ID\"/" wfusion/topology/sources/kafka_nginx.toml
+
 echo "3> wfusion: starting daemon, consuming from Kafka..."
 cd wfusion
 rm -rf data/out_dat
@@ -43,6 +46,7 @@ wfusion run --config conf/wfusion.toml &
 WFUSION_PID=$!
 sleep 3
 cd ..
+echo "   group_id=$GROUP_ID"
 echo "   wfusion PID=$WFUSION_PID"
 echo ""
 
@@ -55,15 +59,23 @@ echo "   → topic: wp_nginx_logs"
 cd ..
 echo ""
 
-# 5. Wait for processing and show results
-sleep 3
-echo "wfusion alerts from Kafka topic wp_alerts:"
-docker-compose exec -T kafka /opt/kafka/bin/kafka-console-consumer.sh \
-    --bootstrap-server localhost:9092 \
-    --topic wp_alerts \
-    --from-beginning \
-    --timeout-ms 5000 \
-    --max-messages 10 || true
+# 5. Graceful shutdown to flush windows and write alerts
+echo "5> flushing wfusion windows..."
+kill "$WFUSION_PID" 2>/dev/null || true
+wait "$WFUSION_PID" 2>/dev/null || true
+sleep 1
+
+# 6. Show local alert files
 echo ""
-echo "Press Ctrl+C to stop"
-wait $WFUSION_PID
+echo "wfusion alerts (local files):"
+for f in wfusion/data/out_dat/alerts/*.ndjson; do
+    name=$(basename "$f")
+    size=$(wc -c < "$f" | tr -d ' ')
+    if [ "$size" -gt 0 ]; then
+        echo "  $name ($size bytes)"
+        cat "$f" | python3 -m json.tool 2>/dev/null || cat "$f"
+    else
+        echo "  $name (empty)"
+    fi
+done
+echo ""

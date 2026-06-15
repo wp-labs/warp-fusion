@@ -1,4 +1,4 @@
-type = "file"
+connect = "file_src"
 key = "conn_source"
 
 path = "data/conn_events.ndjson"

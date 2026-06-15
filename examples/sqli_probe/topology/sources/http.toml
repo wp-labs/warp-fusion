@@ -1,4 +1,4 @@
-type = "file"
+connect = "file_src"
 key = "http_source"
 
 path = "data/http_events.ndjson"

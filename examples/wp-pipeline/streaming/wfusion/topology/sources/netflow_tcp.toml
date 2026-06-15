@@ -1,4 +1,4 @@
-type = "tcp"
+connect = "tcp_src"
 key = "nginx_tcp"
 listen = "tcp://127.0.0.1:9802"
 stream = "nginx_access"

@@ -40,3 +40,24 @@ call context:
 2026-06-15 14:16:56.162162000 [INFO ] [mtrc   ] mem: rss=22.4 MiB
 2026-06-15 14:16:57.163083000 [INFO ] [mtrc   ] mem: rss=22.5 MiB
 2026-06-15 14:16:57.956027000 [INFO ] [ctrl   ] wpgen.sample: completed
+2026-06-15 14:32:22.521481000 [INFO ] [ctrl   ] wpgen out sink resolved: kind=file, params={"base": String("data/in_dat"), "file": String("conn_events.ndjson"), "fmt": String("json"), "sync": Bool(false)}
+2026-06-15 14:32:22.521648000 [INFO ] [ctrl   ] wpgen.sample: rule_root='./models/wpl', find_name='sample.dat', parallel=1, total_line=Some(5000), gen_speed=5000, stat_sec=1, env: WF_GEN_BATCH=(unset), WF_GEN_UNIT_SIZE=(unset)
+2026-06-15 14:32:22.521681000 [INFO ] [ctrl   ] run_sample_direct: rule_root='./models/wpl', find_name='sample.dat', parallel=1, total_line=Some(5000)
+2026-06-15 14:32:22.521696000 [INFO ] [ctrl   ] find conf files in: ./models/wpl
+2026-06-15 14:32:22.521791000 [INFO ] [ctrl   ] run_sample_direct: found 1 files
+2026-06-15 14:32:22.521845000 [INFO ] [ctrl   ] run_sample_direct: loaded 1 sample lines
+2026-06-15 14:32:22.521858000 [INFO ] [ctrl   ] run_sample_direct: speed_profile=Constant(5000), base_speed=5000
+2026-06-15 14:32:22.521957000 [INFO ] [ctrl   ] monitor proc start: stat_sec=1, stat_print=false
+2026-06-15 14:32:22.522067000 [INFO ] [ctrl   ] speed: unlimited (no wait)
+2026-06-15 14:32:22.522084000 [INFO ] [orion_error::core::context] suc! doing=build-sink-instance: 
+call context:
+	sink_name : gen_out
+	sink_kind : file
+
+2026-06-15 14:32:22.522114000 [INFO ] [ctrl   ] run_sample_direct: spawn pipeline 0 (shared_total=Some(5000))
+2026-06-15 14:32:22.522133000 [INFO ] [ctrl   ] monitor loop started (stat_sec=1, stat_print=false)
+2026-06-15 14:32:23.338070000 [INFO ] [ctrl   ] run_sample_direct: all pipelines finished
+2026-06-15 14:32:23.338174000 [INFO ] [ctrl   ] run_sample_direct: summary generated=5000 lines, elapsed=816 ms, parallel=1 
+2026-06-15 14:32:23.542662000 [INFO ] [mtrc   ] mem: rss=22.5 MiB
+2026-06-15 14:32:24.542607000 [INFO ] [mtrc   ] mem: rss=22.5 MiB
+2026-06-15 14:32:25.340123000 [INFO ] [ctrl   ] wpgen.sample: completed

@@ -1,4 +1,4 @@
-type = "file"
+connect = "file_src"
 key = "seed_netflow"
 
 path = "data/conn_events.ndjson"

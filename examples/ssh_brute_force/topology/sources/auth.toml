@@ -1,4 +1,4 @@
-type = "file"
+connect = "file_src"
 key = "auth_source"
 
 path = "data/auth_events.ndjson"

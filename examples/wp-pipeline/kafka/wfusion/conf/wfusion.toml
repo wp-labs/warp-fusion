@@ -1,4 +1,5 @@
 mode = "daemon"
+sources_dir = "../topology/sources"
 sinks = "../topology/sinks"
 
 [runtime]
@@ -37,15 +38,6 @@ over_cap = "0s"
 mode = "local"
 max_window_bytes = "1MB"
 over_cap = "0s"
-
-[[sources]]
-type = "kafka"
-key = "kafka_src"
-stream = "nginx_access"
-brokers = "localhost:9092"
-topic = "wp_nginx_logs"
-group_id = "wfusion"
-config = "auto.offset.reset=earliest"
 
 [logging]
 level = "debug"

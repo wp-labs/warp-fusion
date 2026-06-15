@@ -1,0 +1,64 @@
+version = "1.0"
+robust = "normal"
+skip_parse = false
+skip_sink = false
+
+[models]
+wpl = "./models/wpl"
+oml = "./models/oml"
+knowledge = "./models/knowledge"
+
+[topology]
+sources = "./topology/sources"
+sinks = "./topology/sinks"
+
+[performance]
+rate_limit_rps = 10000
+parse_workers = 2
+reload_timeout_ms = 10000
+fetch_timeout_ms = 300
+
+[rescue]
+path = "./data/rescue"
+
+[log_conf]
+level = "warn,ctrl=info,data=error,matrc=error,dfx=warn,kdb=warn"
+output = "File"
+
+[log_conf.file]
+path = "./data/logs/"
+
+[[stat.pick]]
+key = "pick_stat"
+target = "*"
+
+[[stat.parse]]
+key = "parse_stat"
+target = "*"
+
+[[stat.sink]]
+key = "sink_stat"
+target = "*"
+
+[semantic]
+enabled = false
+
+[project_remote]
+enabled = false
+repo = ""
+init_version = ""
+
+[admin_api]
+enabled = false
+bind = "127.0.0.1:19090"
+request_timeout_ms = 15000
+max_body_bytes = 4096
+
+[admin_api.tls]
+enabled = false
+cert_file = ""
+key_file = ""
+
+[admin_api.auth]
+mode = "bearer_token"
+token_file = "${HOME}/.warp_parse/admin_api.token"

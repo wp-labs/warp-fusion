@@ -407,6 +407,10 @@ async fn run_engine_inner(
 
     let _guard = init_tracing(&fusion_config.logging, &resolved.runtime_base_dir).conv_err()?;
 
+    // Register optional connector factories (app-level, same pattern as warp-parse feats.rs)
+    wp_core_connectors::registry::register_sink_factory(wp_connectors::kafka::KafkaSinkFactory);
+    wp_core_connectors::registry::register_source_factory(wp_connectors::kafka::KafkaSourceFactory);
+
     let reactor = match Reactor::start(fusion_config, &resolved.runtime_base_dir).await {
         Ok(reactor) => reactor,
         Err(err) => return Err(render_runtime_error(err)),

@@ -1,0 +1,10 @@
+version = "1.0"
+[sink_group]
+name = "traffic_out"
+windows = ["traffic_alerts"]
+[[sink_group.sinks]]
+connect = "file_json_sink"
+name = "traffic_file"
+[sink_group.sinks.params]
+base = "../data/out_dat/alerts"
+file = "traffic.ndjson"

@@ -1,0 +1,17 @@
+[[connectors]]
+allow_override = ["endpoint", "database", "schema", "table", "username", "password", "batch", "cursor_column", "cursor_type", "start_from", "start_from_format", "poll_interval_ms", "error_backoff_ms"]
+id = "postgres_src"
+type = "postgres"
+
+[connectors.params]
+batch = 5000
+cursor_column = "id"
+cursor_type = "int"
+database = "wp_data"
+endpoint = "localhost:5432"
+error_backoff_ms = 2000
+password = "dayu"
+poll_interval_ms = 1000
+schema = "public"
+table = "wp_events"
+username = "root"

@@ -1,0 +1,6 @@
+type = "kafka"
+key = "kafka_nginx"
+stream = "nginx_access"
+brokers = "localhost:9092"
+topic = "wp_nginx_logs"
+group_id = "wfusion_test"

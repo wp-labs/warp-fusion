@@ -1,0 +1,20 @@
+
+[sink_group]
+name = "miss"
+batch_size = 1
+batch_timeout_ms = 300
+
+[[sink_group.sinks]]
+connect = "file_raw_sink"
+
+[sink_group.sinks.params]
+file = "miss.dat"
+
+[sink_group.sinks.expect]
+max = 0.1
+min = 0.0
+
+# To mirror miss records to VictoriaLogs, uncomment and tune the sink below.
+#[[sink_group.sinks]]
+#name = "victorialogs_output"
+#connect = "victorialogs_sink"

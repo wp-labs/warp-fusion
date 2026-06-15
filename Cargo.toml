@@ -14,14 +14,10 @@ arrow = { version = "54", default-features = false, features = ["ipc"] }
 async-trait = "0.1"
 orion-error = { version = "0.8.1", features = ["derive", "serde_json", "toml", "tracing"] }
 
-wf-engine = { git = "https://github.com/wp-labs/wp-reactor.git", tag = "v0.1.11" }
-wf-config = { git = "https://github.com/wp-labs/wp-reactor.git", tag = "v0.1.11" }
-wf-lang = { git = "https://github.com/wp-labs/wp-reactor.git", tag = "v0.1.11" }
-wf-runtime = { git = "https://github.com/wp-labs/wp-reactor.git", tag = "v0.1.11" }
+wf-engine = { git = "https://github.com/wp-labs/wp-reactor.git", tag = "v0.1.12" }
+wf-config = { git = "https://github.com/wp-labs/wp-reactor.git", tag = "v0.1.12" }
+wf-lang = { git = "https://github.com/wp-labs/wp-reactor.git", tag = "v0.1.12" }
+wf-runtime = { git = "https://github.com/wp-labs/wp-reactor.git", tag = "v0.1.12" }
 wf-connector-api =  "0.1"
-wp-connectors = { git = "https://github.com/wp-labs/wp-connectors.git", tag = "0.15.4" }
-
-#wf-engine = { path = "../wp-reactor/crates/wf-engine" }
-#wf-config = { path = "../wp-reactor/crates/wf-config" }
-#wf-lang = { path = "../wp-reactor/crates/wf-lang" }
-#wf-runtime = { path = "../wp-reactor/crates/wf-runtime" }
+wp-connectors = { git = "https://github.com/wp-labs/wp-connectors.git", tag = "v0.15.4" }
+wp-core-connectors = "0.5.0"

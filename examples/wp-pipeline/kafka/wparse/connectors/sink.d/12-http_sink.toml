@@ -1,0 +1,17 @@
+[[connectors]]
+allow_override = ["endpoint", "method", "username", "password", "headers", "fmt", "batch_size", "timeout_secs", "max_retries", "compression"]
+id = "http_sink"
+type = "http"
+
+[connectors.params]
+batch_size = 1
+compression = "none"
+endpoint = "http://localhost:8080/webhook"
+fmt = "json"
+max_retries = 3
+method = "POST"
+password = ""
+timeout_secs = 60
+username = ""
+
+[connectors.params.headers]

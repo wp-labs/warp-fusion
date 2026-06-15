@@ -70,6 +70,7 @@ work_root = "{}"
 type = "tcp"
 name = "ingress"
 listen = "tcp://127.0.0.1:0"
+format = "arrow_framed"
 
 [runtime]
 executor_parallelism = 2

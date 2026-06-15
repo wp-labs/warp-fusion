@@ -1,0 +1,19 @@
+
+[sink_group]
+name = "monitor"
+batch_size = 1
+batch_timeout_ms = 300
+
+[[sink_group.sinks]]
+connect = "file_proto_text_sink"
+
+[sink_group.sinks.params]
+file = "monitor.dat"
+
+[sink_group.sinks.expect]
+max = 1.0
+
+# To export monitor metrics to VictoriaMetrics, uncomment and tune the sink below.
+#[[sink_group.sinks]]
+#name = "victoriametrics"
+#connect = "victoriametrics_sink"

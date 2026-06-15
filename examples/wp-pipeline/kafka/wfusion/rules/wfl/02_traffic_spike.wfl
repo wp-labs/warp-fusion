@@ -1,0 +1,16 @@
+use "network.wfs"
+
+rule traffic_spike {
+    events { e : conn_events }
+    match<sip:5m> {
+        on event { e | count >= 100; }
+        and close { e | count >= 100; }
+    } -> score(80.0)
+    entity(ip, e.sip)
+    yield traffic_alerts (
+        sip = e.sip,
+        alert_type = "traffic_spike",
+        total_bytes = 100,
+        request_count = 100
+    )
+}

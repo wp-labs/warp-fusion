@@ -1,0 +1,8 @@
+[[connectors]]
+allow_override = ["batch", "total", "interval_ms"]
+id = "count_src"
+type = "count"
+
+[connectors.params]
+batch = 1
+interval_ms = 1000

@@ -1,0 +1,10 @@
+[[connectors]]
+allow_override = ["base", "file", "sync", "protocol"]
+id = "file_raw_sink"
+type = "file"
+
+[connectors.params]
+base = "./data/out_dat"
+file = "default.raw"
+fmt = "raw"
+sync = false

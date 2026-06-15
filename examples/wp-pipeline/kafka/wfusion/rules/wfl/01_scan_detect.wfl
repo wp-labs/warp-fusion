@@ -1,0 +1,16 @@
+use "network.wfs"
+
+rule scan_detect {
+    events { e : conn_events }
+    match<sip:5m> {
+        on event { e | count >= 50; }
+        and close { e | count >= 50; }
+    } -> score(70.0)
+    entity(ip, e.sip)
+    yield scan_alerts (
+        sip = e.sip,
+        alert_type = "scanner",
+        detail = ">=50 req in 5min",
+        request_count = 50
+    )
+}

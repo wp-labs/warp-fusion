@@ -1,0 +1,14 @@
+[[connectors]]
+allow_override = ["protocol", "host", "port", "index", "username", "password", "timeout_secs", "timeout", "max_retries", "retries"]
+id = "elasticsearch_sink"
+type = "elasticsearch"
+
+[connectors.params]
+host = "localhost"
+index = "wp_logs"
+max_retries = 3
+password = ""
+port = 9200
+protocol = "http"
+timeout_secs = 60
+username = "elastic"

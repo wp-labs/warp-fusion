@@ -1,6 +1,6 @@
 [package]
 name = "wfusion"
-version = "0.1.7" #@gxl:set(version)
+version = "0.1.8" #@gxl:set(version)
 edition.workspace = true
 license.workspace = true
 
@@ -11,6 +11,8 @@ path = "src/main.rs"
 [dependencies]
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "signal"] }
 wf-runtime.workspace = true
+wp-connectors.workspace = true
+wp-core-connectors.workspace = true
 wfgen = { path = "../wfgen" }
 wfl = { path = "../wfl" }
 wf-config.workspace = true

@@ -1,0 +1,48 @@
+# 语义词典外部配置（知识配置）
+# 文件位置：models/knowledge/semantic_dict.toml
+# 用于扩展或替换系统内置的语义词典
+
+version = 1
+
+# 外部词典开关（可选，默认 true）
+enabled = true
+
+# 配置模式：
+#   - "add"：将下面的词汇添加到系统内置词典（默认，推荐）
+#   - "replace"：用下面的词汇完全替换系统内置词典
+mode = "add"
+
+# 停用词（可选）
+# [stop_words]
+# chinese = ["额外停用词"]
+# english = ["custom_stop_word"]
+
+# 日志领域关键词（可选）
+# 注意：支持任意自定义分类名，不局限于下面的例子
+[domain_words]
+# 常用通用分类示例
+# log_level = ["critical"]
+# system = ["cache", "queue"]
+# network = ["websocket", "grpc"]
+# security = ["firewall", "encryption"]
+
+# 自定义分类示例（可根据业务需求自由定义）
+# database = ["mysql", "postgres", "mongodb", "redis"]
+# cloud = ["kubernetes", "docker", "pod"]
+# middleware = ["kafka", "rabbitmq", "elasticsearch"]
+# business = ["order", "payment", "product"]
+
+# 状态词（可选）
+# [status_words]
+# english = ["processing", "queued"]
+# chinese = ["处理中", "队列中"]
+
+# 动作词（可选）
+# [action_verbs]
+# english = ["deploy", "rollback"]
+# chinese = ["部署", "回滚"]
+
+# 实体名词（可选）
+# [entity_nouns]
+# english = ["migration", "notification"]
+# chinese = ["迁移任务", "通知"]

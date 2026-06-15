@@ -1,0 +1,12 @@
+[[connectors]]
+allow_override = ["endpoint", "database", "table", "username", "batch", "columns"]
+id = "postgres_sink"
+type = "postgres"
+
+[connectors.params]
+batch_size = 1024
+columns = ["wp_event_id", "payload"]
+database = "wp_data"
+endpoint = "localhost:5432"
+table = "wp_events"
+username = "root"

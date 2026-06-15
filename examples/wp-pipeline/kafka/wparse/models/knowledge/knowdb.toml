@@ -1,0 +1,26 @@
+version = 2
+
+[[tables]]
+name = "example"
+
+[tables.columns]
+by_header = [
+    "name",
+    "pinying",
+]
+
+[tables.expected_rows]
+min = 1
+
+# PostgreSQL provider example:
+# Uncomment this block to query an external PostgreSQL database instead of
+# loading CSV files into the local authority SQLite.
+#
+# [provider]
+# kind = "postgres"
+# connection_uri = "postgres://demo:${SEC_PWD}@127.0.0.1:5432/demo"
+# pool_size = 8
+#
+# After enabling [provider], OML lookup SQL runs against that PostgreSQL
+# datasource. Keep the local CSV example below if you still want a ready-made
+# sample table in the generated project.

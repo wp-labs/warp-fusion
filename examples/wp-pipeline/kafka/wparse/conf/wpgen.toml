@@ -1,0 +1,18 @@
+version = "1.0"
+
+[generator]
+count = 5000
+speed = 5000
+parallel = 1
+
+[output]
+connect = "file_json_sink"
+
+[output.params]
+base = "data/in_dat"
+file = "conn_events.ndjson"
+
+[logging]
+level = "info"
+output = "file"
+file_path = "./data/logs"

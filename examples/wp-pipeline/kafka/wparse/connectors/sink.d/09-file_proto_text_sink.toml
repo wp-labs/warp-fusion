@@ -1,0 +1,10 @@
+[[connectors]]
+allow_override = ["base", "file", "sync", "protocol"]
+id = "file_proto_text_sink"
+type = "file"
+
+[connectors.params]
+base = "./data/out_dat"
+file = "default.pbtxt"
+fmt = "proto-text"
+sync = false

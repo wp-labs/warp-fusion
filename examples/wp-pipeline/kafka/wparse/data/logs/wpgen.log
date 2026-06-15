@@ -1,0 +1,42 @@
+2026-06-15 14:15:43.436279000 [INFO ] [ctrl   ] wpgen out sink resolved: kind=file, params={"base": String("data/in_dat"), "file": String("conn_events.ndjson"), "fmt": String("json"), "sync": Bool(false)}
+2026-06-15 14:15:43.436411000 [INFO ] [ctrl   ] wpgen.sample: rule_root='./models/wpl', find_name='sample.dat', parallel=1, total_line=Some(5000), gen_speed=5000, stat_sec=1, env: WF_GEN_BATCH=(unset), WF_GEN_UNIT_SIZE=(unset)
+2026-06-15 14:15:43.436435000 [INFO ] [ctrl   ] run_sample_direct: rule_root='./models/wpl', find_name='sample.dat', parallel=1, total_line=Some(5000)
+2026-06-15 14:15:43.436449000 [INFO ] [ctrl   ] find conf files in: ./models/wpl
+2026-06-15 14:15:43.436540000 [INFO ] [ctrl   ] run_sample_direct: found 1 files
+2026-06-15 14:15:43.436596000 [INFO ] [ctrl   ] run_sample_direct: loaded 1 sample lines
+2026-06-15 14:15:43.436609000 [INFO ] [ctrl   ] run_sample_direct: speed_profile=Constant(5000), base_speed=5000
+2026-06-15 14:15:43.436709000 [INFO ] [ctrl   ] monitor proc start: stat_sec=1, stat_print=false
+2026-06-15 14:15:43.436797000 [INFO ] [ctrl   ] speed: unlimited (no wait)
+2026-06-15 14:15:43.436811000 [INFO ] [ctrl   ] monitor loop started (stat_sec=1, stat_print=false)
+2026-06-15 14:15:43.436827000 [INFO ] [orion_error::core::context] suc! doing=build-sink-instance: 
+call context:
+	sink_name : gen_out
+	sink_kind : file
+
+2026-06-15 14:15:43.436853000 [INFO ] [ctrl   ] run_sample_direct: spawn pipeline 0 (shared_total=Some(5000))
+2026-06-15 14:15:44.247062000 [INFO ] [ctrl   ] run_sample_direct: all pipelines finished
+2026-06-15 14:15:44.247119000 [INFO ] [ctrl   ] run_sample_direct: summary generated=5000 lines, elapsed=810 ms, parallel=1 
+2026-06-15 14:15:44.456637000 [INFO ] [mtrc   ] mem: rss=22.3 MiB
+2026-06-15 14:15:45.457369000 [INFO ] [mtrc   ] mem: rss=22.4 MiB
+2026-06-15 14:15:46.248344000 [INFO ] [ctrl   ] wpgen.sample: completed
+2026-06-15 14:16:55.141506000 [INFO ] [ctrl   ] wpgen out sink resolved: kind=file, params={"base": String("data/in_dat"), "file": String("conn_events.ndjson"), "fmt": String("json"), "sync": Bool(false)}
+2026-06-15 14:16:55.141658000 [INFO ] [ctrl   ] wpgen.sample: rule_root='./models/wpl', find_name='sample.dat', parallel=1, total_line=Some(5000), gen_speed=5000, stat_sec=1, env: WF_GEN_BATCH=(unset), WF_GEN_UNIT_SIZE=(unset)
+2026-06-15 14:16:55.141687000 [INFO ] [ctrl   ] run_sample_direct: rule_root='./models/wpl', find_name='sample.dat', parallel=1, total_line=Some(5000)
+2026-06-15 14:16:55.141705000 [INFO ] [ctrl   ] find conf files in: ./models/wpl
+2026-06-15 14:16:55.141804000 [INFO ] [ctrl   ] run_sample_direct: found 1 files
+2026-06-15 14:16:55.141869000 [INFO ] [ctrl   ] run_sample_direct: loaded 1 sample lines
+2026-06-15 14:16:55.141883000 [INFO ] [ctrl   ] run_sample_direct: speed_profile=Constant(5000), base_speed=5000
+2026-06-15 14:16:55.141976000 [INFO ] [ctrl   ] monitor proc start: stat_sec=1, stat_print=false
+2026-06-15 14:16:55.142071000 [INFO ] [ctrl   ] speed: unlimited (no wait)
+2026-06-15 14:16:55.142085000 [INFO ] [ctrl   ] monitor loop started (stat_sec=1, stat_print=false)
+2026-06-15 14:16:55.142103000 [INFO ] [orion_error::core::context] suc! doing=build-sink-instance: 
+call context:
+	sink_name : gen_out
+	sink_kind : file
+
+2026-06-15 14:16:55.142125000 [INFO ] [ctrl   ] run_sample_direct: spawn pipeline 0 (shared_total=Some(5000))
+2026-06-15 14:16:55.954496000 [INFO ] [ctrl   ] run_sample_direct: all pipelines finished
+2026-06-15 14:16:55.954649000 [INFO ] [ctrl   ] run_sample_direct: summary generated=5000 lines, elapsed=812 ms, parallel=1 
+2026-06-15 14:16:56.162162000 [INFO ] [mtrc   ] mem: rss=22.4 MiB
+2026-06-15 14:16:57.163083000 [INFO ] [mtrc   ] mem: rss=22.5 MiB
+2026-06-15 14:16:57.956027000 [INFO ] [ctrl   ] wpgen.sample: completed

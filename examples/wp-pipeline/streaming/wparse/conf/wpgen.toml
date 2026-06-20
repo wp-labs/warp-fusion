@@ -6,11 +6,12 @@ speed = 1000
 parallel = 1
 
 [output]
-connect = "file_json_sink"
+connect = "tcp_sink"
 
 [output.params]
-base = "../data"
-file = "gen.dat"
+addr = "127.0.0.1"
+port = "9801"
+framing = "line"
 
 [logging]
 level = "info"

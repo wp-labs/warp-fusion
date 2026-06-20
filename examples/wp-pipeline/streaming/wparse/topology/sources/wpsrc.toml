@@ -1,20 +1,10 @@
 [[sources]]
-key = "file_1"
+key = "tcp_1"
 enable = true
-connect = "file_src"
+connect = "tcp_src"
 tags = []
 
 [sources.params]
-encode = "text"
-file = "gen*.dat"
-
-[[sources]]
-key = "syslog_1"
-enable = false
-connect = "syslog_tcp_src"
-tags = []
-
-[sources.params]
-addr = "0.0.0.0"
-port = 1514
-protocol = "tcp"
+addr = "127.0.0.1"
+port = "9801"
+framing = "line"

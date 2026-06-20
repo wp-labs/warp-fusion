@@ -85,7 +85,7 @@ mkdir -p ../data/logs
 wparse batch -p -n "$LINE_CNT" -S 1 &
 WPARSE_PID=$!
 cd ..
-sleep 2
+sleep 0
 echo "   wparse PID=$WPARSE_PID"
 
 # 4. Run wpgen (foreground, sends data over TCP)

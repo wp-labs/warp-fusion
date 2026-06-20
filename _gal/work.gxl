@@ -48,4 +48,12 @@ mod main  {
     gx.cmd (  "cp ${MAIN_BLD_BINS}/wfl ${MAIN_HOME_BIN}/"  );
     gx.cmd (  "cp ${MAIN_BLD_BINS}/wfusion ${MAIN_HOME_BIN}/"  );
   }
+  flow use_local  {
+    gx.patch_file(file: "./Cargo.toml", action: "comment_block", marker: "remote_reactor");
+    gx.patch_file(file: "./Cargo.toml", action: "uncomment_block", marker: "local_reactor");
+  }
+  flow use_remote {
+    gx.patch_file(file: "./Cargo.toml", action: "comment_block", marker: "local_reactor");
+    gx.patch_file(file: "./Cargo.toml", action: "uncomment_block", marker: "remote_reactor");
+  }
 }

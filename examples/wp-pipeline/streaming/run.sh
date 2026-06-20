@@ -82,7 +82,7 @@ echo "   wfusion PID=$WFUSION_PID"
 echo "2> wparse: daemon, tcp_src :$PORT_IN → tcp_sink → wfusion :$PORT_OUT..."
 cd wparse
 mkdir -p ../data/logs
-wparse work -p &
+wparse daemon -p &
 WPARSE_PID=$!
 cd ..
 sleep 2  # wait for tcp_src bind + tcp_sink connect

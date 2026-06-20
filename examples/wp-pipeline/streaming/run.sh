@@ -4,7 +4,7 @@ cd "$(dirname "${BASH_SOURCE[0]}")"
 LINE_CNT=${LINE_CNT:-3000}
 
 # ---- pre-check ----
-source "$(dirname "${BASH_SOURCE[0]}")/../lib-check.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/../deps-check.sh"
 # -------------------
 
 cleanup() {

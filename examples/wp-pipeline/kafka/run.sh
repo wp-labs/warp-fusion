@@ -4,7 +4,7 @@ cd "$(dirname "${BASH_SOURCE[0]}")"
 LINE_CNT=${LINE_CNT:-5000}
 
 # ---- pre-check ----
-source "$(dirname "${BASH_SOURCE[0]}")/../lib-check.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/../deps-check.sh"
 # -------------------
 
 cleanup() {
@@ -50,6 +50,7 @@ wait "$WPARSE_PID" 2>/dev/null || true
 cd ..
 echo "   → TCP :9800 → wparse → Kafka (wp_nginx_logs)"
 
+sleep 2
 # 5. Flush wfusion (graceful shutdown → flush windows → alerts)
 echo "4> flushing wfusion windows..."
 kill "$WFUSION_PID" 2>/dev/null || true

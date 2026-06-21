@@ -130,6 +130,32 @@ enum Commands {
         #[arg(long, default_value = "127.0.0.1:9800")]
         addr: String,
     },
+    /// Continuous data generation (daemon mode)
+    Stream {
+        /// Directory containing .wfg scenario files (cycled indefinitely)
+        #[arg(long)]
+        scenario_dir: PathBuf,
+
+        /// Schema files (.wfs)
+        #[arg(long)]
+        ws: Vec<PathBuf>,
+
+        /// Rule files (.wfl)
+        #[arg(long)]
+        wfl: Vec<PathBuf>,
+
+        /// Target TCP address (wparse tcp_src)
+        #[arg(long, default_value = "127.0.0.1:9800")]
+        addr: String,
+
+        /// Seconds per scenario before switching
+        #[arg(long, default_value = "60")]
+        interval: u64,
+
+        /// Sleep (ms) between generate batches — controls event rate
+        #[arg(long, default_value = "100")]
+        rate_sleep: u64,
+    },
 }
 
 fn main() {
@@ -183,5 +209,13 @@ fn run_cli() -> WfgenResult<()> {
             send,
             addr,
         } => wfgen::cmd_bench::run(scenario, ws, wfl, duration, send, addr),
+        Commands::Stream {
+            scenario_dir,
+            ws,
+            wfl,
+            addr,
+            interval,
+            rate_sleep,
+        } => wfgen::cmd_stream::run(scenario_dir, ws, wfl, addr, interval, rate_sleep),
     }
 }

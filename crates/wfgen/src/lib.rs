@@ -3,6 +3,7 @@ pub mod cmd_gen;
 pub mod cmd_helpers;
 pub mod cmd_lint;
 pub mod cmd_send;
+pub mod cmd_stream;
 pub mod cmd_verify;
 pub mod datagen;
 pub mod error;

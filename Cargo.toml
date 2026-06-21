@@ -29,4 +29,4 @@ wf-runtime = { git = "https://github.com/wp-labs/wp-reactor.git", tag = "v0.1.16
 
 wf-connector-api =  "0.1"
 wp-connectors = { git = "https://github.com/wp-labs/wp-connectors.git", tag = "v0.15.6" }
-wp-core-connectors = "0.5.2"
+wp-core-connectors = "0.5.5"

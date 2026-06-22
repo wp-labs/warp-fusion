@@ -1,7 +1,5 @@
 use std::time::Duration;
 
-use chrono::Utc;
-
 use winnow::combinator::{alt, cut_err, opt};
 use winnow::error::{AddContext, StrContext, StrContextValue};
 use winnow::prelude::*;
@@ -180,7 +178,7 @@ pub(super) fn parse_syntax_body(
         name,
         seed,
         time_clause: TimeClause {
-            start: Utc::now().to_rfc3339(),
+            start: "2026-01-01T00:00:00Z".to_string(),
             duration,
         },
         total,

@@ -1,0 +1,38 @@
+use "../../../../../../wp-reactor/examples/sum/schemas/network.wfs"
+use "../../../../../../wp-reactor/examples/sum/rules/data_exfil.wfl"
+
+#[duration=15m]
+scenario data_exfil_detect<seed=42> {
+  traffic {
+    stream conn_events gen 100/s
+  }
+
+  injection {
+    // 高流量外泄：4次30MB = 120MB > 100MB阈值，触发on event
+    hit<25%> conn_events {
+      sip seq {
+        use(action="send", bytes=30000000) with(4)
+      }
+    }
+
+    // 中等流量：5次12MB = 60MB > 50MB关闭阈值，触发on close
+    near_miss<20%> conn_events {
+      sip seq {
+        use(action="send", bytes=12000000) with(5)
+      }
+    }
+
+    // 正常低流量
+    miss<55%> conn_events {
+      sip seq {
+        use(action="send", bytes=1000) with(1)
+      }
+    }
+  }
+
+  expect {
+    hit(data_exfil) >= 80%
+    near_miss(data_exfil) <= 10%
+    miss(data_exfil) <= 0.5%
+  }
+}

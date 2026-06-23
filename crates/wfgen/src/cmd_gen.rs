@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::path::PathBuf;
 
 use orion_error::conversion::SourceErr;
@@ -8,6 +8,7 @@ use rand::rngs::StdRng;
 use crate::datagen::fault_gen::apply_faults;
 use crate::datagen::generate;
 use crate::error::{self, WfgenReason, WfgenResult};
+use crate::injection_targets::injected_rule_names;
 use crate::loader::load_from_uses;
 use crate::oracle::{extract_oracle_tolerances, run_oracle};
 use crate::output::arrow_ipc::write_arrow_ipc;
@@ -129,12 +130,7 @@ pub async fn run(
         let duration = wfg.scenario.time_clause.duration;
 
         // SC7: only evaluate rules that have inject coverage
-        let injected_rules: HashSet<String> = wfg
-            .scenario
-            .injects
-            .iter()
-            .map(|i| i.rule.clone())
-            .collect();
+        let injected_rules = injected_rule_names(&wfg)?;
 
         let expected_result = run_oracle(
             &result.events,
@@ -196,12 +192,7 @@ pub async fn run(
         })?;
         let duration = wfg.scenario.time_clause.duration;
 
-        let injected_rules: HashSet<String> = wfg
-            .scenario
-            .injects
-            .iter()
-            .map(|i| i.rule.clone())
-            .collect();
+        let injected_rules = injected_rule_names(&wfg)?;
 
         let faulted_expected = run_oracle(
             &output_events,

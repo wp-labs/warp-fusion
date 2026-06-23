@@ -39,6 +39,8 @@ fn make_simple_rule_plan() -> RulePlan {
             close_steps: vec![],
             close_mode: CloseMode::Or,
             tracked_bind_aliases: std::collections::HashSet::new(),
+            tracked_bind_fields: std::collections::HashMap::new(),
+            tracked_plain_fields: std::collections::HashSet::new(),
         },
         each_plan: None,
         joins: vec![],
@@ -66,6 +68,38 @@ fn make_filtered_rule_plan() -> RulePlan {
         op: wf_lang::ast::BinOp::Eq,
         left: Box::new(Expr::Field(FieldRef::Simple("action".to_string()))),
         right: Box::new(Expr::StringLit("failed".to_string())),
+    });
+    plan
+}
+
+fn make_and_close_rule_plan() -> RulePlan {
+    let mut plan = make_simple_rule_plan();
+    plan.name = "close_rule".to_string();
+    plan.match_plan.close_steps = vec![StepPlan {
+        branches: vec![BranchPlan {
+            label: Some("close_count".to_string()),
+            source: "fail".to_string(),
+            field: None,
+            guard: None,
+            agg: AggPlan {
+                transforms: vec![],
+                measure: Measure::Count,
+                cmp: CmpOp::Ge,
+                threshold: Expr::Number(1.0),
+            },
+        }],
+    }];
+    plan.match_plan.close_mode = CloseMode::And;
+    plan
+}
+
+fn make_timeout_guard_close_rule_plan() -> RulePlan {
+    let mut plan = make_and_close_rule_plan();
+    plan.name = "timeout_close_rule".to_string();
+    plan.match_plan.close_steps[0].branches[0].guard = Some(Expr::BinOp {
+        op: wf_lang::ast::BinOp::Eq,
+        left: Box::new(Expr::Field(FieldRef::Simple("close_reason".to_string()))),
+        right: Box::new(Expr::StringLit("timeout".to_string())),
     });
     plan
 }
@@ -192,6 +226,48 @@ fn bind_filter_is_applied_during_oracle_eval() {
 }
 
 #[test]
+fn close_all_eos_fires_and_close_rule_at_scenario_end() {
+    let plan = make_and_close_rule_plan();
+    let start: chrono::DateTime<Utc> = "2024-01-01T00:00:00Z".parse().unwrap();
+    let duration = Duration::from_secs(60);
+
+    // The 5m match window has not expired by scenario end. The oracle must
+    // still model finite replay EOF and close active instances.
+    let events = vec![
+        make_event("s1", "LoginWindow", "10.0.0.1", "2024-01-01T00:00:01Z"),
+        make_event("s1", "LoginWindow", "10.0.0.1", "2024-01-01T00:00:02Z"),
+        make_event("s1", "LoginWindow", "10.0.0.1", "2024-01-01T00:00:03Z"),
+    ];
+
+    let result = run_oracle(&events, &[plan], &start, &duration, None).unwrap();
+
+    assert_eq!(result.alerts.len(), 1);
+    assert_eq!(result.alerts[0].rule_name, "close_rule");
+    assert_eq!(result.alerts[0].entity_id, "10.0.0.1");
+    assert_eq!(result.alerts[0].origin, "close:eos");
+}
+
+#[test]
+fn scenario_end_timeout_sweep_fires_timeout_guarded_close_rule() {
+    let plan = make_timeout_guard_close_rule_plan();
+    let start: chrono::DateTime<Utc> = "2024-01-01T00:00:00Z".parse().unwrap();
+    let duration = Duration::from_secs(600);
+
+    let events = vec![
+        make_event("s1", "LoginWindow", "10.0.0.1", "2024-01-01T00:00:01Z"),
+        make_event("s1", "LoginWindow", "10.0.0.1", "2024-01-01T00:00:02Z"),
+        make_event("s1", "LoginWindow", "10.0.0.1", "2024-01-01T00:00:03Z"),
+    ];
+
+    let result = run_oracle(&events, &[plan], &start, &duration, None).unwrap();
+
+    assert_eq!(result.alerts.len(), 1);
+    assert_eq!(result.alerts[0].rule_name, "timeout_close_rule");
+    assert_eq!(result.alerts[0].entity_id, "10.0.0.1");
+    assert_eq!(result.alerts[0].origin, "close:timeout");
+}
+
+#[test]
 fn empty_events_no_alerts() {
     let plan = make_simple_rule_plan();
     let start: chrono::DateTime<Utc> = "2024-01-01T00:00:00Z".parse().unwrap();
@@ -257,6 +333,8 @@ fn multi_alias_same_window_both_receive_events() {
             close_steps: vec![],
             close_mode: CloseMode::Or,
             tracked_bind_aliases: std::collections::HashSet::new(),
+            tracked_bind_fields: std::collections::HashMap::new(),
+            tracked_plain_fields: std::collections::HashSet::new(),
         },
         each_plan: None,
         joins: vec![],
@@ -414,6 +492,8 @@ fn conv_top_filters_non_qualifying() {
             }],
             close_mode: CloseMode::And,
             tracked_bind_aliases: std::collections::HashSet::new(),
+            tracked_bind_fields: std::collections::HashMap::new(),
+            tracked_plain_fields: std::collections::HashSet::new(),
         },
         each_plan: None,
         joins: vec![],

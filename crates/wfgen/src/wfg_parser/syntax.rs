@@ -172,7 +172,6 @@ pub(super) fn parse_syntax_body(
     let duration = extract_duration(&attrs).unwrap_or_else(|| Duration::from_secs(60));
     let total = derive_total(&traffic, duration);
     let streams = derive_legacy_streams(&traffic);
-    let injects = derive_legacy_injects(injection.as_ref(), expect.as_ref());
 
     let scenario = ScenarioDecl {
         name,
@@ -183,7 +182,7 @@ pub(super) fn parse_syntax_body(
         },
         total,
         streams,
-        injects,
+        injects: Vec::new(),
         faults: None,
         oracle: None,
     };
@@ -413,6 +412,23 @@ fn parse_injection_case(input: &mut &str) -> ModalResult<SyntaxInjectCase> {
     let pct = cut_err(percent).parse_next(input)?;
     cut_err(literal(">")).parse_next(input)?;
     ws_skip(input)?;
+    let target_rule = if opt(wf_lang::parse_utils::kw("for"))
+        .parse_next(input)?
+        .is_some()
+    {
+        ws_skip(input)?;
+        Some(
+            cut_err(ident)
+                .context(StrContext::Expected(StrContextValue::Description(
+                    "target rule name in injection case",
+                )))
+                .parse_next(input)?
+                .to_string(),
+        )
+    } else {
+        None
+    };
+    ws_skip(input)?;
     let stream = cut_err(ident)
         .context(StrContext::Expected(StrContextValue::Description(
             "stream name in injection case",
@@ -428,6 +444,7 @@ fn parse_injection_case(input: &mut &str) -> ModalResult<SyntaxInjectCase> {
     Ok(SyntaxInjectCase {
         mode,
         percent: pct,
+        target_rule,
         stream,
         seq,
     })
@@ -460,43 +477,24 @@ fn parse_seq_block(input: &mut &str) -> ModalResult<SeqBlock> {
 }
 
 fn parse_seq_step(input: &mut &str) -> ModalResult<SeqStep> {
-    let mut then_from_prev = false;
     if opt(wf_lang::parse_utils::kw("then"))
         .parse_next(input)?
         .is_some()
     {
-        then_from_prev = true;
         ws_skip(input)?;
+        cut_err(wf_lang::parse_utils::kw("use"))
+            .context(StrContext::Expected(StrContextValue::Description(
+                "'use' after 'then'",
+            )))
+            .parse_next(input)?;
+        return parse_use_step_after_keyword(input);
     }
 
     if opt(wf_lang::parse_utils::kw("use"))
         .parse_next(input)?
         .is_some()
     {
-        ws_skip(input)?;
-        cut_err(literal("(")).parse_next(input)?;
-        let predicates = parse_predicates(input)?;
-        cut_err(literal(")")).parse_next(input)?;
-        ws_skip(input)?;
-        cut_err(wf_lang::parse_utils::kw("with")).parse_next(input)?;
-        ws_skip(input)?;
-        cut_err(literal("(")).parse_next(input)?;
-        ws_skip(input)?;
-        let count = cut_err(wf_lang::parse_utils::nonneg_integer).parse_next(input)? as u64;
-        ws_skip(input)?;
-        cut_err(literal(",")).parse_next(input)?;
-        ws_skip(input)?;
-        let within = cut_err(wf_lang::parse_utils::duration_value).parse_next(input)?;
-        ws_skip(input)?;
-        cut_err(literal(")")).parse_next(input)?;
-        ws_skip(input)?;
-        let _ = opt(literal(";")).parse_next(input)?;
-        return Ok(SeqStep::Use {
-            then_from_prev,
-            predicates,
-            count,
-            within,
-        });
+        return parse_use_step_after_keyword(input);
     }
 
     if opt(wf_lang::parse_utils::kw("not"))
@@ -529,6 +527,24 @@ fn parse_seq_step(input: &mut &str) -> ModalResult<SeqStep> {
             )),
         ),
     ))
+}
+
+fn parse_use_step_after_keyword(input: &mut &str) -> ModalResult<SeqStep> {
+    ws_skip(input)?;
+    cut_err(literal("(")).parse_next(input)?;
+    let predicates = parse_predicates(input)?;
+    cut_err(literal(")")).parse_next(input)?;
+    ws_skip(input)?;
+    cut_err(wf_lang::parse_utils::kw("with")).parse_next(input)?;
+    ws_skip(input)?;
+    cut_err(literal("(")).parse_next(input)?;
+    ws_skip(input)?;
+    let count = cut_err(wf_lang::parse_utils::nonneg_integer).parse_next(input)? as u64;
+    ws_skip(input)?;
+    cut_err(literal(")")).parse_next(input)?;
+    ws_skip(input)?;
+    let _ = opt(literal(";")).parse_next(input)?;
+    Ok(SeqStep::Use { predicates, count })
 }
 
 fn parse_predicates(input: &mut &str) -> ModalResult<Vec<FieldPredicate>> {
@@ -669,109 +685,6 @@ fn derive_legacy_streams(traffic: &TrafficBlock) -> Vec<StreamBlock> {
             overrides: Vec::new(),
         })
         .collect()
-}
-
-fn derive_legacy_injects(
-    injection: Option<&SyntaxInjectionBlock>,
-    expect: Option<&ExpectBlock>,
-) -> Vec<InjectBlock> {
-    let Some(inj) = injection else {
-        return Vec::new();
-    };
-
-    let mut streams = Vec::new();
-    let mut lines = Vec::new();
-
-    for case in &inj.cases {
-        if !streams.iter().any(|s| s == &case.stream) {
-            streams.push(case.stream.clone());
-        }
-
-        let mut params = vec![ParamAssign {
-            name: "count_per_entity".to_string(),
-            value: ParamValue::Number(first_use_count(case.seq.steps.as_slice()) as f64),
-        }];
-        if let Some(within) = first_use_within(case.seq.steps.as_slice()) {
-            params.push(ParamAssign {
-                name: "within".to_string(),
-                value: ParamValue::Duration(within),
-            });
-        }
-        if matches!(case.mode, InjectCaseMode::NearMiss)
-            && let Some(steps_completed) = completed_use_steps(case.seq.steps.as_slice())
-        {
-            params.push(ParamAssign {
-                name: "steps_completed".to_string(),
-                value: ParamValue::Number(steps_completed as f64),
-            });
-        }
-        let use_steps = case
-            .seq
-            .steps
-            .iter()
-            .filter_map(|step| match step {
-                SeqStep::Use {
-                    predicates, count, ..
-                } => Some(crate::wfg_ast::InjectUseStep {
-                    count: *count,
-                    predicates: predicates.clone(),
-                }),
-                SeqStep::Not { .. } => None,
-            })
-            .collect();
-
-        lines.push(InjectLine {
-            mode: match case.mode {
-                InjectCaseMode::Hit => InjectMode::Hit,
-                InjectCaseMode::NearMiss => InjectMode::NearMiss,
-                InjectCaseMode::Miss => InjectMode::NonHit,
-            },
-            percent: case.percent,
-            params,
-            use_steps,
-        });
-    }
-
-    vec![InjectBlock {
-        rule: derive_rule_name(expect),
-        streams,
-        lines,
-    }]
-}
-
-fn derive_rule_name(expect: Option<&ExpectBlock>) -> String {
-    expect
-        .and_then(|e| e.checks.first().map(|c| c.rule.clone()))
-        .unwrap_or_default()
-}
-
-fn first_use_count(steps: &[SeqStep]) -> u64 {
-    steps
-        .iter()
-        .find_map(|s| match s {
-            SeqStep::Use { count, .. } => Some(*count),
-            SeqStep::Not { .. } => None,
-        })
-        .unwrap_or(1)
-}
-
-fn first_use_within(steps: &[SeqStep]) -> Option<Duration> {
-    steps.iter().find_map(|s| match s {
-        SeqStep::Use { within, .. } => Some(*within),
-        SeqStep::Not { .. } => None,
-    })
-}
-
-fn completed_use_steps(steps: &[SeqStep]) -> Option<u64> {
-    let count = steps
-        .iter()
-        .filter(|s| matches!(s, SeqStep::Use { .. }))
-        .count();
-    if count == 0 {
-        None
-    } else {
-        Some(count.saturating_sub(1) as u64)
-    }
 }
 
 fn rate_from_expr(rate_expr: &RateExpr) -> Rate {

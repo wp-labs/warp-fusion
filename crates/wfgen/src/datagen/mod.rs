@@ -56,7 +56,12 @@ pub fn generate(
     let mut inject_counts: HashMap<String, u64> = HashMap::new();
     let mut sorted_chunks: Vec<Vec<GenEvent>> = Vec::new();
 
-    let has_inject = !scenario.injects.is_empty() && !rule_plans.is_empty();
+    let has_syntax_inject = wfg
+        .syntax
+        .as_ref()
+        .and_then(|syntax| syntax.injection.as_ref())
+        .is_some_and(|injection| !injection.cases.is_empty());
+    let has_inject = (has_syntax_inject || !scenario.injects.is_empty()) && !rule_plans.is_empty();
     if has_inject {
         let inject_result =
             generate_inject_events(wfg, rule_plans, schemas, &start, &duration, &mut rng)?;

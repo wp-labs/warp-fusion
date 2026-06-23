@@ -1,0 +1,35 @@
+use "../../../../../../wp-reactor/examples/distinct/schemas/network.wfs"
+use "../../../../../../wp-reactor/examples/distinct/rules/port_scan.wfl"
+
+#[duration=10m]
+scenario port_scan_detect<seed=42> {
+  traffic {
+    stream conn_events gen 100/s
+  }
+
+  injection {
+    hit<40%> conn_events {
+      sip seq {
+        use(action="syn") with(12)
+      }
+    }
+
+    near_miss<20%> conn_events {
+      sip seq {
+        use(action="syn") with(2)
+      }
+    }
+
+    miss<40%> conn_events {
+      sip seq {
+        use(action="login") with(1)
+      }
+    }
+  }
+
+  expect {
+    hit(port_scan) >= 80%
+    near_miss(port_scan) <= 5%
+    miss(port_scan) <= 0.5%
+  }
+}

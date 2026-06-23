@@ -7,7 +7,8 @@ use rand::rngs::StdRng;
 use wf_lang::WindowSchema;
 
 use super::helpers::{
-    compute_near_miss_counts, compute_window_bounds, generate_cluster_events, generate_key_values,
+    compute_cluster_count_for_step_counts, compute_near_miss_counts, compute_window_bounds,
+    generate_cluster_events, generate_key_values,
 };
 use super::structures::{InjectOverrides, RuleStructure};
 use crate::datagen::stream_gen::GenEvent;
@@ -32,7 +33,7 @@ pub(super) fn generate_near_miss_clusters(
         return Ok(Vec::new());
     }
 
-    let near_miss_counts = compute_near_miss_counts(steps, overrides);
+    let near_miss_counts = compute_near_miss_counts(steps, overrides)?;
 
     // Total events per cluster
     let events_per_cluster: u64 = near_miss_counts.iter().sum();
@@ -40,18 +41,8 @@ pub(super) fn generate_near_miss_clusters(
         return Ok(Vec::new());
     }
 
-    // Compute number of clusters from the near-miss step's budget
-    let nm_step_idx = overrides
-        .steps_completed
-        .unwrap_or(steps.len() - 1)
-        .min(steps.len() - 1);
-    let primary_step = &steps[nm_step_idx];
-    let stream_total = *stream_totals
-        .get(&primary_step.scenario_alias)
-        .unwrap_or(&0);
-    let budget = (stream_total as f64 * percent / 100.0).round() as u64;
-    let nm_count = near_miss_counts[nm_step_idx];
-    let num_clusters = budget.checked_div(nm_count).unwrap_or(0);
+    let num_clusters =
+        compute_cluster_count_for_step_counts(percent, steps, &near_miss_counts, stream_totals);
 
     if num_clusters == 0 {
         return Ok(Vec::new());
@@ -77,6 +68,7 @@ pub(super) fn generate_near_miss_clusters(
             "nm",
             schemas,
             &rule_struct.steps,
+            overrides.entity_field.as_deref(),
         );
 
         let cluster_start_secs = if max_start_offset > 0.0 {

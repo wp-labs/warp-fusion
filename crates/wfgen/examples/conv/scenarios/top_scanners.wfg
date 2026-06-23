@@ -1,0 +1,38 @@
+use "../../../../../../wp-reactor/examples/conv/schemas/network.wfs"
+use "../../../../../../wp-reactor/examples/conv/rules/top_scanners.wfl"
+
+#[duration=2h]
+scenario top_scanners_detect<seed=42> {
+  traffic {
+    stream conn_events gen 40/s
+  }
+
+  injection {
+    // 高扫描者：生成5个 SYN 事件；端口分布由字段生成器负责
+    hit<25%> conn_events {
+      sip seq {
+        use(action="syn") with(5)
+      }
+    }
+
+    // 中等扫描者：生成3个 SYN 事件
+    near_miss<15%> conn_events {
+      sip seq {
+        use(action="syn") with(3)
+      }
+    }
+
+    // 正常流量：1个端口（低于阈值）
+    miss<60%> conn_events {
+      sip seq {
+        use(action="syn") with(1)
+      }
+    }
+  }
+
+  expect {
+    hit(top_port_scanners) >= 80%
+    near_miss(top_port_scanners) <= 10%
+    miss(top_port_scanners) <= 1%
+  }
+}

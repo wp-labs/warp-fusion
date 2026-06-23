@@ -5,7 +5,9 @@ use std::collections::HashMap;
 use std::time::Duration;
 
 use chrono::{DateTime, Utc};
-use wf_engine::match_engine::{CepStateMachine, Event, RuleExecutor, StepResult, Value};
+use wf_engine::match_engine::{
+    CepStateMachine, CloseOutput, CloseReason, Event, RuleExecutor, StepResult, Value,
+};
 use wf_lang::plan::{ConvPlan, RulePlan};
 
 use crate::datagen::stream_gen::GenEvent;
@@ -80,18 +82,7 @@ pub fn run_oracle(
             let expired = engine
                 .sm
                 .scan_expired_at_with_conv(event_nanos, engine.conv_plan.as_ref());
-            for close_out in expired {
-                if let Ok(Some(alert_record)) = engine.executor.execute_close(&close_out) {
-                    alerts.push(OracleAlert {
-                        rule_name: alert_record.rule_name,
-                        score: alert_record.score,
-                        entity_type: alert_record.entity_type,
-                        entity_id: alert_record.entity_id,
-                        origin: alert_record.origin.as_str().to_string(),
-                        emit_time: alert_record.fired_at.clone(),
-                    });
-                }
-            }
+            collect_close_alerts(&engine.executor, expired, &mut alerts);
 
             // Find bind aliases for this event's window
             let bind_aliases = match engine.alias_map.get(&event.window_name) {
@@ -125,7 +116,6 @@ pub fn run_oracle(
         }
     }
 
-    // End-of-scenario sweep: flush remaining instances
     let eos_time =
         *scenario_start + chrono::Duration::from_std(*scenario_duration).unwrap_or_default();
     let eos_nanos = eos_time.timestamp_nanos_opt().unwrap_or(i64::MAX);
@@ -134,19 +124,15 @@ pub fn run_oracle(
         let expired = engine
             .sm
             .scan_expired_at_with_conv(eos_nanos, engine.conv_plan.as_ref());
+        collect_close_alerts(&engine.executor, expired, &mut alerts);
 
-        for close_out in expired {
-            if let Ok(Some(alert_record)) = engine.executor.execute_close(&close_out) {
-                alerts.push(OracleAlert {
-                    rule_name: alert_record.rule_name,
-                    score: alert_record.score,
-                    entity_type: alert_record.entity_type,
-                    entity_id: alert_record.entity_id,
-                    origin: alert_record.origin.as_str().to_string(),
-                    emit_time: alert_record.fired_at.clone(),
-                });
-            }
-        }
+        // End-of-scenario in datagen is also a finite replay boundary. After
+        // the timeout sweep, close remaining active instances so `and close`
+        // rules match batch/EOF execution semantics.
+        let closed = engine
+            .sm
+            .close_all_with_conv(CloseReason::Eos, engine.conv_plan.as_ref());
+        collect_close_alerts(&engine.executor, closed, &mut alerts);
     }
 
     Ok(OracleResult { alerts })
@@ -162,6 +148,25 @@ struct RuleEngine {
     conv_plan: Option<ConvPlan>,
     /// window_name → Vec<bind_alias> for routing events to all matching aliases
     alias_map: HashMap<String, Vec<String>>,
+}
+
+fn collect_close_alerts(
+    executor: &RuleExecutor,
+    close_outputs: Vec<CloseOutput>,
+    alerts: &mut Vec<OracleAlert>,
+) {
+    for close_out in close_outputs {
+        if let Ok(Some(alert_record)) = executor.execute_close(&close_out) {
+            alerts.push(OracleAlert {
+                rule_name: alert_record.rule_name,
+                score: alert_record.score,
+                entity_type: alert_record.entity_type,
+                entity_id: alert_record.entity_id,
+                origin: alert_record.origin.as_str().to_string(),
+                emit_time: alert_record.fired_at.clone(),
+            });
+        }
+    }
 }
 
 /// Build a mapping from window name to ALL bind aliases for a rule.

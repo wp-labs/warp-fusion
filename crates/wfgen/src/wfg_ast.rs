@@ -11,7 +11,6 @@ pub struct WfgFile {
     pub uses: Vec<UseDecl>,
     pub scenario: ScenarioDecl,
     /// Parsed new syntax section when the file uses new stream-first syntax.
-    /// Legacy `.wfg` files keep this as `None`.
     pub syntax: Option<SyntaxScenario>,
 }
 
@@ -114,7 +113,7 @@ pub enum RateExpr {
 }
 
 impl RateExpr {
-    /// Fallback EPS approximation used while datagen still relies on legacy fields.
+    /// EPS approximation used by datagen for total event budgeting.
     pub fn approx_eps(&self) -> f64 {
         match self {
             RateExpr::Constant(r) => r.events_per_second(),
@@ -155,6 +154,7 @@ pub struct SyntaxInjectionBlock {
 pub struct SyntaxInjectCase {
     pub mode: InjectCaseMode,
     pub percent: f64,
+    pub target_rule: Option<String>,
     pub stream: String,
     pub seq: SeqBlock,
 }
@@ -178,11 +178,8 @@ pub struct SeqBlock {
 #[non_exhaustive]
 pub enum SeqStep {
     Use {
-        /// `true` when the step is explicitly prefixed with `then`.
-        then_from_prev: bool,
         predicates: Vec<FieldPredicate>,
         count: u64,
-        within: Duration,
     },
     Not {
         predicates: Vec<FieldPredicate>,
@@ -356,13 +353,11 @@ pub struct InjectLine {
     pub mode: InjectMode,
     pub percent: f64,
     pub params: Vec<ParamAssign>,
-    /// Step-local `use(...)` predicates from new syntax.
-    ///
-    /// Legacy inject syntax does not populate this field.
+    /// Ordered `use(...)` declarations; each declaration describes one rule step.
     pub use_steps: Vec<InjectUseStep>,
 }
 
-/// One `use(...) with(count, within)` step captured for inject generation.
+/// One `use(...) with(count)` declaration captured for inject generation.
 #[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
 pub struct InjectUseStep {

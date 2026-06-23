@@ -76,19 +76,19 @@ scenario brute_force_detect<seed=7> {
   injection {
     hit<30%> auth_events {
       user seq {
-        use(login="failed") with(3,2m)
-        then use(action="port_scan") with(1,1m)
+        use(login="failed") with(3)
+        then use(action="port_scan") with(1)
       }
     }
     near_miss<10%> auth_events {
       user seq {
-        use(login="failed") with(2,2m)
+        use(login="failed") with(2)
         not(action="port_scan") within(1m)
       }
     }
     miss<60%> auth_events {
       user seq {
-        use(login="success") with(1,30s)
+        use(login="success") with(1)
       }
     }
   }
@@ -108,33 +108,79 @@ scenario brute_force_detect<seed=7> {
     let wfg = parse_wfg(input).unwrap();
     let syntax = wfg.syntax.as_ref().unwrap();
     let inj = syntax.injection.as_ref().unwrap();
+    assert!(
+        wfg.scenario.injects.is_empty(),
+        "new syntax injection must not be converted into ScenarioDecl.injects"
+    );
     assert_eq!(inj.cases.len(), 3);
     assert_eq!(inj.cases[0].mode, InjectCaseMode::Hit);
     assert_eq!(inj.cases[1].mode, InjectCaseMode::NearMiss);
     assert_eq!(inj.cases[2].mode, InjectCaseMode::Miss);
+    assert_eq!(inj.cases[0].target_rule, None);
     assert_eq!(inj.cases[0].percent, 30.0);
 
     let steps = &inj.cases[0].seq.steps;
-    assert!(matches!(
-        steps[0],
-        SeqStep::Use {
-            then_from_prev: false,
-            ..
-        }
-    ));
-    assert!(matches!(
-        steps[1],
-        SeqStep::Use {
-            then_from_prev: true,
-            ..
-        }
-    ));
+    assert!(matches!(steps[0], SeqStep::Use { .. }));
+    assert!(matches!(steps[1], SeqStep::Use { .. }));
     assert!(matches!(inj.cases[1].seq.steps[1], SeqStep::Not { .. }));
 
     let expect = syntax.expect.as_ref().unwrap();
     assert_eq!(expect.checks.len(), 7);
     assert!(matches!(expect.checks[6].metric, ExpectMetric::LatencyP95));
     assert!(matches!(expect.checks[6].value, ExpectValue::Duration(_)));
+}
+
+#[test]
+fn test_parse_then_only_allows_use_step() {
+    let input = r#"
+#[duration=10m]
+scenario invalid_then_not<seed=1> {
+  traffic { stream auth_events gen 100/s }
+  injection {
+    near_miss<10%> auth_events {
+      user seq {
+        use(login="failed") with(1)
+        then not(action="port_scan") within(1m)
+      }
+    }
+  }
+}
+"#;
+
+    let err = parse_wfg(input).unwrap_err().to_string();
+    assert!(
+        err.contains("'use' after 'then'"),
+        "unexpected parse error: {err}"
+    );
+}
+
+#[test]
+fn test_parse_injection_case_target_rule() {
+    let input = r#"
+#[duration=10m]
+scenario targeted<seed=1> {
+  traffic { stream auth_events gen 100/s }
+  injection {
+    hit<30%> for brute_force auth_events {
+      user seq {
+        use(login="failed") with(3)
+      }
+    }
+  }
+}
+"#;
+
+    let wfg = parse_wfg(input).unwrap();
+    let case = &wfg
+        .syntax
+        .as_ref()
+        .unwrap()
+        .injection
+        .as_ref()
+        .unwrap()
+        .cases[0];
+    assert_eq!(case.target_rule.as_deref(), Some("brute_force"));
+    assert_eq!(case.stream, "auth_events");
 }
 
 #[test]

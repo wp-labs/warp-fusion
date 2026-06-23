@@ -7,6 +7,7 @@ pub mod cmd_stream;
 pub mod cmd_verify;
 pub mod datagen;
 pub mod error;
+pub mod injection_targets;
 pub mod loader;
 pub mod oracle;
 pub mod output;

@@ -1,0 +1,39 @@
+use "../../../../../../wp-reactor/examples/multi_step/schemas/network.wfs"
+use "../../../../../../wp-reactor/examples/multi_step/rules/chain_attack.wfl"
+
+#[duration=60m]
+scenario chain_attack_detect<seed=42> {
+  traffic {
+    stream conn_events gen 50/s
+  }
+
+  injection {
+    // 完整攻击链：扫描(5次) + 登录失败(3次)
+    hit<25%> conn_events {
+      sip seq {
+        use(action="syn") with(5)
+        then use(action="login_fail", dport=22) with(3)
+      }
+    }
+
+    // 仅扫描，无登录
+    near_miss<15%> conn_events {
+      sip seq {
+        use(action="syn") with(5)
+      }
+    }
+
+    // 正常流量
+    miss<60%> conn_events {
+      sip seq {
+        use(action="syn") with(1)
+      }
+    }
+  }
+
+  expect {
+    hit(chain_attack) >= 90%
+    near_miss(chain_attack) <= 2%
+    miss(chain_attack) <= 0.1%
+  }
+}

@@ -43,17 +43,19 @@ pub(super) struct AliasMap {
 
 /// Override parameters extracted from inject line params.
 pub(super) struct InjectOverrides {
+    /// Entity field named by new syntax `ENTITY seq { ... }`.
+    pub(super) entity_field: Option<String>,
     /// Override the threshold (events per entity) for hit/near_miss clusters.
     pub(super) count_per_entity: Option<u64>,
-    /// For near_miss multi-step: how many steps to complete (0-indexed last step).
+    /// For legacy near_miss overrides: 0-indexed last completed step.
     pub(super) steps_completed: Option<usize>,
     /// Override the window duration for cluster time distribution.
     pub(super) within: Option<Duration>,
-    /// Step-local predicates from `use(...) with(count, ...)`.
+    /// Ordered `use(...)` declarations; each declaration maps to one rule step.
     pub(super) use_steps: Vec<InjectUseStepOverrides>,
 }
 
-/// Step-local overrides extracted from one `use(...)` clause.
+/// Overrides extracted from one `use(...)` clause.
 pub(super) struct InjectUseStepOverrides {
     pub(super) count: u64,
     pub(super) predicates: HashMap<String, serde_json::Value>,

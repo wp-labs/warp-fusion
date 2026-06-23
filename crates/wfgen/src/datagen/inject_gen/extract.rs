@@ -8,7 +8,7 @@ use super::structures::{
     AliasMap, InjectOverrides, InjectUseStepOverrides, RuleStructure, StepInfo,
 };
 use crate::error::{self, WfgenReason, WfgenResult};
-use crate::wfg_ast::{InjectLine, ParamValue};
+use crate::wfg_ast::{InjectLine, ParamValue, SeqStep, SyntaxInjectCase};
 
 pub(super) fn extract_rule_structure(
     rule_plan: &RulePlan,
@@ -50,13 +50,16 @@ pub(super) fn extract_rule_structure(
         })? as u64;
 
         // Extract filter constraints from the corresponding bind
-        let filter_overrides = rule_plan
+        let mut filter_overrides = rule_plan
             .binds
             .iter()
             .find(|b| b.alias == *bind_alias)
             .and_then(|b| b.filter.as_ref())
             .map(extract_filter_constraints)
             .unwrap_or_default();
+        if let Some(guard) = &branch.guard {
+            filter_overrides.extend(extract_filter_constraints(guard));
+        }
 
         steps.push(StepInfo {
             bind_alias: bind_alias.clone(),
@@ -108,6 +111,7 @@ pub(crate) fn field_ref_field_name(fr: &FieldRef) -> &str {
 
 pub(super) fn extract_inject_overrides(inject_line: &InjectLine) -> InjectOverrides {
     let mut overrides = InjectOverrides {
+        entity_field: None,
         count_per_entity: None,
         steps_completed: None,
         within: None,
@@ -145,6 +149,38 @@ pub(super) fn extract_inject_overrides(inject_line: &InjectLine) -> InjectOverri
         overrides.use_steps.push(InjectUseStepOverrides {
             count: use_step.count,
             predicates,
+        });
+    }
+
+    overrides
+}
+
+pub(super) fn extract_syntax_case_overrides(case: &SyntaxInjectCase) -> InjectOverrides {
+    let mut overrides = InjectOverrides {
+        entity_field: Some(case.seq.entity.clone()),
+        count_per_entity: None,
+        steps_completed: None,
+        within: None,
+        use_steps: Vec::new(),
+    };
+
+    for step in &case.seq.steps {
+        let SeqStep::Use {
+            predicates, count, ..
+        } = step
+        else {
+            continue;
+        };
+
+        let mut pred_map = HashMap::new();
+        for pred in predicates {
+            if let Some(value) = attr_value_to_json(&pred.value) {
+                pred_map.insert(pred.field.clone(), value);
+            }
+        }
+        overrides.use_steps.push(InjectUseStepOverrides {
+            count: *count,
+            predicates: pred_map,
         });
     }
 

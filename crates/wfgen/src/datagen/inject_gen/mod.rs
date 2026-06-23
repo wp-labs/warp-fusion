@@ -15,9 +15,10 @@ use wf_lang::WindowSchema;
 use wf_lang::plan::RulePlan;
 
 use crate::error::{self, WfgenReason, WfgenResult};
+use crate::injection_targets::{injected_rule_names, unique_expected_rule};
 use crate::wfg_ast::WfgFile;
 
-use dispatch::{build_alias_map, compute_stream_totals};
+use dispatch::{build_alias_map, build_alias_map_for_syntax_case, compute_stream_totals};
 use extract::extract_rule_structure;
 pub use structures::InjectGenResult;
 
@@ -38,6 +39,46 @@ pub fn generate_inject_events(
 
     let mut all_events = Vec::new();
     let mut inject_counts: HashMap<String, u64> = HashMap::new();
+
+    if let Some(injection) = wfg
+        .syntax
+        .as_ref()
+        .and_then(|syntax| syntax.injection.as_ref())
+    {
+        let _ = injected_rule_names(wfg)?;
+        let default_rule = wfg
+            .syntax
+            .as_ref()
+            .and_then(|syntax| syntax.expect.as_ref())
+            .and_then(unique_expected_rule)
+            .unwrap_or_default();
+
+        for case in &injection.cases {
+            let rule_plan = resolve_rule_plan(
+                case.target_rule.as_deref().unwrap_or(default_rule),
+                rule_plans,
+            )?;
+            let alias_map = build_alias_map_for_syntax_case(case, &scenario.streams, rule_plan)?;
+            let rule_struct = extract_rule_structure(rule_plan, &alias_map)?;
+            let events = dispatch::generate_for_syntax_case(
+                case,
+                &rule_struct,
+                &stream_totals,
+                schemas,
+                &scenario.streams,
+                start,
+                duration,
+                rng,
+                &mut inject_counts,
+            )?;
+            all_events.extend(events);
+        }
+
+        return Ok(InjectGenResult {
+            events: all_events,
+            inject_counts,
+        });
+    }
 
     for inject_block in &scenario.injects {
         let rule_plan = resolve_rule_plan(&inject_block.rule, rule_plans)?;
@@ -67,10 +108,11 @@ pub fn generate_inject_events(
     })
 }
 
-fn resolve_rule_plan<'a>(
-    inject_rule: &str,
-    rule_plans: &'a [RulePlan],
-) -> WfgenResult<&'a RulePlan> {
+fn resolve_rule_plan(
+    inject_rule: impl AsRef<str>,
+    rule_plans: &[RulePlan],
+) -> WfgenResult<&RulePlan> {
+    let inject_rule = inject_rule.as_ref();
     if inject_rule.is_empty() {
         if rule_plans.len() == 1 {
             return Ok(&rule_plans[0]);

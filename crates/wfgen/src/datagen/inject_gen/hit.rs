@@ -7,7 +7,8 @@ use rand::rngs::StdRng;
 use wf_lang::WindowSchema;
 
 use super::helpers::{
-    compute_cluster_count, compute_window_bounds, generate_cluster_events, generate_key_values,
+    compute_cluster_count, compute_cluster_count_for_step_counts, compute_hit_counts,
+    compute_window_bounds, generate_cluster_events, generate_key_values,
 };
 use super::structures::{InjectOverrides, RuleStructure, StepInfo};
 use crate::datagen::stream_gen::GenEvent;
@@ -44,17 +45,33 @@ pub(super) fn generate_hit_clusters(
     } else {
         rule_struct.steps.clone()
     };
+    if effective_steps.is_empty() {
+        return Ok(Vec::new());
+    }
 
-    let num_clusters = compute_cluster_count(percent, &effective_steps, stream_totals);
+    let step_event_counts = compute_hit_counts(&effective_steps, overrides)?;
+    let num_clusters = if overrides.use_steps.is_empty() {
+        compute_cluster_count(percent, &effective_steps, stream_totals)
+    } else {
+        compute_cluster_count_for_step_counts(
+            percent,
+            &effective_steps,
+            &step_event_counts,
+            stream_totals,
+        )
+    };
     if num_clusters == 0 {
         return Ok(Vec::new());
     }
 
     // Update inject counts
-    for step in &effective_steps {
+    for (step, event_count) in effective_steps
+        .iter()
+        .zip(step_event_counts.iter().copied())
+    {
         *inject_counts
             .entry(step.scenario_alias.clone())
-            .or_insert(0) += step.threshold * num_clusters;
+            .or_insert(0) += event_count * num_clusters;
     }
 
     let dur_secs = duration.as_secs_f64();
@@ -70,6 +87,7 @@ pub(super) fn generate_hit_clusters(
             "hit",
             schemas,
             &effective_steps,
+            overrides.entity_field.as_deref(),
         );
 
         let cluster_start_secs = if max_start_offset > 0.0 {
@@ -77,8 +95,6 @@ pub(super) fn generate_hit_clusters(
         } else {
             0.0
         };
-        let step_event_counts: Vec<u64> = effective_steps.iter().map(|s| s.threshold).collect();
-
         generate_cluster_events(
             &effective_steps,
             &step_event_counts,

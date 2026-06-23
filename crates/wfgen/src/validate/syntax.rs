@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use wf_lang::WindowSchema;
 use wf_lang::ast::RuleDecl;
@@ -42,6 +42,16 @@ pub(super) fn validate_syntax(
     }
 
     if let Some(inj) = &syntax.injection {
+        let traffic_streams: HashSet<&str> = syntax
+            .traffic
+            .streams
+            .iter()
+            .map(|stream| stream.stream.as_str())
+            .collect();
+        let schemas_by_name: HashMap<&str, &WindowSchema> = schemas
+            .iter()
+            .map(|schema| (schema.name.as_str(), schema))
+            .collect();
         let mut sum = 0.0;
         for case in &inj.cases {
             if case.percent <= 0.0 || case.percent > 100.0 {
@@ -55,6 +65,17 @@ pub(super) fn validate_syntax(
             }
             sum += case.percent;
 
+            let case_schema = schemas_by_name.get(case.stream.as_str()).copied();
+            if !traffic_streams.contains(case.stream.as_str()) {
+                errors.push(ValidationError {
+                    code: "VN10",
+                    message: format!(
+                        "injection case stream '{}' is not declared in traffic",
+                        case.stream
+                    ),
+                });
+            }
+
             if case.seq.steps.is_empty() {
                 errors.push(ValidationError {
                     code: "VN5",
@@ -66,17 +87,58 @@ pub(super) fn validate_syntax(
             }
 
             for (step_idx, step) in case.seq.steps.iter().enumerate() {
-                let crate::wfg_ast::SeqStep::Use { predicates, .. } = step else {
-                    continue;
+                let (step_kind, predicates, count) = match step {
+                    crate::wfg_ast::SeqStep::Use {
+                        predicates, count, ..
+                    } => ("use(...)", predicates, Some(*count)),
+                    crate::wfg_ast::SeqStep::Not { predicates, .. } => {
+                        errors.push(ValidationError {
+                            code: "VN16",
+                            message: format!(
+                                "injection case '{}' step {} not(...) is not supported by datagen yet",
+                                case.stream, step_idx
+                            ),
+                        });
+                        ("not(...)", predicates, None)
+                    }
                 };
+                if count == Some(0) {
+                    errors.push(ValidationError {
+                        code: "VN15",
+                        message: format!(
+                            "injection case '{}' step {} use(...) count must be greater than 0",
+                            case.stream, step_idx
+                        ),
+                    });
+                }
                 let mut seen = HashSet::new();
                 for pred in predicates {
                     if !seen.insert(pred.field.as_str()) {
                         errors.push(ValidationError {
                             code: "VN9",
                             message: format!(
-                                "injection case '{}' step {} has duplicate field '{}' in use(...)",
-                                case.stream, step_idx, pred.field
+                                "injection case '{}' step {} has duplicate field '{}' in {}",
+                                case.stream, step_idx, pred.field, step_kind
+                            ),
+                        });
+                    }
+                    if pred.field == case.seq.entity {
+                        errors.push(ValidationError {
+                            code: "VN12",
+                            message: format!(
+                                "injection case '{}' step {} repeats seq entity field '{}' in {}",
+                                case.stream, step_idx, pred.field, step_kind
+                            ),
+                        });
+                    }
+                    if let Some(schema) = case_schema
+                        && !schema.fields.iter().any(|field| field.name == pred.field)
+                    {
+                        errors.push(ValidationError {
+                            code: "VN11",
+                            message: format!(
+                                "injection case '{}' step {} field '{}' not found in schema '{}'",
+                                case.stream, step_idx, pred.field, schema.name
                             ),
                         });
                     }
@@ -88,6 +150,43 @@ pub(super) fn validate_syntax(
                 code: "VN6",
                 message: format!("injection percentages sum to {}, which exceeds 100%", sum),
             });
+        }
+    }
+
+    let expected_rules: HashSet<&str> = syntax
+        .expect
+        .as_ref()
+        .map(|expect| {
+            expect
+                .checks
+                .iter()
+                .map(|check| check.rule.as_str())
+                .collect()
+        })
+        .unwrap_or_default();
+
+    if let Some(inj) = &syntax.injection {
+        for case in &inj.cases {
+            if let Some(target_rule) = case.target_rule.as_deref() {
+                if !all_rules.iter().any(|rule| rule.name == target_rule) {
+                    errors.push(ValidationError {
+                        code: "VN14",
+                        message: format!(
+                            "injection case '{}' targets rule '{}' not found in WFL files",
+                            case.stream, target_rule
+                        ),
+                    });
+                }
+            } else if expected_rules.len() != 1 {
+                errors.push(ValidationError {
+                    code: "VN13",
+                    message: format!(
+                        "injection case '{}' must use 'for RULE' because expect identifies {} target rules",
+                        case.stream,
+                        expected_rules.len()
+                    ),
+                });
+            }
         }
     }
 

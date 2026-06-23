@@ -5,7 +5,7 @@ mod inject;
 
 use std::time::Duration;
 
-use wf_lang::ast::{BinOp, CloseMode, CmpOp, Expr, FieldRef, Measure};
+use wf_lang::ast::{BinOp, CloseMode, CmpOp, Expr, FieldRef, FieldSelector, Measure, Transform};
 use wf_lang::plan::{
     AggPlan, BindPlan, BranchPlan, EntityPlan, MatchPlan, RulePlan, ScorePlan, StepPlan,
     WindowSpec, YieldPlan,
@@ -40,6 +40,10 @@ fn make_login_schema() -> WindowSchema {
             },
             FieldDef {
                 name: "attempts".to_string(),
+                field_type: FieldType::Base(BaseType::Digit),
+            },
+            FieldDef {
+                name: "dport".to_string(),
                 field_type: FieldType::Base(BaseType::Digit),
             },
             FieldDef {
@@ -83,6 +87,8 @@ fn make_brute_force_plan() -> RulePlan {
             close_steps: vec![],
             close_mode: CloseMode::Or,
             tracked_bind_aliases: std::collections::HashSet::new(),
+            tracked_bind_fields: std::collections::HashMap::new(),
+            tracked_plain_fields: std::collections::HashSet::new(),
         },
         each_plan: None,
         joins: vec![],
@@ -138,6 +144,8 @@ fn make_auth_fail_plan() -> RulePlan {
             close_steps: vec![],
             close_mode: CloseMode::Or,
             tracked_bind_aliases: std::collections::HashSet::new(),
+            tracked_bind_fields: std::collections::HashMap::new(),
+            tracked_plain_fields: std::collections::HashSet::new(),
         },
         each_plan: None,
         joins: vec![],
@@ -214,6 +222,8 @@ fn make_bool_chain_plan() -> RulePlan {
             close_steps: vec![],
             close_mode: CloseMode::Or,
             tracked_bind_aliases: std::collections::HashSet::new(),
+            tracked_bind_fields: std::collections::HashMap::new(),
+            tracked_plain_fields: std::collections::HashSet::new(),
         },
         each_plan: None,
         joins: vec![],
@@ -228,6 +238,154 @@ fn make_bool_chain_plan() -> RulePlan {
         },
         score_plan: ScorePlan {
             expr: Expr::Number(70.0),
+        },
+        pattern_origin: None,
+        conv_plan: None,
+        limits_plan: None,
+    }
+}
+
+fn make_distinct_close_plan() -> RulePlan {
+    RulePlan {
+        name: "distinct_close".to_string(),
+        binds: vec![BindPlan {
+            alias: "evt".to_string(),
+            window: "LoginWindow".to_string(),
+            filter: None,
+        }],
+        match_plan: MatchPlan {
+            keys: vec![FieldRef::Simple("src_ip".to_string())],
+            key_map: None,
+            window_spec: WindowSpec::Fixed(Duration::from_secs(300)),
+            event_steps: vec![StepPlan {
+                branches: vec![BranchPlan {
+                    label: Some("seen".to_string()),
+                    source: "evt".to_string(),
+                    field: None,
+                    guard: None,
+                    agg: AggPlan {
+                        transforms: vec![],
+                        measure: Measure::Count,
+                        cmp: CmpOp::Ge,
+                        threshold: Expr::Number(1.0),
+                    },
+                }],
+            }],
+            close_steps: vec![StepPlan {
+                branches: vec![BranchPlan {
+                    label: Some("ports".to_string()),
+                    source: "evt".to_string(),
+                    field: Some(FieldSelector::Dot("dport".to_string())),
+                    guard: None,
+                    agg: AggPlan {
+                        transforms: vec![Transform::Distinct],
+                        measure: Measure::Count,
+                        cmp: CmpOp::Ge,
+                        threshold: Expr::Number(3.0),
+                    },
+                }],
+            }],
+            close_mode: CloseMode::And,
+            tracked_bind_aliases: std::collections::HashSet::new(),
+            tracked_bind_fields: std::collections::HashMap::new(),
+            tracked_plain_fields: std::collections::HashSet::new(),
+        },
+        each_plan: None,
+        joins: vec![],
+        entity_plan: EntityPlan {
+            entity_type: "ip".to_string(),
+            entity_id_expr: Expr::Field(FieldRef::Simple("src_ip".to_string())),
+        },
+        yield_plan: YieldPlan {
+            target: "alerts".to_string(),
+            version: None,
+            fields: vec![],
+        },
+        score_plan: ScorePlan {
+            expr: Expr::Number(80.0),
+        },
+        pattern_origin: None,
+        conv_plan: None,
+        limits_plan: None,
+    }
+}
+
+fn make_chain_attack_plan() -> RulePlan {
+    RulePlan {
+        name: "chain_attack".to_string(),
+        binds: vec![
+            BindPlan {
+                alias: "scan".to_string(),
+                window: "LoginWindow".to_string(),
+                filter: Some(Expr::BinOp {
+                    op: BinOp::Eq,
+                    left: Box::new(Expr::Field(FieldRef::Simple("success".to_string()))),
+                    right: Box::new(Expr::Bool(false)),
+                }),
+            },
+            BindPlan {
+                alias: "login".to_string(),
+                window: "LoginWindow".to_string(),
+                filter: Some(Expr::BinOp {
+                    op: BinOp::Eq,
+                    left: Box::new(Expr::Field(FieldRef::Simple("success".to_string()))),
+                    right: Box::new(Expr::Bool(true)),
+                }),
+            },
+        ],
+        match_plan: MatchPlan {
+            keys: vec![FieldRef::Simple("src_ip".to_string())],
+            key_map: None,
+            window_spec: WindowSpec::Sliding(Duration::from_secs(300)),
+            event_steps: vec![
+                StepPlan {
+                    branches: vec![BranchPlan {
+                        label: Some("scan_count".to_string()),
+                        source: "scan".to_string(),
+                        field: None,
+                        guard: None,
+                        agg: AggPlan {
+                            transforms: vec![],
+                            measure: Measure::Count,
+                            cmp: CmpOp::Ge,
+                            threshold: Expr::Number(5.0),
+                        },
+                    }],
+                },
+                StepPlan {
+                    branches: vec![BranchPlan {
+                        label: Some("login_count".to_string()),
+                        source: "login".to_string(),
+                        field: None,
+                        guard: None,
+                        agg: AggPlan {
+                            transforms: vec![],
+                            measure: Measure::Count,
+                            cmp: CmpOp::Ge,
+                            threshold: Expr::Number(3.0),
+                        },
+                    }],
+                },
+            ],
+            close_steps: vec![],
+            close_mode: CloseMode::Or,
+            tracked_bind_aliases: std::collections::HashSet::new(),
+            tracked_bind_fields: std::collections::HashMap::new(),
+            tracked_plain_fields: std::collections::HashSet::new(),
+        },
+        each_plan: None,
+        joins: vec![],
+        entity_plan: EntityPlan {
+            entity_type: "ip".to_string(),
+            entity_id_expr: Expr::Field(FieldRef::Simple("src_ip".to_string())),
+        },
+        yield_plan: YieldPlan {
+            target: "alerts".to_string(),
+            version: None,
+            fields: vec![],
+        },
+        score_plan: ScorePlan {
+            expr: Expr::Number(90.0),
         },
         pattern_origin: None,
         conv_plan: None,

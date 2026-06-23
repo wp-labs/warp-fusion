@@ -1,0 +1,36 @@
+use "../../../../../../wp-reactor/examples/count/schemas/security.wfs"
+use "../../../../../../wp-reactor/examples/count/rules/brute_force.wfl"
+
+#[duration=10m]
+scenario brute_force_detect<seed=42> {
+  traffic {
+    stream auth_events gen 100/s
+    stream auth_events gen wave(base=80/s, amp=40/s, period=2m, shape=sine)
+  }
+
+  injection {
+    hit<30%> auth_events {
+      user seq {
+        use(action="failed") with(3)
+      }
+    }
+
+    near_miss<10%> auth_events {
+      user seq {
+        use(action="failed") with(2)
+      }
+    }
+
+    miss<60%> auth_events {
+      user seq {
+        use(action="success") with(1)
+      }
+    }
+  }
+
+  expect {
+    hit(brute_force_then_scan) >= 95%
+    near_miss(brute_force_then_scan) <= 1%
+    miss(brute_force_then_scan) <= 0.1%
+  }
+}

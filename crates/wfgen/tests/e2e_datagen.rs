@@ -96,7 +96,7 @@ async fn e2e_datagen_brute_force() {
 
     // ---- Load scenario (.wfg → schemas + rules) ----
     let base_dir = manifest_dir.join("../../../wp-reactor/examples");
-    let wfg_path = base_dir.join("count/scenarios/brute_force.wfg");
+    let wfg_path = manifest_dir.join("examples/count/scenarios/brute_force.wfg");
     let vars = HashMap::from([("FAIL_THRESHOLD".into(), "3".into())]);
     let loaded = wfgen::loader::load_scenario(&wfg_path, &vars).expect("failed to load scenario");
 
@@ -128,13 +128,8 @@ async fn e2e_datagen_brute_force() {
         .expect("invalid scenario start time");
     let duration = loaded.wfg.scenario.time_clause.duration;
 
-    let injected_rules: HashSet<String> = loaded
-        .wfg
-        .scenario
-        .injects
-        .iter()
-        .map(|i| i.rule.clone())
-        .collect();
+    let injected_rules =
+        wfgen::injection_targets::injected_rule_names(&loaded.wfg).expect("injected rules");
     let oracle_result = wfgen::oracle::run_oracle(
         &events,
         &loaded.rule_plans,
@@ -144,6 +139,11 @@ async fn e2e_datagen_brute_force() {
     )
     .expect("oracle evaluation failed");
     let oracle_alerts = &oracle_result.alerts;
+    assert!(
+        !oracle_alerts.is_empty(),
+        "oracle produced zero alerts; injected_rules={:?}",
+        injected_rules
+    );
     let tolerances = loaded
         .wfg
         .scenario
@@ -232,13 +232,13 @@ FAIL_THRESHOLD = "3"
         .unwrap_or_else(|e| panic!("failed to read alerts from {}: {e}", alert_dir.display()));
     // In `file + batch` mode, final alerts are emitted during rule-task flush on
     // shutdown. That lifecycle uses `close:flush`, while the oracle models the
-    // finite scenario boundary as `close:timeout`. Normalize the origin so the
+    // finite scenario boundary as EOF (`close:eos`). Normalize the origin so the
     // content comparison still validates the generated alerts.
     let mut actual_normalized = actual.clone();
     let mut normalized_flush = 0usize;
     for alert in &mut actual_normalized {
         if alert.origin == "close:flush" {
-            alert.origin = "close:timeout".to_string();
+            alert.origin = "close:eos".to_string();
             normalized_flush += 1;
         }
     }
@@ -253,7 +253,7 @@ FAIL_THRESHOLD = "3"
     let mut report_md = report.to_markdown();
     if normalized_flush > 0 {
         report_md.push_str(&format!(
-            "\n### Notes\n\n- Normalized shutdown `close:flush` alerts to `close:timeout`: {normalized_flush}\n"
+            "\n### Notes\n\n- Normalized shutdown `close:flush` alerts to `close:eos`: {normalized_flush}\n"
         ));
     }
     let report_path = artifact_dir.join("verify_report.md");

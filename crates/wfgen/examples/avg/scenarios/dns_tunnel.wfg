@@ -1,0 +1,35 @@
+use "../../../../../../wp-reactor/examples/avg/schemas/dns.wfs"
+use "../../../../../../wp-reactor/examples/avg/rules/dns_tunnel.wfl"
+
+#[duration=10m]
+scenario dns_tunnel_detect<seed=42> {
+  traffic {
+    stream dns_events gen 100/s
+  }
+
+  injection {
+    hit<30%> dns_events {
+      sip seq {
+        use(resp_size=1200) with(3)
+      }
+    }
+
+    near_miss<10%> dns_events {
+      sip seq {
+        use(resp_size=200) with(2)
+      }
+    }
+
+    miss<60%> dns_events {
+      sip seq {
+        use(resp_size=60) with(1)
+      }
+    }
+  }
+
+  expect {
+    hit(dns_tunnel) >= 95%
+    near_miss(dns_tunnel) <= 1%
+    miss(dns_tunnel) <= 0.1%
+  }
+}

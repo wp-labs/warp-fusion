@@ -12,7 +12,7 @@ on:
       - alpha
       - beta
       - main
-      - 'release/**'
+      - "release/**"
 
 permissions:
   contents: read

@@ -45,7 +45,7 @@ jobs:
 
       - name: Show version
         if: matrix.can-run == true
-        run: ./target/${{ matrix.target }}/release/wparse --version
+        run: ./target/${{ matrix.target }}/release/wfusion --version
 
       - name: Package artifacts
         run: |
@@ -147,7 +147,7 @@ jobs:
 
             ### Quick Install Script
             ```bash
-            curl -sSf https://get.warpparse.ai/inst-x.sh | bash -s -- wparse ${{ steps.branch.outputs.branch }}
+            curl -sSf https://get.warpparse.ai/inst-x.sh | bash -s -- wfusion ${{ steps.branch.outputs.branch }}
             ```
 
             ## 🔐 Verification

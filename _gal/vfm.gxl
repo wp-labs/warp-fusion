@@ -4,9 +4,13 @@ mod sys_ver_adm {
   flow __into_sys_ver_adm | ver.use {
   }
   #[usage(desp="update version of patch ")]
-  flow v_patch | ver.patch  { }
+  flow v_patch | ver.patch  {
+    gx.cmd ( "bash scripts/update-local-manifest.sh ${VERSION} stable" );
+  }
   #[usage(desp="update version of feature ")]
-  flow v_feat |  ver.feature   { }
+  flow v_feat |  ver.feature   {
+    gx.cmd ( "bash scripts/update-local-manifest.sh ${VERSION} stable" );
+  }
   #[usage(desp="add tag by version ")]
   flow tag_stable {
     gx.ver ( file : "${GXL_START_ROOT}/version.txt" ,  inc : "null"  );
@@ -30,9 +34,13 @@ mod lib_ver_adm {
   flow __into_lib_ver_adm | ver.use {
   }
   #[usage(desp="update version of patch ")]
-  flow v_patch | ver.patch  { }
+  flow v_patch | ver.patch  {
+    gx.cmd ( "bash scripts/update-local-manifest.sh ${VERSION} stable" );
+  }
   #[usage(desp="update version of feature ")]
-  flow v_feat |  ver.feature   { }
+  flow v_feat |  ver.feature   {
+    gx.cmd ( "bash scripts/update-local-manifest.sh ${VERSION} stable" );
+  }
   #[usage(desp="add tag by version ")]
   flow tag_stable{
     gx.ver ( file : "${GXL_START_ROOT}/version.txt" ,  inc : "null"  );

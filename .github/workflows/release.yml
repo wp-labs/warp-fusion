@@ -53,6 +53,7 @@ jobs:
           ARTIFACT="${{ github.event.repository.name }}-${{ github.ref_name }}-${{ matrix.target }}"
           mkdir -p artifacts
           cp -av target/${{ matrix.target }}/release/wfusion artifacts/
+          cp -av target/${{ matrix.target }}/release/wfgen artifacts/
           cp -av target/${{ matrix.target }}/release/wfl artifacts/
           tar -czf "${ARTIFACT}.tar.gz" artifacts
 
@@ -125,7 +126,7 @@ jobs:
           generate_release_notes: false
           fail_on_unmatched_files: true
           body: |
-            # WarpParse ${{ github.ref_name }}
+            # Warp Fusion ${{ github.ref_name }}
 
             ${{ steps.changelog.outputs.changelog_en }}
 
@@ -161,25 +162,25 @@ jobs:
 
             ## 📚 Documentation
 
-            - [Release Management](https://github.com/wp-labs/warp-parse/blob/${{ steps.branch.outputs.branch }}/docs/RELEASE_MANAGEMENT.md)
-            - [User Guide](https://github.com/wp-labs/warp-parse/tree/${{ steps.branch.outputs.branch }}/docs/user-guide)
-            - [Performance Benchmarks](https://github.com/wp-labs/warp-parse/blob/${{ steps.branch.outputs.branch }}/docs/performance.md)
+            - [Getting Started](https://github.com/wp-labs/warp-fusion/blob/${{ steps.branch.outputs.branch }}/docs/getting-started.md)
+            - [CLI Reference](https://github.com/wp-labs/warp-fusion/blob/${{ steps.branch.outputs.branch }}/docs/cli.md)
+            - [Configuration](https://github.com/wp-labs/warp-fusion/blob/${{ steps.branch.outputs.branch }}/docs/configuration.md)
 
             ## 🐛 Found an Issue?
 
-            Please report it at: https://github.com/wp-labs/warp-parse/issues
+            Please report it at: https://github.com/wp-labs/warp-fusion/issues
 
           token: ${{ secrets.GITHUB_TOKEN }}
-          prerelease: ${{ contains(github.ref, '-alpha') || contains(github.ref, '-beta') }}
+          prerelease: ${{ contains(github.ref_name, '-alpha') || contains(github.ref_name, 'alpha-') || contains(github.ref_name, '-beta') || contains(github.ref_name, 'beta-') || contains(github.ref_name, '-pre') || contains(github.ref_name, 'pre-') }}
           files: artifacts/*
 
-  update-wp-install-manifest:
+  update-local-manifest:
     needs: [release]
     runs-on: ubuntu-22.04
     permissions:
-      contents: read
+      contents: write
     concurrency:
-      group: wp-install-updates
+      group: warp-fusion-updates
       cancel-in-progress: false
     steps:
       - name: Determine channel
@@ -187,24 +188,24 @@ jobs:
         run: |
           set -euo pipefail
           TAG="${GITHUB_REF_NAME}"
-          if [[ "$TAG" == *"-alpha"* ]]; then
+          VERSION="${TAG#v}"
+          if [[ "$VERSION" == *"-alpha"* || "$VERSION" == *"alpha-"* ]]; then
             CHANNEL="alpha"
-          elif [[ "$TAG" == *"-beta"* ]]; then
+          elif [[ "$VERSION" == *"-beta"* || "$VERSION" == *"beta-"* || "$VERSION" == *"-pre"* || "$VERSION" == *"pre-"* ]]; then
             CHANNEL="beta"
           else
             CHANNEL="stable"
+            BRANCH="main"
+          fi
+          if [[ "$CHANNEL" == "alpha" ]]; then
+            BRANCH="alpha"
+          elif [[ "$CHANNEL" == "beta" ]]; then
+            BRANCH="beta"
           fi
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "channel=$CHANNEL" >> "$GITHUB_OUTPUT"
-
-      - name: Ensure wp-install token exists
-        env:
-          WP_INSTALL_TOKEN: ${{ secrets.WP_INSTALL_TOKEN }}
-        run: |
-          if [[ -z "${WP_INSTALL_TOKEN}" ]]; then
-            echo "missing required secret: WP_INSTALL_TOKEN"
-            exit 1
-          fi
+          echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
 
       - name: Fetch release metadata
         env:
@@ -218,7 +219,7 @@ jobs:
           set -euo pipefail
           jq -c '
             [ .assets[]
-              | select(.name | test("^warp-parse-v[^/]+-(aarch64-apple-darwin|aarch64-unknown-linux-gnu|x86_64-unknown-linux-gnu)\\.tar\\.gz$"))
+              | select(.name | test("^warp-fusion-v[^/]+-(aarch64-apple-darwin|aarch64-unknown-linux-gnu|x86_64-unknown-linux-gnu)\\.tar\\.gz$"))
               | {
                   key: (.name | capture("-(?<target>aarch64-apple-darwin|aarch64-unknown-linux-gnu|x86_64-unknown-linux-gnu)\\.tar\\.gz$").target),
                   value: {
@@ -231,39 +232,61 @@ jobs:
 
           jq -e '
             (keys | sort) == ["aarch64-apple-darwin","aarch64-unknown-linux-gnu","x86_64-unknown-linux-gnu"] and
-            (to_entries | all(.value.url | startswith("https://github.com/wp-labs/warp-parse/releases/download/"))) and
-            (to_entries | all(.value.sha256 | test("^[0-9a-f]{64}$")))
+            (to_entries | all(.value.url | startswith("https://github.com/wp-labs/warp-fusion/releases/download/")))
           ' /tmp/assets.json >/dev/null
 
-      - name: Checkout wp-install
+      - name: Checkout update branch
         uses: actions/checkout@v6
         with:
-          repository: wp-labs/wp-install
-          token: ${{ secrets.WP_INSTALL_TOKEN }}
-          path: wp-install
+          ref: ${{ steps.meta.outputs.branch }}
+          path: repo
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Update manifest and history
         run: |
           set -euo pipefail
           TAG="${{ steps.meta.outputs.tag }}"
+          VERSION="${{ steps.meta.outputs.version }}"
           CHANNEL="${{ steps.meta.outputs.channel }}"
           PUBLISHED_AT="$(jq -r '.published_at // empty' /tmp/release.json)"
           if [[ -z "$PUBLISHED_AT" ]]; then
             PUBLISHED_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
           fi
 
-          cd wp-install
+          cd repo
           MANIFEST="updates/${CHANNEL}/manifest.json"
           HISTORY="updates/${CHANNEL}/versions/${TAG}.json"
           mkdir -p "$(dirname "$MANIFEST")" "$(dirname "$HISTORY")"
 
+          # Read assets and compute sha256 if not provided by GitHub
+          ASSETS_FILE="/tmp/assets.json"
+
+          # If sha256 is empty, download and compute
+          if jq -e 'to_entries | all(.value.sha256 != "")' "$ASSETS_FILE" >/dev/null; then
+            echo "All assets have sha256 from release metadata"
+          else
+            echo "Computing sha256 for assets..."
+            NEW_ASSETS='{}'
+            for entry in $(jq -c 'to_entries[]' "$ASSETS_FILE"); do
+              target=$(echo "$entry" | jq -r '.key')
+              url=$(echo "$entry" | jq -r '.value.url')
+              sha256=$(curl -sL "$url" | sha256sum | awk '{print $1}')
+              NEW_ASSETS="$(echo "$NEW_ASSETS" | jq -c --arg target "$target" --arg url "$url" --arg sha "$sha256" '. + {($target): {url: $url, sha256: $sha}}')"
+            done
+            echo "$NEW_ASSETS" > "$ASSETS_FILE"
+          fi
+
+          jq -e '
+            to_entries | all(.value.sha256 | test("^[0-9a-f]{64}$"))
+          ' "$ASSETS_FILE" >/dev/null
+
           jq -n \
-            --arg version "$TAG" \
+            --arg version "$VERSION" \
             --arg channel "$CHANNEL" \
             --arg published_at "$PUBLISHED_AT" \
             --arg git_ref "$TAG" \
             --arg git_commit "${GITHUB_SHA}" \
-            --slurpfile assets /tmp/assets.json \
+            --slurpfile assets "$ASSETS_FILE" \
             '{
               version: $version,
               channel: $channel,
@@ -275,10 +298,13 @@ jobs:
 
           cp "$MANIFEST" "$HISTORY"
 
-      - name: Commit and push metadata repo
+          echo "Generated manifest:"
+          cat "$MANIFEST"
+
+      - name: Commit and push manifest
         run: |
           set -euo pipefail
-          cd wp-install
+          cd repo
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add updates

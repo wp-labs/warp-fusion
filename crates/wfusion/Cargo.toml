@@ -9,16 +9,15 @@ name = "wfusion"
 path = "src/main.rs"
 
 [dependencies]
-tokio = { version = "1", features = ["rt-multi-thread", "macros", "signal"] }
+tokio = { workspace = true }
 wf-runtime.workspace = true
 wp-connectors.workspace = true
 wp-core-connectors.workspace = true
-wfgen = { path = "../wfgen" }
 wfl = { path = "../wfl" }
 wf-config.workspace = true
 orion-error.workspace = true
-clap = { version = "4", features = ["derive"] }
-tracing = "0.1"
+clap = { workspace = true }
+tracing = { workspace = true }
 moju-derive = { git = "https://github.com/dayu-sec/moju-derive.git", branch = "main" }
 
 [dev-dependencies]

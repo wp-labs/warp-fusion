@@ -10,9 +10,9 @@ license = "Apache-2.0"
 [workspace.dependencies]
 serde = { version = "1.0", features = ["derive"] }
 winnow = "1.0"
-arrow = { version = "54", default-features = false, features = ["ipc"] }
+arrow = { version = "59", default-features = false, features = ["ipc"] }
 async-trait = "0.1"
-orion-error = { version = "0.8.1", features = ["derive", "serde_json", "toml", "tracing"] }
+orion-error = { version = "0.8", features = ["derive", "serde_json", "toml", "tracing"] }
 # @gxl:block(remote_reactor)
 #wf-engine = { git = "https://github.com/wp-labs/wp-reactor.git", tag = "v0.1.18" }
 #wf-config = { git = "https://github.com/wp-labs/wp-reactor.git", tag = "v0.1.18" }
@@ -27,6 +27,14 @@ wf-runtime = { path = "../wp-reactor/crates/wf-runtime" }
 # @gxl:end(local_reactor)
 
 
-wf-connector-api =  "0.1"
-wp-connectors = { git = "https://github.com/wp-labs/wp-connectors.git", tag = "v0.15.6" }
+wf-connector-api =  "0.2"
+wp-connectors = { git = "https://github.com/wp-labs/wp-connectors.git", tag = "v0.15.7" }
 wp-core-connectors = "0.5.5"
+serde_json = "1.0"
+chrono = { version = "0.4", features = ["serde"] }
+clap = { version = "4", features = ["derive"] }
+tokio = { version = "1", features = ["net", "time", "rt", "rt-multi-thread", "macros", "signal"] }
+rand = "0.9"
+wp-arrow = "0.2"
+wp-connector-api = "0.10"
+tracing = "0.1"

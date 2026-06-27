@@ -1,6 +1,0 @@
-[package]
-name = "init-tpl"
-version = "0.1.0"
-edition = "2024"
-license = "Apache-2.0"
-description = "wf-rules project template — embedded via include_str! macros"

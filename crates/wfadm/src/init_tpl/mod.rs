@@ -76,13 +76,13 @@ use templates::{
 ///
 /// Files are grouped:
 /// - `conf/` — always included
-/// - `connectors/` — always included
-/// - `models/` — only when `scope.include_models()`
-/// - `topology/` — only when `scope.include_topology()`
+/// - `connectors/` — generated at runtime by `connectors` module
+/// - `models/` — included in Normal and Rules scopes
+/// - `topology/` — included in Normal and Conf scopes
 /// - scripts — always included
 pub fn templates_for(scope: Scope) -> &'static [TemplateFile] {
     match scope {
-        Scope::Full | Scope::Normal => ALL,
+        Scope::Normal => ALL,
         Scope::Rules => RULES_ONLY,
         Scope::Conf => CONF_ONLY,
     }

@@ -1,5 +1,6 @@
 mod check;
 mod connectors;
+pub(crate) mod init_tpl;
 mod init;
 mod self_update;
 mod sink;

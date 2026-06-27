@@ -9,7 +9,6 @@ name = "wfadm"
 path = "src/main.rs"
 
 [dependencies]
-init-tpl = { path = "../init_tpl" }
 clap = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

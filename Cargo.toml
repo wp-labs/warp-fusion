@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/wfusion", "crates/wfgen", "crates/wfl", "crates/wfadm", "crates/init_tpl"]
+members = ["crates/wfusion", "crates/wfgen", "crates/wfl", "crates/wfadm"]
 default-members = ["crates/wfusion", "crates/wfgen", "crates/wfl", "crates/wfadm"]
 resolver = "2"
 

@@ -1,7 +1,7 @@
 use std::fs;
 use std::path::Path;
 
-use init_tpl::{Scope, templates_for};
+use crate::init_tpl::{Scope, templates_for};
 
 // =====================================================================
 // Init

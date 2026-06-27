@@ -1,0 +1,9 @@
+[sink_group]
+name = "dns_out"
+windows = ["dns_alerts"]
+[[sink_group.sinks]]
+connect = "file_json_sink"
+name = "dns_file"
+[sink_group.sinks.params]
+base = "data/alerts"
+file = "dns.ndjson"

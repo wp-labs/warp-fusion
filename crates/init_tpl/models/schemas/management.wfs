@@ -1,0 +1,45 @@
+// 管理和系统事件 — 覆盖持久化 / 账户操作 / 进程创建
+//
+// ad_change_events: Active Directory 变更审计（4728/4732/4756/4720 等）
+// process_events: 进程创建事件（Sysmon EID 1 / EDR 进程审计）
+
+window ad_change_events {
+    stream = "ad_change_events"
+    time = event_time
+    over = 30m
+    fields {
+        sip: ip
+        user: chars
+        target_user: chars
+        target_group: chars
+        action: chars
+        event_time: time
+    }
+}
+
+window process_events {
+    stream = "process_events"
+    time = event_time
+    over = 10m
+    fields {
+        sip: ip
+        user: chars
+        process_name: chars
+        process_path: chars
+        parent_process: chars
+        command_line: chars
+        action: chars
+        event_time: time
+    }
+}
+
+window management_alerts {
+    over = 0
+    fields {
+        sip: ip
+        user: chars
+        target: chars
+        alert_type: chars
+        detail: chars
+    }
+}

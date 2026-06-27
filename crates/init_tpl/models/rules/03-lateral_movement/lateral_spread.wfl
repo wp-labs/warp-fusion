@@ -1,0 +1,30 @@
+use "network.wfs"
+
+// 横向移动扩散 — 单主机 5 分钟内对 >= 5 个不同内部主机发起远程管理端口连接
+// 端口：SSH(22) / SMB(445) / RDP(3389) / WinRM(5985)
+// 指标：蠕虫/攻击者拿下跳板后横向跳转的典型特征
+
+rule lateral_spread {
+    events {
+        c : conn_events
+            && (c.dport == 22 || c.dport == 445 || c.dport == 3389 || c.dport == 5985)
+            && c.action == "syn"
+    }
+    match<sip:5m> {
+        on event { c.dip | distinct | count >= 5; }
+        and close { c | count >= 5; }
+    } -> score(75.0)
+    entity(ip, c.sip)
+    yield network_alerts (
+        sip = c.sip,
+        alert_type = "lateral_spread",
+        detail = "remote-admin ports to >= 5 distinct hosts in 5min",
+        request_count = 5
+    )
+
+    limits {
+        max_memory = "64MB";
+        max_instances = 10000;
+        on_exceed = throttle;
+    }
+}

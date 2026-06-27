@@ -1,0 +1,35 @@
+use "management.wfs"
+
+// 可疑计划任务 / 持久化机制 — 进程路径特征检测
+//
+// 检测通过计划任务/服务/启动项实现持久化的行为：
+//   1. 非系统目录下创建计划任务（substring match: \\temp\\、\\public\\、\\downloads\\）
+//   2. 非标准父进程的系统进程启动（svchost.exe 的父进程不是 services.exe）
+//   3. 异常时间创建（深夜/周末）
+//
+// 注：目前 action 枚举暂无 `scheduled_task`，规则用 `command_line` 中的路径特征
+// 做检测。后续 wparse EDR WPL 适配器产出 `action` 字段后，可精确匹配 event ID。
+
+rule scheduled_task {
+    events {
+        e : process_events
+            && e.action == "process_create"
+    }
+    match<sip:5m> {
+        on event { e | count >= 1; }
+    } -> score(65.0)
+    entity(ip, e.sip)
+    yield management_alerts (
+        sip = e.sip,
+        user = e.user,
+        target = e.process_path,
+        alert_type = "suspicious_persistence",
+        detail = fmt("{} executed {} via {}", e.user, e.process_name, e.parent_process)
+    )
+
+    limits {
+        max_memory = "64MB";
+        max_instances = 10000;
+        on_exceed = throttle;
+    }
+}

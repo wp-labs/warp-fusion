@@ -1,0 +1,28 @@
+// 认证事件 — 覆盖暴力破解 / 弱口令 / 凭据喷射 / 横向登录 / PtH
+window auth_events {
+    stream = "auth_events"
+    time = event_time
+    over = 10m
+    fields {
+        sip: ip
+        dip: ip
+        dport: digit
+        service: chars
+        user: chars
+        password_hash: chars
+        result: chars
+        logon_type: digit
+        event_time: time
+    }
+}
+
+window security_alerts {
+    over = 0
+    fields {
+        sip: ip
+        dip: ip
+        user: chars
+        alert_type: chars
+        detail: chars
+    }
+}

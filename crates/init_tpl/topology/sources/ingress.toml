@@ -1,0 +1,7 @@
+connect = "tcp_src"
+key = "ingress"
+stream = ""
+addr = "127.0.0.1"
+port = "9800"
+framing = "len"
+data_format = "arrow_framed"

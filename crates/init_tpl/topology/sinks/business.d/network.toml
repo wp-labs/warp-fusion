@@ -1,0 +1,9 @@
+[sink_group]
+name = "network_out"
+windows = ["network_alerts"]
+[[sink_group.sinks]]
+connect = "file_json_sink"
+name = "network_file"
+[sink_group.sinks.params]
+base = "data/alerts"
+file = "network.ndjson"

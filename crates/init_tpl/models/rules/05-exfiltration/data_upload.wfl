@@ -1,0 +1,28 @@
+use "network.wfs"
+
+// 数据外发 — 单主机 5 分钟内发起 >= 5 次大流量出站（每次 > 10MB）
+// 指标：打包压缩后外传、上传网盘/云存储的典型特征
+// 注：精确字节总量需 sum 聚合；此处用"大流量连接次数"近似
+
+rule data_exfiltration {
+    events {
+        c : conn_events
+            && c.bytes_out > 10000000
+    }
+    match<sip:5m> {
+        on event { c | count >= 5; }
+    } -> score(80.0)
+    entity(ip, c.sip)
+    yield network_alerts (
+        sip = c.sip,
+        alert_type = "data_exfiltration",
+        detail = ">= 5 large uploads (>10MB each) in 5min",
+        request_count = 5
+    )
+
+    limits {
+        max_memory = "64MB";
+        max_instances = 10000;
+        on_exceed = throttle;
+    }
+}

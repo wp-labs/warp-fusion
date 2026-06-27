@@ -1,0 +1,7 @@
+[sink_group]
+name = "__error"
+[[sink_group.sinks]]
+connect = "file_json_sink"
+[sink_group.sinks.params]
+base = "data/alerts"
+file = "error.ndjson"

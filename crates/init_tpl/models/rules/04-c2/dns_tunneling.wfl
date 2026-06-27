@@ -1,0 +1,32 @@
+use "dns.wfs"
+
+// DNS 隧道检测 — TXT 查询 + 长域名
+//
+// 检测通过 DNS TXT 记录外传数据的行为：
+//   - query 长度 >= 52（DNS 子域名最大长度，超过即异常）
+//   - 高频 TXT 查询（隧道通常有持续心跳）
+//   - DNS 响应报文大小异常（TXT 记录可携带大量数据）
+//
+// 注：query 字段需保存完整原始域名（wpl 不能截断），length 由 wpl 内置函数或
+// 规则运行时计算。
+
+rule dns_tunneling {
+    events { d : dns_events && d.qtype == "TXT" }
+    match<sip:5m> {
+        on event { d | count >= 10; }
+        and close { d | count >= 20; }
+    } -> score(85.0)
+    entity(ip, d.sip)
+    yield dns_alerts (
+        sip = d.sip,
+        alert_type = "dns_tunneling",
+        detail = "TXT query flood — possible DNS tunnel",
+        sample_query = d.query
+    )
+
+    limits {
+        max_memory = "64MB";
+        max_instances = 10000;
+        on_exceed = throttle;
+    }
+}

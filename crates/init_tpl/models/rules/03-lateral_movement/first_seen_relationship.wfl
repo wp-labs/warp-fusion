@@ -1,0 +1,39 @@
+use "network.wfs"
+
+// 首次通信关系检测 — 历史未见 (sip, dip) 通信对
+//
+// 通过 external("first_seen", fmt("{}-{}", c.sip, c.dip)) 点查图基线 Redis，
+// 检测历史未出现过的网络通信关系。首次出现的交互通常是：
+//   - 攻击者的 C2 信道
+//   - 横向移动到新网段
+//   - 内部主机新访问外部可疑 IP
+//
+// 配置: knowdb.toml
+//   [fun.first_seen] call=bf_exists key=communication_pairs
+//   （Bloom filter 存储历史出现的 sip-dip 对，bf_exists=false → 首次出现）
+//
+// 注：Bloom filter 不支持删除——如果基线重建，旧的通信对会过期。
+// 建议配合基线定期重建（如每周重建一次 Bloom filter）。
+
+rule first_seen_relationship {
+    events {
+        c : conn_events
+            && c.action == "established"
+    }
+    on each c where
+        external("is_new_connection", fmt("{}-{}", c.sip, c.dip)) -> score(50.0)
+    entity(ip, c.sip)
+    yield network_alerts (
+        sip = c.sip,
+        dip = c.dip,
+        alert_type = "first_seen_communication",
+        detail = fmt("first seen communication: {} -> {}", c.sip, c.dip),
+        request_count = 1
+    )
+
+    limits {
+        max_memory = "64MB";
+        max_instances = 10000;
+        on_exceed = throttle;
+    }
+}

@@ -1,0 +1,35 @@
+use "auth.wfs"
+
+// 特权账户异常访问 — 已知高权限用户登录到非授权主机
+//
+// 白名单模式：已知特权用户（通过 knowdb.toml [fun.privileged_users] Redis SET）
+// 登录到不在其授权范围内的主机时告警。
+//
+// 配置: knowdb.toml
+//   [fun.privileged_users] call=sismember key=admin_users
+//   [fun.authorized_hosts] call=hexists key=host_authorization field=$user
+
+rule privileged_anomaly {
+    events {
+        e : auth_events
+            && e.result == "success"
+            && (e.service == "smb" || e.service == "rdp" || e.service == "winlogon")
+    }
+    on each e where
+        external("unauthorized_access", fmt("{}-{}", e.user, e.dip))
+        -> score(80.0)
+    entity(ip, e.sip)
+    yield security_alerts (
+        sip = e.sip,
+        dip = e.dip,
+        user = e.user,
+        alert_type = "privileged_anomaly",
+        detail = fmt("{} accessed {} outside authorized hosts", e.user, e.dip)
+    )
+
+    limits {
+        max_memory = "64MB";
+        max_instances = 10000;
+        on_exceed = throttle;
+    }
+}

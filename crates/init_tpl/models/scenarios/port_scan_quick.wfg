@@ -1,0 +1,31 @@
+use "../schemas/network.wfs"
+use "../rules/01-recon/port_scan.wfl"
+
+#[duration=1m]
+scenario port_scan_quick<seed=42> {
+  traffic {
+    stream conn_events gen 500/s
+  }
+  injection {
+    hit<30%> conn_events {
+      sip seq {
+        use(action="syn") with(12)
+      }
+    }
+    near_miss<10%> conn_events {
+      sip seq {
+        use(action="syn") with(2)
+      }
+    }
+    miss<60%> conn_events {
+      sip seq {
+        use(action="established") with(1)
+      }
+    }
+  }
+  expect {
+    hit(port_scan) >= 80%
+    near_miss(port_scan) <= 5%
+    miss(port_scan) <= 0.5%
+  }
+}

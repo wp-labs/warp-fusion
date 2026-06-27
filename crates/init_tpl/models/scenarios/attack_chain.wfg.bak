@@ -1,0 +1,36 @@
+use "../schemas/network.wfs"
+use "../schemas/auth.wfs"
+
+#[duration=15m]
+scenario attack_chain {
+  traffic {
+    stream conn_events gen 80/s
+    stream auth_events gen 30/s
+  }
+  injection {
+    hit<5%> conn_events {
+      sip seq {
+        use(dport="22") with(3,3m)
+        use(bytes_out="500") with(3,0s)
+      }
+    }
+    hit<5%> auth_events {
+      sip seq {
+        use(result="success") with(2,1m)
+      }
+    }
+    hit<5%> conn_events {
+      sip seq {
+        use(bytes_out="50000") with(2,1m)
+      }
+    }
+    miss<85%> conn_events {
+      sip seq {
+        use(action="established") with(3,20s)
+      }
+    }
+  }
+  expect {
+    hit(scan_login_xfer) >= 50%
+  }
+}

@@ -1,0 +1,39 @@
+use "network.wfs"
+use "auth.wfs"
+
+// 攻击链检测 — 扫描 → 成功登录 → 大量数据传输
+//
+// 单一弱信号聚合为高置信攻击事件：
+//   scan  : conn_events，远程管理端口 + 小字节（探测）
+//   login : auth_events，成功登录
+//   xfer  : conn_events，大字节外传
+// 三步在同一 (sip,dip) 30 分钟窗口内全部命中 → 高分告警（95）
+
+rule scan_login_xfer {
+    events {
+        scan  : conn_events && (scan.dport == 22 || scan.dport == 445 || scan.dport == 3389) && scan.bytes_out < 1000
+        login : auth_events && login.result == "success"
+        xfer  : conn_events && xfer.bytes_out >= 10000
+    }
+    match<sip,dip:30m> {
+        on event {
+            scan | count >= 1;
+            login | count >= 1;
+            xfer | count >= 1;
+        }
+    } -> score(95.0)
+    entity(ip, scan.sip)
+    yield network_alerts (
+        sip = scan.sip,
+        dip = scan.dip,
+        alert_type = "attack_chain_scan_login_xfer",
+        detail = "scan -> login -> data transfer on same host pair",
+        request_count = 3
+    )
+
+    limits {
+        max_memory = "64MB";
+        max_instances = 10000;
+        on_exceed = throttle;
+    }
+}

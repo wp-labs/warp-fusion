@@ -1,0 +1,97 @@
+# wf-rules 内置 wfusion 配置 — 可直接运行完整管道
+
+mode = "daemon"
+sources_dir = "test/sources"
+sinks = "test/sinks"
+
+[runtime]
+executor_parallelism = 4
+rule_exec_timeout = "30s"
+schemas = "schemas/*.wfs"
+rules = "rules/*/*.wfl"
+
+[window_defaults]
+evict_interval = "30s"
+max_window_bytes = "256MB"
+max_total_bytes = "2GB"
+evict_policy = "time_first"
+watermark = "5s"
+allowed_lateness = "30m"
+late_policy = "drop"
+
+# conn_events
+[window.conn_events]
+mode = "local"
+max_window_bytes = "256MB"
+over_cap = "30m"
+
+# auth_events
+[window.auth_events]
+mode = "local"
+max_window_bytes = "128MB"
+over_cap = "10m"
+
+# http_events
+[window.http_events]
+mode = "local"
+max_window_bytes = "128MB"
+over_cap = "5m"
+
+# dns_events
+[window.dns_events]
+mode = "local"
+max_window_bytes = "64MB"
+over_cap = "10m"
+
+# 告警窗口（over=0）
+[window.network_alerts]
+mode = "local"
+max_window_bytes = "16MB"
+over_cap = "0s"
+
+[window.security_alerts]
+mode = "local"
+max_window_bytes = "16MB"
+over_cap = "0s"
+
+[window.http_alerts]
+mode = "local"
+max_window_bytes = "16MB"
+over_cap = "0s"
+
+[window.dns_alerts]
+mode = "local"
+max_window_bytes = "16MB"
+over_cap = "0s"
+
+[window.management_alerts]
+mode = "local"
+max_window_bytes = "16MB"
+over_cap = "0s"
+
+[window.insider_alerts]
+mode = "local"
+max_window_bytes = "16MB"
+over_cap = "0s"
+
+# management.wfs — data windows
+[window.ad_change_events]
+mode = "local"
+max_window_bytes = "64MB"
+over_cap = "30m"
+
+[window.process_events]
+mode = "local"
+max_window_bytes = "64MB"
+over_cap = "10m"
+
+# data.wfs — data windows
+[window.data_access_events]
+mode = "local"
+max_window_bytes = "64MB"
+over_cap = "10m"
+
+[logging]
+level = "debug"
+format = "plain"
+file = "data/wfusion.log"

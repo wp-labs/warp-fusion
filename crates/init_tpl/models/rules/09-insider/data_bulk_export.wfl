@@ -1,0 +1,34 @@
+use "data.wfs"
+
+// 批量数据访问 / 导出检测 — DB 查询 / 文件下载审计
+//
+// 检测单用户短时间内大量数据访问行为（SQL SELECT *、文件批量下载、API 批量调用）。
+// 用 row_count 阈值或 bytes_out 总量作为判定依据。
+//
+// 数据源：DB 审计日志、文件服务器审计、API 网关日志。
+// wparse WPL 适配器需提取 action、row_count、bytes_out 字段。
+
+rule data_bulk_export {
+    events {
+        d : data_access_events
+            && (d.action == "select" || d.action == "download")
+    }
+    match<user:5m> {
+        on event { d.row_count | sum >= 100000; d.bytes_out | sum >= 50000000; }
+        and close { d.row_count | sum >= 500000; d.bytes_out | sum >= 250000000; }
+    } -> score(70.0)
+    entity(user, d.user)
+    yield insider_alerts (
+        sip = d.sip,
+        user = d.user,
+        alert_type = "data_bulk_export",
+        detail = fmt("{} retrieved bulk data in 5min", d.user),
+        resource = d.resource
+    )
+
+    limits {
+        max_memory = "64MB";
+        max_instances = 10000;
+        on_exceed = throttle;
+    }
+}

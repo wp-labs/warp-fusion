@@ -1,0 +1,36 @@
+use "management.wfs"
+
+// 新建账户 / 隐藏账户 / 特权组变更 — AD 审计事件检测
+//
+// 检测模式：
+//   1. 新用户创建（AD 4720）——特别关注 `$` 结尾的隐藏账户
+//   2. 用户被加入特权组（4728/4732/4756）——特权提升
+//   3. 同一操作者短时间内多次管理操作——自动化/脚本行为
+//
+// 注：需要 AD 变更审计日志（Windows EventLog），通过 wparse WPL 适配器
+// 提取字段名。当前 schema 用 `action` 区分事件类型。
+
+rule new_account {
+    events {
+        e : ad_change_events
+            && (e.action == "user_created" || e.action == "added_to_priv_group")
+    }
+    match<sip:5m> {
+        on event { e | count >= 1; }
+        and close { e | count >= 2; }
+    } -> score(75.0)
+    entity(user, e.user)
+    yield management_alerts (
+        sip = e.sip,
+        user = e.user,
+        target = e.target_user,
+        alert_type = if e.action == "user_created" then "new_account" else "privilege_escalation",
+        detail = fmt("{} performed {} on {}", e.user, e.action, e.target_user)
+    )
+
+    limits {
+        max_memory = "64MB";
+        max_instances = 10000;
+        on_exceed = throttle;
+    }
+}

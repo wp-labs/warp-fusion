@@ -1,0 +1,9 @@
+[sink_group]
+name = "http_out"
+windows = ["http_alerts"]
+[[sink_group.sinks]]
+connect = "file_json_sink"
+name = "http_file"
+[sink_group.sinks.params]
+base = "data/alerts"
+file = "http.ndjson"

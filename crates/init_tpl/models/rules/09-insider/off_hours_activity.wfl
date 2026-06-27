@@ -1,0 +1,40 @@
+use "auth.wfs"
+
+// 非工作时间活动检测 — auth_events + external() 点查
+//
+// 检查用户在非工作时间（夜间/周末/假日）的认证和操作行为。
+// 通过 external("is_off_hours", e.event_time) 点查 Redis，判断当前时间
+// 是否在用户所在时区的非工作时间范围内。
+//
+// 典型场景：
+//   - 财务人员凌晨 3 点 VPN 登录 → 异常
+//   - 运维人员在法定假日操作数据库 → 需审批
+//
+// 配置: knowdb.toml
+//   [fun.is_off_hours] call=get  # 返回 "true"/"false" 或 "1"/"0"
+//
+// 注：wparse v0.25+ 支持 external() 返回 chars 类型用于 bool 判定。
+// 如为旧版，改用 external("check_off_hours", e.event_time)（bool 返回）。
+
+rule off_hours_activity {
+    events {
+        e : auth_events
+            && e.result == "success"
+    }
+    on each e where
+        external("is_off_hours", e.event_time) -> score(60.0)
+    entity(ip, e.sip)
+    yield security_alerts (
+        sip = e.sip,
+        dip = e.dip,
+        user = e.user,
+        alert_type = "off_hours_access",
+        detail = fmt("{} identified off-hours access from {}", e.user, e.sip)
+    )
+
+    limits {
+        max_memory = "64MB";
+        max_instances = 10000;
+        on_exceed = throttle;
+    }
+}

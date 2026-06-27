@@ -1,0 +1,32 @@
+use "network.wfs"
+
+// C2 信标检测（近似）— 同一 (sip,dip) 10 分钟内出现 >= 20 次短连接、小字节出站
+// 指标：beaconing 心跳——固定间隔、小包、长持续。本规则用"高频短小连接"近似
+// （精确周期性需方差/间隔分析，可在 ETL 侧打 beacon_score 标签后用 on each 判定）
+
+rule c2_beaconing {
+    events {
+        c : conn_events
+            && c.bytes_out < 1000
+            && c.duration < 2
+            && c.action == "syn"
+    }
+    match<sip,dip:10m> {
+        on event { c | count >= 20; }
+        and close { c | count >= 20; }
+    } -> score(70.0)
+    entity(ip, c.sip)
+    yield network_alerts (
+        sip = c.sip,
+        dip = c.dip,
+        alert_type = "c2_beaconing",
+        detail = ">= 20 short low-bytes connections to same dest in 10min",
+        request_count = 20
+    )
+
+    limits {
+        max_memory = "64MB";
+        max_instances = 10000;
+        on_exceed = throttle;
+    }
+}

@@ -1,0 +1,31 @@
+// 网络流事件 — 覆盖流量/连接类规则（扫描、横向、C2、外发）
+window conn_events {
+    stream = "conn_events"
+    time = event_time
+    over = 30m
+    fields {
+        sip: ip
+        dip: ip
+        dport: digit
+        bytes: digit
+        bytes_in: digit
+        bytes_out: digit
+        protocol: chars
+        action: chars
+        duration: digit
+        event_time: time
+    }
+}
+
+// 网络类告警输出
+window network_alerts {
+    over = 0
+    fields {
+        sip: ip
+        dip: ip
+        alert_type: chars
+        detail: chars
+        request_count: digit
+        total_bytes: digit
+    }
+}

@@ -1,0 +1,26 @@
+// HTTP 事件 — 覆盖 Web 探测 / SQLi / 异常 UA
+window http_events {
+    stream = "http_events"
+    time = event_time
+    over = 5m
+    fields {
+        sip: ip
+        dip: ip
+        method: chars
+        uri: chars
+        status: digit
+        bytes_out: digit
+        user_agent: chars
+        event_time: time
+    }
+}
+
+window http_alerts {
+    over = 0
+    fields {
+        sip: ip
+        alert_type: chars
+        detail: chars
+        sample_uri: chars
+    }
+}

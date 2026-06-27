@@ -1,0 +1,25 @@
+// DNS 事件 — 覆盖 DGA / DNS 隧道 / 信标域名
+window dns_events {
+    stream = "dns_events"
+    time = event_time
+    over = 10m
+    fields {
+        sip: ip
+        query: chars
+        qtype: chars
+        rcode: chars
+        response: chars
+        bytes: digit
+        event_time: time
+    }
+}
+
+window dns_alerts {
+    over = 0
+    fields {
+        sip: ip
+        alert_type: chars
+        detail: chars
+        sample_query: chars
+    }
+}

@@ -1,0 +1,9 @@
+[[connectors]]
+id = "file_json_sink"
+type = "file"
+allow_override = ["base", "file"]
+
+[connectors.params]
+fmt = "json"
+base = "data/alerts"
+file = "default.ndjson"

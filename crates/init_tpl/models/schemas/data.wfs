@@ -1,0 +1,30 @@
+// 数据访问事件 — 覆盖 DB 查询 / 文件访问 / 内部滥用
+//
+// data_access_events: 应用/DB 层的数据访问审计（SQL 查询、文件下载、API 调用）
+// insider_alerts: 内部威胁告警输出
+
+window data_access_events {
+    stream = "data_access_events"
+    time = event_time
+    over = 10m
+    fields {
+        sip: ip
+        user: chars
+        action: chars
+        resource: chars
+        row_count: digit
+        bytes_out: digit
+        event_time: time
+    }
+}
+
+window insider_alerts {
+    over = 0
+    fields {
+        sip: ip
+        user: chars
+        alert_type: chars
+        detail: chars
+        resource: chars
+    }
+}

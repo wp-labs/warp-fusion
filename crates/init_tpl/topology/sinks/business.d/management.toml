@@ -1,0 +1,9 @@
+[sink_group]
+name = "management_out"
+windows = ["management_alerts"]
+[[sink_group.sinks]]
+connect = "file_json_sink"
+name = "management_file"
+[sink_group.sinks.params]
+base = "data/alerts"
+file = "management.ndjson"

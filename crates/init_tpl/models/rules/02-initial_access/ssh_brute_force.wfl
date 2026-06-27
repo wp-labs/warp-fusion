@@ -1,0 +1,29 @@
+use "auth.wfs"
+
+// SSH 暴力破解 — 单 IP 5 分钟内失败登录 >= 10 次
+// 指标：hydra/medusa 等爆破工具特征
+
+rule ssh_brute_force {
+    events {
+        e : auth_events
+            && e.service == "ssh"
+            && e.result == "failed"
+    }
+    match<sip:5m> {
+        on event { e | count >= 10; }
+    } -> score(70.0)
+    entity(ip, e.sip)
+    yield security_alerts (
+        sip = e.sip,
+        dip = e.dip,
+        user = e.user,
+        alert_type = "ssh_brute_force",
+        detail = "failed login >= 10 in 5min"
+    )
+
+    limits {
+        max_memory = "64MB";
+        max_instances = 10000;
+        on_exceed = throttle;
+    }
+}

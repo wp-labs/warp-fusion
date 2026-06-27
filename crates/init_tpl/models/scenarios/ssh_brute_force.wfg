@@ -1,0 +1,31 @@
+use "../schemas/auth.wfs"
+use "../rules/02-initial_access/ssh_brute_force.wfl"
+
+#[duration=10m]
+scenario brute_force_detect<seed=42> {
+  traffic {
+    stream auth_events gen 50/s
+  }
+  injection {
+    hit<20%> auth_events {
+      sip seq {
+        use(result="failed", service="ssh") with(12)
+      }
+    }
+    near_miss<10%> auth_events {
+      sip seq {
+        use(result="failed", service="ssh") with(2)
+      }
+    }
+    miss<70%> auth_events {
+      sip seq {
+        use(result="success", service="ssh") with(1)
+      }
+    }
+  }
+  expect {
+    hit(ssh_brute_force) >= 90%
+    near_miss(ssh_brute_force) <= 5%
+    miss(ssh_brute_force) <= 0.5%
+  }
+}

@@ -23,6 +23,7 @@ pub fn run() -> Result<(), String> {
             Ok(content) => {
                 if content.parse::<toml::Value>().is_ok() {
                     ok += 1;
+                    println!("  [OK] conf/wfusion.toml: valid TOML");
                 } else {
                     err += 1;
                     eprintln!("  [ERR] conf/wfusion.toml: invalid TOML");
@@ -38,51 +39,82 @@ pub fn run() -> Result<(), String> {
         eprintln!("  [ERR] conf/wfusion.toml: not found");
     }
 
-    // 2. rules/
-    let rules_dir = root.join("rules");
+    // 2. models/rules/
+    let rules_dir = root.join("models").join("rules");
     if rules_dir.is_dir() {
         let wfl_count = count_files(&rules_dir, "wfl");
         if wfl_count > 0 {
             ok += 1;
-            println!("  [OK] rules/: {wfl_count} .wfl file(s)");
+            println!("  [OK] models/rules/: {wfl_count} .wfl file(s)");
         } else {
             warn += 1;
-            eprintln!("  [WARN] rules/: no .wfl files found");
+            eprintln!("  [WARN] models/rules/: no .wfl files found");
         }
     } else {
         warn += 1;
-        eprintln!("  [WARN] rules/: directory not found");
+        eprintln!("  [WARN] models/rules/: directory not found");
     }
 
-    // 3. schemas/
-    let schemas_dir = root.join("schemas");
+    // 3. models/schemas/
+    let schemas_dir = root.join("models").join("schemas");
     if schemas_dir.is_dir() {
         let wfs_count = count_files(&schemas_dir, "wfs");
         if wfs_count > 0 {
             ok += 1;
-            println!("  [OK] schemas/: {wfs_count} .wfs file(s)");
+            println!("  [OK] models/schemas/: {wfs_count} .wfs file(s)");
         } else {
             warn += 1;
-            eprintln!("  [WARN] schemas/: no .wfs files found");
+            eprintln!("  [WARN] models/schemas/: no .wfs files found");
         }
     } else {
         warn += 1;
-        eprintln!("  [WARN] schemas/: directory not found");
+        eprintln!("  [WARN] models/schemas/: directory not found");
     }
 
-    // 4. scenarios/
-    let scenarios_dir = root.join("scenarios");
+    // 4. models/scenarios/
+    let scenarios_dir = root.join("models").join("scenarios");
     if scenarios_dir.is_dir() {
         let wfg_count = count_files(&scenarios_dir, "wfg");
         if wfg_count > 0 {
             ok += 1;
-            println!("  [OK] scenarios/: {wfg_count} .wfg file(s)");
+            println!("  [OK] models/scenarios/: {wfg_count} .wfg file(s)");
         } else {
-            println!("  [INFO] scenarios/: no .wfg files");
+            println!("  [INFO] models/scenarios/: no .wfg files");
         }
     }
 
-    // 5. connectors/ (sink.d/)
+    // 5. topology/sinks/
+    let sinks_dir = root.join("topology").join("sinks");
+    if sinks_dir.is_dir() {
+        ok += 1;
+        let parts = ["business.d", "infra.d"];
+        for part in &parts {
+            if sinks_dir.join(part).is_dir() {
+                println!("  [OK] topology/sinks/{part}/: present");
+            } else {
+                warn += 1;
+                eprintln!("  [WARN] topology/sinks/{part}/: not found");
+            }
+        }
+        if sinks_dir.join("defaults.toml").exists() {
+            println!("  [OK] topology/sinks/defaults.toml: present");
+        } else {
+            warn += 1;
+            eprintln!("  [WARN] topology/sinks/defaults.toml: not found");
+        }
+    } else {
+        warn += 1;
+        eprintln!("  [WARN] topology/sinks/: directory not found");
+    }
+
+    // 6. topology/sources/
+    let sources_dir = root.join("topology").join("sources");
+    if sources_dir.is_dir() {
+        ok += 1;
+        println!("  [OK] topology/sources/: present");
+    }
+
+    // 7. connectors/
     let connectors_dir = root.join("connectors");
     if connectors_dir.is_dir() {
         let sink_d = connectors_dir.join("sink.d");
@@ -96,27 +128,6 @@ pub fn run() -> Result<(), String> {
     } else {
         warn += 1;
         eprintln!("  [WARN] connectors/: directory not found");
-    }
-
-    // 6. sinks/
-    let sinks_dir = root.join("sinks");
-    if sinks_dir.is_dir() {
-        ok += 1;
-        let parts = ["business.d", "infra.d"];
-        for part in &parts {
-            if sinks_dir.join(part).is_dir() {
-                println!("  [OK] sinks/{part}/: present");
-            } else {
-                warn += 1;
-                eprintln!("  [WARN] sinks/{part}/: not found");
-            }
-        }
-        if sinks_dir.join("defaults.toml").exists() {
-            println!("  [OK] sinks/defaults.toml: present");
-        } else {
-            warn += 1;
-            eprintln!("  [WARN] sinks/defaults.toml: not found");
-        }
     }
 
     // Summary

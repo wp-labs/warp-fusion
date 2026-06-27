@@ -33,26 +33,6 @@ fn scope_matches(template_path: &str, scope: &str) -> bool {
 }
 
 // =====================================================================
-// Path mapping (docker template → wf-rules project)
-// =====================================================================
-
-fn map_path(template_path: &str) -> String {
-    let pairs: &[(&str, &str)] = &[
-        ("models/rules/", "rules/"),
-        ("models/schemas/", "schemas/"),
-        ("models/scenarios/", "scenarios/"),
-        ("topology/sinks/", "sinks/"),
-        ("topology/sources/", "sources/"),
-    ];
-    for (prefix, replacement) in pairs {
-        if let Some(rest) = template_path.strip_prefix(prefix) {
-            return format!("{replacement}{rest}");
-        }
-    }
-    template_path.to_string()
-}
-
-// =====================================================================
 // Init
 // =====================================================================
 
@@ -78,13 +58,13 @@ pub fn init_project(project_dir: &str, _name: &str, scope: &str) -> Result<(), S
         if !scope_matches(template_path, scope) {
             continue;
         }
-        let mapped = map_path(template_path);
-        let full = root.join(&mapped);
+        let full = root.join(template_path);
 
         if let Some(parent) = full.parent() {
-            fs::create_dir_all(parent).map_err(|e| format!("create parent for {mapped}: {e}"))?;
+            fs::create_dir_all(parent)
+                .map_err(|e| format!("create parent for {template_path}: {e}"))?;
         }
-        fs::write(&full, data).map_err(|e| format!("write {mapped}: {e}"))?;
+        fs::write(&full, data).map_err(|e| format!("write {template_path}: {e}"))?;
     }
 
     // Make scripts executable (on Unix)

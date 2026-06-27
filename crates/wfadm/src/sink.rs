@@ -15,8 +15,8 @@ pub fn run() -> Result<(), String> {
     let mut issues = 0u32;
     let mut files_checked = 0u32;
 
-    // sinks/ directory (layered layout)
-    let sinks_dir = root.join("sinks");
+    // topology/sinks/ directory
+    let sinks_dir = root.join("topology").join("sinks");
     if sinks_dir.is_dir() {
         // defaults.toml
         let defaults = sinks_dir.join("defaults.toml");
@@ -24,9 +24,9 @@ pub fn run() -> Result<(), String> {
             files_checked += 1;
             if let Err(e) = validate_sink_file(&defaults) {
                 issues += 1;
-                eprintln!("  [ERR] sinks/defaults.toml: {e}");
+                eprintln!("  [ERR] topology/sinks/defaults.toml: {e}");
             } else {
-                println!("  [OK] sinks/defaults.toml");
+                println!("  [OK] topology/sinks/defaults.toml");
             }
         }
 
@@ -37,19 +37,19 @@ pub fn run() -> Result<(), String> {
                 files_checked += n;
                 issues += errs;
                 if errs == 0 {
-                    println!("  [OK] sinks/{sub}/: {n} file(s) ok");
+                    println!("  [OK] topology/sinks/{sub}/: {n} file(s) ok");
                 }
             }
         }
 
-        // sinks/connectors/sink.d/
+        // topology/sinks/connectors/sink.d/
         let conn_dir = sinks_dir.join("connectors").join("sink.d");
         if conn_dir.is_dir() {
             let (n, errs) = validate_sink_dir(&conn_dir);
             files_checked += n;
             issues += errs;
             if errs == 0 {
-                println!("  [OK] sinks/connectors/sink.d/: {n} file(s) ok");
+                println!("  [OK] topology/sinks/connectors/sink.d/: {n} file(s) ok");
             }
         }
     }

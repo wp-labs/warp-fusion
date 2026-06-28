@@ -43,7 +43,7 @@ Redis 数据模型（由 `scripts/docker_init.sh` 从 `data/weak_password_list.n
 # 或分步
 docker compose up -d                  # Redis + 自动加载弱口令库
 wfl lint rules/weak_password.wfl -s "schemas/*.wfs"
-wfusion run -c ./wfusion.toml         # batch 模式，读 auth_events → external() 查 Redis
+wfusion batch -c ./wfusion.toml         # batch 模式，读 auth_events → external() 查 Redis
 ```
 
 Redis 映射到宿主机 **6380** 端口（避免与其他示例的 6379 冲突）；`knowdb.toml` 连 `redis://127.0.0.1:6380`。

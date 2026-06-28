@@ -17,7 +17,7 @@ echo ""
 echo "2> wfusion: 读 auth_events → external() 点查 Redis → 告警..."
 mkdir -p data/out_dat
 rm -f data/out_dat/*.ndjson
-wfusion run -c ./wfusion.toml
+wfusion batch -c ./wfusion.toml
 
 echo ""
 echo "=== alerts ==="

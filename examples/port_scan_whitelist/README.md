@@ -18,7 +18,7 @@ wfl test rules/port_scan_whitelist.wfl --schemas "schemas/*.wfs"
 wfl replay rules/port_scan_whitelist.wfl --input data/conn_events.ndjson
 
 # 3. 完整引擎（batch 模式）
-wfusion run -c ./wfusion.toml
+wfusion batch -c ./wfusion.toml
 ```
 
 ## 规则

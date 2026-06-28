@@ -23,7 +23,7 @@ echo "============================================"
 echo "1> wfusion: daemon, listening on TCP :9802..."
 cd wfusion
 rm -rf ../data/alerts; mkdir -p ../data/alerts
-wfusion run --config conf/wfusion.toml &
+wfusion daemon --config conf/wfusion.toml &
 WFUSION_PID=$!
 cd ..
 echo "   wfusion PID=$WFUSION_PID"

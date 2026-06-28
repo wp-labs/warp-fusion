@@ -33,7 +33,7 @@ sed -i '' "s/group_id = .*/group_id = \"$GROUP_ID\"/" wfusion/topology/sources/k
 echo "2> wfusion: daemon, consuming from Kafka..."
 cd wfusion
 rm -rf ../data/alerts; mkdir -p ../data/alerts
-wfusion run --config conf/wfusion.toml &
+wfusion daemon --config conf/wfusion.toml &
 WFUSION_PID=$!
 cd ..
 echo "   wfusion PID=$WFUSION_PID"

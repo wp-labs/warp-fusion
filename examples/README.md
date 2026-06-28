@@ -194,5 +194,5 @@ wfl test rules/<scenario>.wfl --schemas "schemas/*.wfs"
 wfl replay rules/<scenario>.wfl --input data/events.ndjson
 
 # 完整引擎（batch 模式）
-wfusion run -c ./wfusion.toml
+wfusion batch -c ./wfusion.toml
 ```

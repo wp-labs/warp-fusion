@@ -18,7 +18,7 @@ wfl test rules/ssh_brute_force.wfl --schemas "schemas/*.wfs"
 wfl replay rules/ssh_brute_force.wfl --input data/auth_events.ndjson
 
 # 3. 完整引擎（batch 模式）
-wfusion run -c ./wfusion.toml
+wfusion batch -c ./wfusion.toml
 ```
 
 ## 规则

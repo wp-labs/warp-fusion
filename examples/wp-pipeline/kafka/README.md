@@ -36,5 +36,5 @@ cd ..
 
 # 4. Start wfusion (consumes from Kafka, writes alerts to Kafka)
 cd wfusion
-wfusion run --config conf/wfusion.toml
+wfusion daemon --config conf/wfusion.toml
 ```

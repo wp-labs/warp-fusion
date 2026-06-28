@@ -78,10 +78,10 @@ wfl replay rules/rat_propagation.wfl --input data/demo_events.ndjson
 wfl replay rules/rat_propagation_exploit.wfl --input data/demo_events.ndjson
 
 # 3. 完整引擎（batch 模式）
-wfusion run -c ./wfusion.toml
+wfusion batch -c ./wfusion.toml
 ```
 
-> **多步匹配与多源 replay 的已知限制**：`rat_propagation` 依赖 `match<sip,dip:30m>` 三步顺序匹配（scan → login → xfer）。`wfl test` 中事件按时间顺序注入，三步可正确触发。`wfusion run` batch 模式使用两个 `[[sources]]` 分别回放 conn_events 和 auth_events，两个文件并发读取，事件到达状态机的顺序不可控，会导致多步匹配的序列断裂。**因此告警逻辑的验证请以 `wfl test` 为准。** 实时部署中，各 source 独立推送事件，窗口内由 event timestamp 保证时间顺序，不存在此问题。
+> **多步匹配与多源 replay 的已知限制**：`rat_propagation` 依赖 `match<sip,dip:30m>` 三步顺序匹配（scan → login → xfer）。`wfl test` 中事件按时间顺序注入，三步可正确触发。`wfusion batch` batch 模式使用两个 `[[sources]]` 分别回放 conn_events 和 auth_events，两个文件并发读取，事件到达状态机的顺序不可控，会导致多步匹配的序列断裂。**因此告警逻辑的验证请以 `wfl test` 为准。** 实时部署中，各 source 独立推送事件，窗口内由 event timestamp 保证时间顺序，不存在此问题。
 ```
 
 ---

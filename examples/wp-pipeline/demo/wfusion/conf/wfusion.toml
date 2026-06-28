@@ -1,4 +1,4 @@
-mode = "batch"
+
 sources_dir = "../topology/sources"
 sinks = "../topology/sinks"
 

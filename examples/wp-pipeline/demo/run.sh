@@ -14,7 +14,7 @@ wparse batch -p -n "$LINE_CNT" -S 1 > /dev/null 2>&1 && cd ..
 
 echo "3> wfusion: detect → alerts"
 cd wfusion && mkdir -p data/out_dat/alerts
-wfusion run --config conf/wfusion.toml > /dev/null 2>&1 && cd ..
+wfusion batch --config conf/wfusion.toml > /dev/null 2>&1 && cd ..
 
 echo ""
 echo "Output:"

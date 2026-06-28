@@ -108,7 +108,7 @@ wfl lint rules/weak_password.wfl --schemas "schemas/*.wfs"
 wfl explain rules/weak_password.wfl --schemas "schemas/*.wfs"
 
 # 完整引擎（batch 模式，同时加载 auth + password_audit 两个 source）
-wfusion run -c ./wfusion.toml
+wfusion batch -c ./wfusion.toml
 ```
 
 ## 规则
@@ -174,7 +174,7 @@ rule weak_password_login {
 
 ## 测试说明
 
-`wfl test` 不加载外部 window 数据，`weak_password_db` 为空，因此 `isnotnull(hash_value)` guard 始终为 false。测试验证规则编译和基本结构。跨 window join 的完整验证通过 `wfusion run`（batch 模式）完成。
+`wfl test` 不加载外部 window 数据，`weak_password_db` 为空，因此 `isnotnull(hash_value)` guard 始终为 false。测试验证规则编译和基本结构。跨 window join 的完整验证通过 `wfusion batch`（batch 模式）完成。
 
 ## 目录结构
 

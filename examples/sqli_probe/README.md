@@ -18,7 +18,7 @@ wfl test rules/sqli_probe.wfl --schemas "schemas/*.wfs"
 wfl replay rules/sqli_probe.wfl --input data/http_events.ndjson
 
 # 3. 完整引擎（batch 模式）
-wfusion run -c ./wfusion.toml
+wfusion batch -c ./wfusion.toml
 ```
 
 ## 规则

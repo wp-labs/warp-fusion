@@ -509,10 +509,10 @@ rule test_rule {
     }
 
     #[test]
-    fn wfl_lint_warning_reported() {
+    fn wfl_parses_without_close_block() {
         let dir = temp_dir();
         setup_models_dir(&dir);
-        // Missing on_close block triggers W002 lint warning
+        // Rule without close block should still parse (lint should not produce noise)
         std::fs::write(
             dir.join("models/rules/no_close.wfl"),
             r#"
@@ -527,7 +527,6 @@ rule no_close {
         .unwrap();
         let mut err = 0;
         let ok = check_models(&dir, &mut err);
-        // Lint warnings don't count as errors, parsing still succeeds
         assert!(ok > 0);
         assert_eq!(err, 0);
         let _ = std::fs::remove_dir_all(&dir);

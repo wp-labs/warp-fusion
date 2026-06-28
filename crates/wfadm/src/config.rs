@@ -1,56 +1,14 @@
-//! wfadm config — inspect and diff wfusion configuration
-//!
-//! Mirrors `wfusion config` subcommands, relocated to the admin CLI
-//! where they belong as project-management tools.
+//! wfadm config — diff wfusion configuration
 
 use std::path::{Path, PathBuf};
 
 use clap::Subcommand;
-use wf_config::{ConfigResult, ConfigVarContext, FusionConfigLoader, parse_vars};
+use wf_config::{ConfigVarContext, FusionConfigLoader, parse_vars};
 
-// ── CLI subcommands ───────────────────────────────────────────────────
+// ── CLI subcommand ────────────────────────────────────────────────────
 
 #[derive(Subcommand, Clone)]
 pub enum ConfigCommands {
-    /// Render merged configuration (raw or expanded)
-    Render {
-        #[arg(short, long, default_value = "conf/wfusion.toml")]
-        config: PathBuf,
-        #[arg(long)]
-        overlay: Vec<PathBuf>,
-        #[arg(long)]
-        var: Vec<String>,
-        #[arg(long)]
-        work_dir: Option<PathBuf>,
-        #[arg(long)]
-        raw: bool,
-    },
-    /// Show the file origin of each config key
-    Origins {
-        #[arg(short, long, default_value = "conf/wfusion.toml")]
-        config: PathBuf,
-        #[arg(long)]
-        overlay: Vec<PathBuf>,
-        #[arg(long)]
-        var: Vec<String>,
-        #[arg(long)]
-        work_dir: Option<PathBuf>,
-        #[arg(long)]
-        path_prefix: Vec<String>,
-    },
-    /// List all resolved configuration variables
-    Vars {
-        #[arg(short, long, default_value = "conf/wfusion.toml")]
-        config: PathBuf,
-        #[arg(long)]
-        overlay: Vec<PathBuf>,
-        #[arg(long)]
-        var: Vec<String>,
-        #[arg(long)]
-        work_dir: Option<PathBuf>,
-        #[arg(long)]
-        var_prefix: Vec<String>,
-    },
     /// Diff two configuration sets
     Diff {
         #[arg(short, long, default_value = "conf/wfusion.toml")]
@@ -80,27 +38,6 @@ pub enum ConfigCommands {
 
 pub fn run(command: ConfigCommands) -> Result<(), String> {
     match command {
-        ConfigCommands::Render {
-            config,
-            overlay,
-            var,
-            work_dir,
-            raw,
-        } => cmd_render(&config, &overlay, &var, work_dir.as_deref(), raw),
-        ConfigCommands::Origins {
-            config,
-            overlay,
-            var,
-            work_dir,
-            path_prefix,
-        } => cmd_origins(&config, &overlay, &var, work_dir.as_deref(), &path_prefix),
-        ConfigCommands::Vars {
-            config,
-            overlay,
-            var,
-            work_dir,
-            var_prefix,
-        } => cmd_vars(&config, &overlay, &var, work_dir.as_deref(), &var_prefix),
         ConfigCommands::Diff {
             config,
             overlay,
@@ -176,99 +113,6 @@ fn resolve_load(
     })
 }
 
-fn to_toml_res(e: ConfigResult<String>) -> Result<String, String> {
-    e.map_err(|e| format!("{e}"))
-}
-
-// ── Render ────────────────────────────────────────────────────────────
-
-fn cmd_render(
-    config: &Path,
-    overlays: &[PathBuf],
-    vars: &[String],
-    work_dir: Option<&Path>,
-    raw: bool,
-) -> Result<(), String> {
-    let ctx = resolve_load(config, overlays, vars, work_dir)?;
-    let loader = FusionConfigLoader::new(
-        &ctx.config_path,
-        &ctx.overlay_paths,
-        &ctx.config_ctx,
-        Some(&ctx.base_dir),
-    );
-    let rendered = if raw {
-        to_toml_res(loader.load_merged_toml())?
-    } else {
-        to_toml_res(loader.load_expanded_toml())?
-    };
-    println!("{rendered}");
-    Ok(())
-}
-
-// ── Origins ───────────────────────────────────────────────────────────
-
-fn cmd_origins(
-    config: &Path,
-    overlays: &[PathBuf],
-    vars: &[String],
-    work_dir: Option<&Path>,
-    path_prefix: &[String],
-) -> Result<(), String> {
-    let ctx = resolve_load(config, overlays, vars, work_dir)?;
-    let raw = FusionConfigLoader::new(
-        &ctx.config_path,
-        &ctx.overlay_paths,
-        &ctx.config_ctx,
-        Some(&ctx.base_dir),
-    )
-    .load_raw()
-    .map_err(|e| format!("{e}"))?;
-    let mut matched = 0usize;
-    for (path, origin) in raw.origin_entries() {
-        if !matches_any_prefix(&path, path_prefix) {
-            continue;
-        }
-        matched += 1;
-        println!("{path}\t{}", origin.display());
-    }
-    if matched == 0 {
-        println!("(no matching paths)");
-    }
-    Ok(())
-}
-
-// ── Vars ──────────────────────────────────────────────────────────────
-
-fn cmd_vars(
-    config: &Path,
-    overlays: &[PathBuf],
-    vars: &[String],
-    work_dir: Option<&Path>,
-    var_prefix: &[String],
-) -> Result<(), String> {
-    let ctx = resolve_load(config, overlays, vars, work_dir)?;
-    let vars = FusionConfigLoader::new(
-        &ctx.config_path,
-        &ctx.overlay_paths,
-        &ctx.config_ctx,
-        Some(&ctx.base_dir),
-    )
-    .load_effective_vars()
-    .map_err(|e| format!("{e}"))?;
-    let mut matched = 0usize;
-    for entry in &vars {
-        if !var_prefix.is_empty() && !var_prefix.iter().any(|p| entry.key.starts_with(p.as_str())) {
-            continue;
-        }
-        matched += 1;
-        println!("{}\t{}\t{}", entry.key, entry.value, entry.source);
-    }
-    if matched == 0 {
-        println!("(no matching vars)");
-    }
-    Ok(())
-}
-
 // ── Diff ──────────────────────────────────────────────────────────────
 
 fn cmd_diff(
@@ -299,6 +143,7 @@ fn cmd_diff(
         &cmp_ctx.config_ctx,
         Some(&cmp_ctx.base_dir),
     );
+
     let left = if expanded {
         l.load_expanded_raw().map_err(|e| format!("{e}"))?
     } else {
@@ -309,11 +154,13 @@ fn cmd_diff(
     } else {
         r.load_raw().map_err(|e| format!("{e}"))?
     };
+
     let changes: Vec<_> = left
         .diff(&right)
         .into_iter()
         .filter(|c| matches_any_prefix(&c.path, path_prefix))
         .collect();
+
     if changes.is_empty() {
         println!("(no changes)");
         return Ok(());
@@ -351,8 +198,6 @@ fn cmd_diff(
     }
     Ok(())
 }
-
-// ── Prefix matching ───────────────────────────────────────────────────
 
 fn matches_any_prefix(path: &str, prefixes: &[String]) -> bool {
     prefixes.is_empty() || prefixes.iter().any(|p| path_matches_prefix(path, p))

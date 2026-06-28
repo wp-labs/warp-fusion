@@ -60,6 +60,7 @@ jobs:
           cp -av target/${{ matrix.target }}/release/wfusion artifacts/
           cp -av target/${{ matrix.target }}/release/wfgen artifacts/
           cp -av target/${{ matrix.target }}/release/wfl artifacts/
+          cp -av target/${{ matrix.target }}/release/wfadm artifacts/
           tar -czf "${ARTIFACT}.tar.gz" artifacts
 
       - name: Attest Build Provenance
@@ -114,7 +115,6 @@ jobs:
           chmod +x arm64/*
           rm -rf arm64-tar
           cp ../docker/Dockerfile .
-          cp -r ../docker/default_setting .
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3

@@ -25,14 +25,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY ${TARGETARCH}/wfusion /usr/local/bin/
 COPY ${TARGETARCH}/wfgen /usr/local/bin/
 COPY ${TARGETARCH}/wfl /usr/local/bin/
+COPY ${TARGETARCH}/wfadm /usr/local/bin/
 
-# Create data directory
-RUN chmod 0755 /usr/local/bin/wfusion /usr/local/bin/wfgen /usr/local/bin/wfl \
+# Create data directory and bootstrap it via `wfadm init`.
+# Templates are embedded in the wfadm binary, so no external default_setting/ is needed.
+RUN chmod 0755 /usr/local/bin/wfusion /usr/local/bin/wfgen /usr/local/bin/wfl /usr/local/bin/wfadm \
     && mkdir -p /data \
-    && chown wfusion:wfusion /data
-
-# Copy default settings
-COPY --chown=wfusion:wfusion default_setting/ /data/
+    && chown wfusion:wfusion /data \
+    && cd /data && wfadm init --dir . --mode normal
 
 USER wfusion
 WORKDIR /data

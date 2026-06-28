@@ -418,11 +418,20 @@ async fn run_engine_inner(
     // Register external connector factories (mirrors warp-parse feats.rs pattern)
     crate::register::register_connectors();
 
+    // Extract admin_api config before fusion_config is moved into Reactor
+    let admin_api_config = fusion_config.admin_api.clone();
+
     let reactor = match Reactor::start(fusion_config, &resolved.runtime_base_dir).await {
         Ok(reactor) => reactor,
         Err(err) => return Err(render_runtime_error(err)),
     };
     tracing::info!(domain = "sys", "WarpFusion reactor started");
+
+    // Start admin API if enabled
+    let _admin_api =
+        wf_runtime::admin_api::start_if_enabled(&resolved.runtime_base_dir, &admin_api_config)
+            .await
+            .map_err(render_runtime_error)?;
     if metrics_enabled {
         tracing::info!(
             domain = "res",

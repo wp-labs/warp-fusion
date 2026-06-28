@@ -21,7 +21,7 @@ echo "2> generate events"
 wfgen gen --scenario "$SCENARIO" --out "$GENERATED_DIR" --format jsonl
 
 echo "3> run wfusion batch replay"
-wfusion run --config test/wfusion.batch.toml --work-dir .
+wfusion batch --config test/wfusion.batch.toml --work-dir .
 
 if [[ ! -s "$ACTUAL_ALERTS" ]]; then
     echo "ERROR: expected non-empty alert output: $ACTUAL_ALERTS" >&2

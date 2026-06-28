@@ -14,6 +14,7 @@ use orion_error::report::DiagnosticReport;
 
 use cli_config::{ConfigLoadArgs, run_config_command, run_engine_command};
 use error::{CliResult, into_cli_error_from_wfl};
+use wf_config::FusionMode;
 
 // -- Top-level CLI -----------------------------------------------------------
 
@@ -31,8 +32,19 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Start the WarpFusion engine
-    Run {
+    /// Start engine in daemon mode (continuous, listens for input)
+    Daemon {
+        #[command(flatten)]
+        load: ConfigLoadArgs,
+        #[arg(long)]
+        metrics: bool,
+        #[arg(long)]
+        metrics_interval: Option<String>,
+        #[arg(long)]
+        metrics_listen: Option<String>,
+    },
+    /// Start engine in batch mode (replay input files, exit when done)
+    Batch {
         #[command(flatten)]
         load: ConfigLoadArgs,
         #[arg(long)]
@@ -148,12 +160,36 @@ async fn run_cli() -> CliResult<()> {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::Run {
+        Commands::Daemon {
             load,
             metrics,
             metrics_interval,
             metrics_listen,
-        } => run_engine_command(load, metrics, metrics_interval, metrics_listen).await?,
+        } => {
+            run_engine_command(
+                load,
+                Some(FusionMode::Daemon),
+                metrics,
+                metrics_interval,
+                metrics_listen,
+            )
+            .await?
+        }
+        Commands::Batch {
+            load,
+            metrics,
+            metrics_interval,
+            metrics_listen,
+        } => {
+            run_engine_command(
+                load,
+                Some(FusionMode::Batch),
+                metrics,
+                metrics_interval,
+                metrics_listen,
+            )
+            .await?
+        }
         Commands::Config { command } => run_config_command(command).await?,
         Commands::Rule { command } => match command {
             RuleCommands::Explain { file, schemas, var } => {

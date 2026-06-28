@@ -69,7 +69,7 @@ rm -f data/alerts/*.ndjson data/logs/wfusion.log data/logs/wfgen.log
 # 1. Start wfusion (loads schemas + rules from wf-rules/)
 echo "1> wfusion: starting daemon..."
 echo "   log=data/logs/wfusion.log"
-wfusion run --config conf/wfusion.toml --work-dir . >data/logs/wfusion.log 2>&1 &
+wfusion daemon --config conf/wfusion.toml --work-dir . >data/logs/wfusion.log 2>&1 &
 WFUSION_PID=$!
 sleep 2
 if ! kill -0 "$WFUSION_PID" 2>/dev/null; then

@@ -2,8 +2,8 @@
 #
 # This config intentionally uses batch/file replay instead of TCP so it can be
 # used as a deterministic availability check for the rule set.
+# mode 由 CLI 控制: wfusion batch
 
-mode = "batch"
 sinks = "topology/sinks"
 
 [[sources]]

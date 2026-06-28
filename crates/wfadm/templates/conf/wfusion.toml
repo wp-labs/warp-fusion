@@ -1,6 +1,6 @@
 # wf-rules 内置 wfusion 配置 — 可直接运行完整管道
+# mode 由 CLI 控制: wfusion daemon | wfusion batch
 
-mode = "daemon"
 sources_dir = "topology/sources"
 sinks = "topology/sinks"
 

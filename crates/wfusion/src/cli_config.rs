@@ -9,7 +9,9 @@ use std::str::FromStr;
 use clap::{Args, Subcommand};
 use orion_error::conversion::{ConvErr, ConvStructError, SourceErr};
 
-use wf_config::{ConfigVarContext, FusionConfig, FusionConfigLoader, HumanDuration, parse_vars};
+use wf_config::{
+    ConfigVarContext, FusionConfig, FusionConfigLoader, FusionMode, HumanDuration, parse_vars,
+};
 use wf_runtime::{
     cli::error::{EngineError, EngineReason, EngineResult},
     error::RuntimeError,
@@ -369,17 +371,19 @@ async fn run_config_inner(command: ConfigCommands) -> EngineResult<()> {
 
 pub async fn run_engine_command(
     load: ConfigLoadArgs,
+    mode: Option<FusionMode>,
     metrics: bool,
     metrics_interval: Option<String>,
     metrics_listen: Option<String>,
 ) -> CliResult<()> {
-    run_engine_inner(load, metrics, metrics_interval, metrics_listen)
+    run_engine_inner(load, mode, metrics, metrics_interval, metrics_listen)
         .await
         .map_err(into_cli_error)
 }
 
 async fn run_engine_inner(
     load: ConfigLoadArgs,
+    mode: Option<FusionMode>,
     metrics: bool,
     metrics_interval: Option<String>,
     metrics_listen: Option<String>,
@@ -392,6 +396,10 @@ async fn run_engine_inner(
         Some(&resolved.runtime_base_dir),
     )
     .conv_err()?;
+    // Override mode from CLI command (daemon/batch always explicit)
+    if let Some(m) = mode {
+        fusion_config.mode = m;
+    }
     if metrics || metrics_interval.is_some() || metrics_listen.is_some() {
         fusion_config.metrics.enabled = true;
     }

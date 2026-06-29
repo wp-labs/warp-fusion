@@ -14,9 +14,9 @@ use hyper::service::service_fn;
 use hyper::{Method, Request, Response, StatusCode};
 use hyper_util::rt::{TokioExecutor, TokioIo};
 use hyper_util::server::conn::auto::Builder as AutoBuilder;
+use rustls::ServerConfig;
 use rustls::pki_types::pem::PemObject;
 use rustls::pki_types::{CertificateDer, PrivateKeyDer};
-use rustls::ServerConfig;
 use tokio::net::TcpListener;
 use tokio::sync::oneshot;
 use tokio::task::JoinHandle;
@@ -27,6 +27,7 @@ use wf_config::AdminApiConf;
 // ── AdminApiRuntime ───────────────────────────────────────────────────
 
 #[derive(Debug)]
+#[allow(dead_code)]
 pub struct AdminApiRuntime {
     local_addr: SocketAddr,
     shutdown_tx: Option<oneshot::Sender<()>>,
@@ -34,9 +35,11 @@ pub struct AdminApiRuntime {
 }
 
 impl AdminApiRuntime {
+    #[allow(dead_code)]
     pub fn local_addr(&self) -> SocketAddr {
         self.local_addr
     }
+    #[allow(dead_code)]
     pub async fn shutdown(mut self) {
         if let Some(tx) = self.shutdown_tx.take() {
             let _ = tx.send(());
@@ -552,10 +555,7 @@ mod tests {
         let err = start_if_enabled(temp.path(), &config, fresh_cancel())
             .await
             .expect_err("should reject too-permissive token file");
-        assert!(
-            err.contains("too permissive"),
-            "unexpected error: {err}"
-        );
+        assert!(err.contains("too permissive"), "unexpected error: {err}");
     }
 
     #[tokio::test]
@@ -656,7 +656,10 @@ mod tests {
             ])
             .status()
             .expect("run openssl to generate self-signed cert");
-        assert!(status.success(), "openssl failed to generate self-signed cert");
+        assert!(
+            status.success(),
+            "openssl failed to generate self-signed cert"
+        );
         (cert_path, key_path)
     }
 

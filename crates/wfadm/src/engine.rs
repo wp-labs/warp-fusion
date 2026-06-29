@@ -101,7 +101,7 @@ fn resolve_target(
         .get("bind")
         .and_then(|v| v.as_str())
         .unwrap_or("127.0.0.1:19090");
-    let base_url = if admin_url.map_or(true, |u| u.is_empty()) {
+    let base_url = if admin_url.is_none_or(|u| u.is_empty()) {
         format!("http://{bind}")
     } else {
         admin_url.unwrap().trim_end_matches('/').to_string()

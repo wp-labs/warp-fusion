@@ -2409,8 +2409,8 @@ checksum = "9bb517913cfcfb9eeda59f36020269075a152701a01606c612f547e4890be399"
 
 [[package]]
 name = "moju-derive"
-version = "0.1.1"
-source = "git+https://github.com/dayu-sec/moju-derive.git?branch=main#d44b32e1549d39fd6b6e9feee76098ec3f92e5aa"
+version = "0.1.2"
+source = "git+https://github.com/dayu-sec/moju-derive.git?branch=main#d35deaa2ff15a8d03bea7961db5f1044383ff4e1"
 dependencies = [
  "moju-derive-macros",
 ]
@@ -2418,7 +2418,7 @@ dependencies = [
 [[package]]
 name = "moju-derive-macros"
 version = "0.1.0"
-source = "git+https://github.com/dayu-sec/moju-derive.git?branch=main#d44b32e1549d39fd6b6e9feee76098ec3f92e5aa"
+source = "git+https://github.com/dayu-sec/moju-derive.git?branch=main#d35deaa2ff15a8d03bea7961db5f1044383ff4e1"
 dependencies = [
  "proc-macro2",
  "quote",

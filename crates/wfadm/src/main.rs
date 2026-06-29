@@ -1,9 +1,11 @@
 mod check;
+mod conf;
 mod config;
 mod connectors;
 mod engine;
 mod init;
 pub(crate) mod init_tpl;
+mod project_remote;
 mod self_update;
 
 use clap::{Parser, Subcommand};
@@ -46,6 +48,11 @@ enum Commands {
         #[command(subcommand)]
         command: config::ConfigCommands,
     },
+    /// Remote rule-source version sync (`conf update`)
+    Conf {
+        #[command(subcommand)]
+        command: conf::ConfCmd,
+    },
     /// Check project integrity
     Check,
     /// Engine management (status/reload)
@@ -70,6 +77,7 @@ fn main() {
             version,
         } => cmd_init(name, dir, mode, repo, version),
         Commands::Config { command } => config::run(command),
+        Commands::Conf { command } => conf::run(command),
         Commands::Check => check::run(),
         Commands::Engine { command } => engine::run(command),
         Commands::SelfUpdate => self_update::run(),

@@ -14,10 +14,10 @@ arrow = { version = "59", default-features = false, features = ["ipc"] }
 async-trait = "0.1"
 orion-error = { version = "0.8", features = ["derive", "serde_json", "toml", "tracing"] }
 # @gxl:block(remote_reactor)
-wf-engine = { git = "https://github.com/wp-labs/wp-reactor.git", tag = "v0.1.21" }
-wf-config = { git = "https://github.com/wp-labs/wp-reactor.git", tag = "v0.1.21" }
-wf-lang = { git = "https://github.com/wp-labs/wp-reactor.git", tag = "v0.1.21" }
-wf-runtime = { git = "https://github.com/wp-labs/wp-reactor.git", tag = "v0.1.21" }
+wf-engine = { git = "https://github.com/wp-labs/wp-reactor.git", tag = "v0.1.23" }
+wf-config = { git = "https://github.com/wp-labs/wp-reactor.git", tag = "v0.1.23" }
+wf-lang = { git = "https://github.com/wp-labs/wp-reactor.git", tag = "v0.1.23" }
+wf-runtime = { git = "https://github.com/wp-labs/wp-reactor.git", tag = "v0.1.23" }
 # @gxl:end(remote_reactor)
 # @gxl:block(local_reactor)
 #wf-engine = { path = "../wp-reactor/crates/wf-engine" }
@@ -43,3 +43,6 @@ ureq = { version = "3", features = ["gzip"] }
 flate2 = "1"
 tar = "0.4"
 walkdir = "2"
+git2 = "0.19"
+semver = "1"
+libc = "0.2"

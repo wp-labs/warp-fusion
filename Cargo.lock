@@ -1577,6 +1577,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "git2"
+version = "0.19.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b903b73e45dc0c6c596f2d37eccece7c1c8bb6e4407b001096387c63d0d93724"
+dependencies = [
+ "bitflags",
+ "libc",
+ "libgit2-sys",
+ "log",
+ "openssl-probe 0.1.6",
+ "openssl-sys",
+ "url",
+]
+
+[[package]]
 name = "glob"
 version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2201,6 +2216,20 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "68ab91017fe16c622486840e4c83c9a37afeff978bd239b5293d61ece587de66"
 
 [[package]]
+name = "libgit2-sys"
+version = "0.17.0+1.8.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "10472326a8a6477c3c20a64547b0059e4b0d086869eee31e6d7da728a8eb7224"
+dependencies = [
+ "cc",
+ "libc",
+ "libssh2-sys",
+ "libz-sys",
+ "openssl-sys",
+ "pkg-config",
+]
+
+[[package]]
 name = "libm"
 version = "0.2.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2224,6 +2253,20 @@ version = "0.30.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2e99fb7a497b1e3339bc746195567ed8d3e24945ecd636e3619d20b9de9e9149"
 dependencies = [
+ "pkg-config",
+ "vcpkg",
+]
+
+[[package]]
+name = "libssh2-sys"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "220e4f05ad4a218192533b300327f5150e809b54c4ec83b5a1d91833601811b9"
+dependencies = [
+ "cc",
+ "libc",
+ "libz-sys",
+ "openssl-sys",
  "pkg-config",
  "vcpkg",
 ]
@@ -2435,7 +2478,7 @@ dependencies = [
  "libc",
  "log",
  "openssl",
- "openssl-probe",
+ "openssl-probe 0.2.1",
  "openssl-sys",
  "schannel",
  "security-framework",
@@ -2777,6 +2820,12 @@ dependencies = [
  "quote",
  "syn",
 ]
+
+[[package]]
+name = "openssl-probe"
+version = "0.1.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d05e27ee213611ffe7d6348b942e8f942b37114c00cc03cec254295a4a17852e"
 
 [[package]]
 name = "openssl-probe"
@@ -3617,7 +3666,7 @@ version = "0.8.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dab5152771c58876a2146916e53e35057e1a4dfa2b9df0f0305b07f611fdea4d"
 dependencies = [
- "openssl-probe",
+ "openssl-probe 0.2.1",
  "rustls-pki-types",
  "schannel",
  "security-framework",
@@ -5318,8 +5367,8 @@ dependencies = [
 
 [[package]]
 name = "wf-config"
-version = "0.1.21"
-source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v0.1.21#eac616348ef3fe0bf35fbab14aff1c7c29d7b300"
+version = "0.1.23"
+source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v0.1.23#13aa6a877abf478c4b78391c2574134cb60438a0"
 dependencies = [
  "glob",
  "moju-derive",
@@ -5327,7 +5376,7 @@ dependencies = [
  "serde",
  "serde_json",
  "toml 1.1.2+spec-1.1.0",
- "wf-lang 0.1.21 (git+https://github.com/wp-labs/wp-reactor.git?tag=v0.1.21)",
+ "wf-lang 0.1.23 (git+https://github.com/wp-labs/wp-reactor.git?tag=v0.1.23)",
  "wildmatch",
  "wp-connector-api",
 ]
@@ -5345,8 +5394,8 @@ dependencies = [
 
 [[package]]
 name = "wf-engine"
-version = "0.1.21"
-source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v0.1.21#eac616348ef3fe0bf35fbab14aff1c7c29d7b300"
+version = "0.1.23"
+source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v0.1.23#13aa6a877abf478c4b78391c2574134cb60438a0"
 dependencies = [
  "arrow",
  "async-trait",
@@ -5362,14 +5411,14 @@ dependencies = [
  "thiserror 2.0.18",
  "tokio",
  "wf-config",
- "wf-lang 0.1.21 (git+https://github.com/wp-labs/wp-reactor.git?tag=v0.1.21)",
+ "wf-lang 0.1.23 (git+https://github.com/wp-labs/wp-reactor.git?tag=v0.1.23)",
  "wp-connector-api",
  "wp-model-core",
 ]
 
 [[package]]
 name = "wf-lang"
-version = "0.1.21"
+version = "0.1.23"
 dependencies = [
  "moju-derive",
  "orion-error",
@@ -5379,8 +5428,8 @@ dependencies = [
 
 [[package]]
 name = "wf-lang"
-version = "0.1.21"
-source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v0.1.21#eac616348ef3fe0bf35fbab14aff1c7c29d7b300"
+version = "0.1.23"
+source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v0.1.23#13aa6a877abf478c4b78391c2574134cb60438a0"
 dependencies = [
  "moju-derive",
  "orion-error",
@@ -5390,8 +5439,8 @@ dependencies = [
 
 [[package]]
 name = "wf-runtime"
-version = "0.1.21"
-source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v0.1.21#eac616348ef3fe0bf35fbab14aff1c7c29d7b300"
+version = "0.1.23"
+source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v0.1.23#13aa6a877abf478c4b78391c2574134cb60438a0"
 dependencies = [
  "arrow",
  "async-broadcast",
@@ -5415,7 +5464,7 @@ dependencies = [
  "wf-config",
  "wf-connector-api",
  "wf-engine",
- "wf-lang 0.1.21 (git+https://github.com/wp-labs/wp-reactor.git?tag=v0.1.21)",
+ "wf-lang 0.1.23 (git+https://github.com/wp-labs/wp-reactor.git?tag=v0.1.23)",
  "wp-arrow",
  "wp-connector-api",
  "wp-core-connectors",
@@ -5429,15 +5478,20 @@ version = "0.1.13"
 dependencies = [
  "clap",
  "flate2",
+ "git2",
+ "libc",
  "rand 0.9.0",
+ "semver",
  "serde",
  "serde_json",
  "tar",
+ "tempfile",
  "toml 0.8.23",
+ "tracing",
  "ureq",
  "walkdir",
  "wf-config",
- "wf-lang 0.1.21",
+ "wf-lang 0.1.23",
  "wp-connector-api",
  "wp-core-connectors",
 ]
@@ -5459,7 +5513,7 @@ dependencies = [
  "tracing-subscriber",
  "wf-config",
  "wf-engine",
- "wf-lang 0.1.21 (git+https://github.com/wp-labs/wp-reactor.git?tag=v0.1.21)",
+ "wf-lang 0.1.23 (git+https://github.com/wp-labs/wp-reactor.git?tag=v0.1.23)",
  "wf-runtime",
  "winnow 1.0.3",
  "wp-arrow",
@@ -5479,7 +5533,7 @@ dependencies = [
  "tree-sitter-wfl",
  "wf-config",
  "wf-engine",
- "wf-lang 0.1.21 (git+https://github.com/wp-labs/wp-reactor.git?tag=v0.1.21)",
+ "wf-lang 0.1.23 (git+https://github.com/wp-labs/wp-reactor.git?tag=v0.1.23)",
  "wfgen",
 ]
 

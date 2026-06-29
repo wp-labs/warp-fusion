@@ -6,6 +6,7 @@
 mod cli_config;
 mod error;
 mod register;
+mod admin_api;
 
 use clap::{Parser, Subcommand};
 use orion_error::report::DiagnosticReport;

@@ -7,14 +7,14 @@ use std::path::PathBuf;
 use std::str::FromStr;
 
 use clap::{Args, Subcommand};
-use orion_error::conversion::{ConvErr, ConvStructError, SourceErr};
+use orion_error::conversion::{ConvErr, ConvStructError, SourceErr, ToStructError};
 
 use wf_config::{
     ConfigVarContext, FusionConfig, FusionConfigLoader, FusionMode, HumanDuration, parse_vars,
 };
 use wf_runtime::{
     cli::error::{EngineError, EngineReason, EngineResult},
-    error::RuntimeError,
+    error::{RuntimeError, RuntimeReason},
     lifecycle::{Reactor, ShutdownTrigger, wait_for_signal},
     tracing_init::init_tracing,
 };
@@ -429,9 +429,11 @@ async fn run_engine_inner(
 
     // Start admin API if enabled
     let _admin_api =
-        wf_runtime::admin_api::start_if_enabled(&resolved.runtime_base_dir, &admin_api_config)
+        crate::admin_api::start_if_enabled(&resolved.runtime_base_dir, &admin_api_config, reactor.cancel_token())
             .await
-            .map_err(render_runtime_error)?;
+            .map_err(|e| {
+                render_runtime_error(RuntimeReason::core_conf().to_err().with_detail(e))
+            })?;
     if metrics_enabled {
         tracing::info!(
             domain = "res",

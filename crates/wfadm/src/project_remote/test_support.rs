@@ -8,7 +8,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use git2::{Oid, Repository, Signature};
-use tempfile::{tempdir, TempDir};
+use tempfile::{TempDir, tempdir};
 
 use wf_config::project_remote::{ProjectRemoteConf, RepoGroupConf};
 
@@ -76,10 +76,7 @@ pub(super) fn single_conf(repo_url: &str, init_version: &str) -> ProjectRemoteCo
 }
 
 /// Dual-repo `ProjectRemoteConf`.
-pub(super) fn dual_conf(
-    models_repo_url: &str,
-    infra_repo_url: &str,
-) -> ProjectRemoteConf {
+pub(super) fn dual_conf(models_repo_url: &str, infra_repo_url: &str) -> ProjectRemoteConf {
     ProjectRemoteConf {
         enabled: true,
         repo: String::new(),

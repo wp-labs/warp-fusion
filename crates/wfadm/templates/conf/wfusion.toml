@@ -91,6 +91,18 @@ mode = "local"
 max_window_bytes = "64MB"
 over_cap = "10m"
 
+# Admin API — runtime status & (future) reload. `wfadm init` generates a
+# bearer token at ${HOME}/.warp_fusion/admin_api.token (owner-only, shared
+# across projects); ${HOME} is expanded by wf-config at load time.
+# Only the fields you want to override need to be set — the rest
+# (request_timeout_ms, max_body_bytes, tls, auth.mode) use sane defaults.
+[admin_api]
+enabled = true
+bind = "127.0.0.1:19080"
+
+[admin_api.auth]
+token_file = "${HOME}/.warp_fusion/admin_api.token"
+
 [logging]
 level = "debug"
 format = "plain"

@@ -1,15 +1,18 @@
 use std::fs;
 use std::path::Path;
 
-use git2::{build::CheckoutBuilder, ErrorCode, FetchOptions, Oid, Remote, Repository};
+use git2::{ErrorCode, FetchOptions, Oid, Remote, Repository, build::CheckoutBuilder};
 use semver::Version;
 
 use super::managed::remove_path;
 use super::{
-    conf_err_source, requested_version_not_found_err, RemoteGroup, ResolvedTag, STATE_PATH,
+    RemoteGroup, ResolvedTag, STATE_PATH, conf_err_source, requested_version_not_found_err,
 };
 
-pub(super) fn prepare_remote_repo(remote_root: &Path, repo_url: &str) -> Result<Repository, String> {
+pub(super) fn prepare_remote_repo(
+    remote_root: &Path,
+    repo_url: &str,
+) -> Result<Repository, String> {
     if !remote_root.exists() {
         if let Some(parent) = remote_root.parent() {
             fs::create_dir_all(parent)
@@ -118,13 +121,12 @@ pub(super) fn resolve_default_target(
     init_version: Option<&str>,
     group: Option<RemoteGroup>,
 ) -> Result<ResolvedTag, String> {
-    if is_first_initialization(work_root, group)? {
-        if let Some(init_version) = init_version {
-            if !init_version.trim().is_empty() {
-                return resolve_tag_for_version(repo, init_version.trim())?
-                    .ok_or_else(|| requested_version_not_found_err(init_version.trim()));
-            }
-        }
+    if is_first_initialization(work_root, group)?
+        && let Some(init_version) = init_version
+        && !init_version.trim().is_empty()
+    {
+        return resolve_tag_for_version(repo, init_version.trim())?
+            .ok_or_else(|| requested_version_not_found_err(init_version.trim()));
     }
     match resolve_latest_released_target(repo)? {
         Some(resolved) => Ok(resolved),

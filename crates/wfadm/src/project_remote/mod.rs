@@ -28,14 +28,12 @@ use self::repo::{
     resolve_tag_for_version,
 };
 pub use self::state::{
-    acquire_project_remote_lock, capture_project_remote_snapshot,
-    capture_project_remote_snapshot_with_group, capture_runtime_artifact_snapshot,
-    restore_project_remote_snapshot, restore_project_remote_update,
-    restore_runtime_artifact_snapshot,
+    acquire_project_remote_lock, capture_project_remote_snapshot_with_group,
+    restore_project_remote_update,
 };
-use self::state::{
-    load_state, persist_group_state, persist_state, restore_project_remote_state,
-};
+#[cfg(test)]
+use self::state::{capture_project_remote_snapshot, restore_project_remote_snapshot};
+use self::state::{load_state, persist_group_state, persist_state, restore_project_remote_state};
 
 const ENGINE_CONF_PATH: &str = "conf/wfusion.toml";
 const STATE_PATH: &str = ".run/project_remote_state.json";
@@ -45,7 +43,9 @@ const REMOTE_CACHE_PATH_INFRA: &str = ".run/project_remote/remote-infra";
 const BACKUP_PATH: &str = ".run/project_remote/backup";
 const BACKUP_MANIFEST_PATH: &str = ".run/project_remote/backup/manifest.json";
 const LOCK_PATH: &str = ".run/project_remote.lock";
+#[allow(dead_code)]
 const RULE_MAPPING_PATH: &str = ".run/rule_mapping.dat";
+#[allow(dead_code)]
 const AUTHORITY_DB_PATH: &str = ".run/authority.sqlite";
 
 #[derive(Debug, Clone, Serialize)]
@@ -67,6 +67,7 @@ pub struct ProjectRemoteSnapshot {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct ProjectRuntimeArtifactSnapshot {
     pub(super) rule_mapping: Option<Vec<u8>>,
     authority_db: Option<Vec<u8>>,
@@ -122,6 +123,7 @@ enum ProjectRemoteState {
 }
 
 impl ProjectRemoteState {
+    #[allow(dead_code)]
     fn single_version(&self) -> Option<&str> {
         match self {
             ProjectRemoteState::Single {
@@ -227,6 +229,7 @@ pub fn sync_project_remote_from_repo<P: AsRef<Path>>(
     sync_project_remote_with_repo_inner(work_root, repo_url, requested_version, None, None)
 }
 
+#[allow(dead_code)]
 pub fn current_project_version<P: AsRef<Path>>(work_root: P) -> Result<Option<String>, String> {
     Ok(
         load_state(work_root.as_ref())?
@@ -234,6 +237,7 @@ pub fn current_project_version<P: AsRef<Path>>(work_root: P) -> Result<Option<St
     )
 }
 
+#[allow(dead_code)]
 pub fn current_project_group_versions<P: AsRef<Path>>(
     work_root: P,
 ) -> Result<Option<serde_json::Value>, String> {
@@ -437,9 +441,8 @@ fn sync_project_remote_with_repo_inner(
             result.changed,
             err
         );
-        rollback_partial_update(work_root, previous_state.as_ref(), changed, dirs).map_err(
-            |rollback_err| format!("{}; rollback failed: {rollback_err}", err),
-        )?;
+        rollback_partial_update(work_root, previous_state.as_ref(), changed, dirs)
+            .map_err(|rollback_err| format!("{}; rollback failed: {rollback_err}", err))?;
         tracing::warn!(
             domain = "sys",
             "project remote sync rollback done work_root={} requested_version={} current_version={} resolved_tag={} changed={}",
@@ -484,10 +487,7 @@ fn oid_to_string(oid: Oid) -> String {
 // ── Error constructors (String, not wparse's RunError) ───────────────
 
 fn project_remote_disabled_err(path: impl Into<String>) -> String {
-    format!(
-        "project_remote is disabled in {}",
-        path.into()
-    )
+    format!("project_remote is disabled in {}", path.into())
 }
 
 fn project_remote_repo_required_err() -> String {
@@ -668,19 +668,21 @@ mod tests {
         let conf = single_conf(fixture.repo_url(), "1.4.2");
         write_runtime_local_dirs(work_root.path());
 
-        let result =
-            sync_project_remote(work_root.path(), &conf, Some("1.4.2")).expect("sync should initialize");
+        let result = sync_project_remote(work_root.path(), &conf, Some("1.4.2"))
+            .expect("sync should initialize");
 
         assert_eq!(result.current_version, "1.4.2");
         assert_eq!(result.resolved_tag, "v1.4.2");
         // work_root itself must not become a git repo
         assert!(!work_root.path().join(".git").exists());
         // the remote cache is a git repo
-        assert!(work_root
-            .path()
-            .join(REMOTE_CACHE_PATH)
-            .join(".git")
-            .exists());
+        assert!(
+            work_root
+                .path()
+                .join(REMOTE_CACHE_PATH)
+                .join(".git")
+                .exists()
+        );
         assert_eq!(
             fs::read_to_string(work_root.path().join("models/version.txt")).expect("read version"),
             "1.4.2\n"
@@ -750,14 +752,12 @@ mod tests {
         write_model_version(work_root.path(), "1.4.2");
         write_runtime_local_dirs(work_root.path());
 
-        let snapshot =
-            capture_project_remote_snapshot(work_root.path()).expect("capture snapshot");
+        let snapshot = capture_project_remote_snapshot(work_root.path()).expect("capture snapshot");
         sync_project_remote(work_root.path(), &conf, Some("1.4.3")).expect("sync remote");
         restore_project_remote_snapshot(work_root.path(), &snapshot).expect("restore snapshot");
 
         assert_eq!(
-            fs::read_to_string(work_root.path().join("models/version.txt"))
-                .expect("read version"),
+            fs::read_to_string(work_root.path().join("models/version.txt")).expect("read version"),
             "1.4.2\n"
         );
         assert_eq!(
@@ -774,8 +774,7 @@ mod tests {
         let conf = single_conf(fixture.repo_url(), "1.4.2");
         write_model_version(work_root.path(), "1.4.2");
 
-        let snapshot =
-            capture_project_remote_snapshot(work_root.path()).expect("capture snapshot");
+        let snapshot = capture_project_remote_snapshot(work_root.path()).expect("capture snapshot");
         let result = sync_project_remote(work_root.path(), &conf, Some("1.4.2")).expect("sync");
         assert!(!result.changed);
         assert!(work_root.path().join(STATE_PATH).exists());
@@ -784,8 +783,7 @@ mod tests {
 
         assert!(!work_root.path().join(STATE_PATH).exists());
         assert_eq!(
-            fs::read_to_string(work_root.path().join("models/version.txt"))
-                .expect("read version"),
+            fs::read_to_string(work_root.path().join("models/version.txt")).expect("read version"),
             "1.4.2\n"
         );
     }
@@ -799,22 +797,20 @@ mod tests {
 
         sync_project_remote(work_root.path(), &conf, Some("1.4.3")).expect("sync to latest");
         assert_eq!(
-            fs::read_to_string(work_root.path().join("models/version.txt"))
-                .expect("read version"),
+            fs::read_to_string(work_root.path().join("models/version.txt")).expect("read version"),
             "1.4.3\n"
         );
 
-        let snapshot =
-            capture_project_remote_snapshot(work_root.path()).expect("capture snapshot");
-        let result = sync_project_remote(work_root.path(), &conf, Some("1.4.3")).expect("sync unchanged");
+        let snapshot = capture_project_remote_snapshot(work_root.path()).expect("capture snapshot");
+        let result =
+            sync_project_remote(work_root.path(), &conf, Some("1.4.3")).expect("sync unchanged");
         assert!(!result.changed);
 
         restore_project_remote_update(work_root.path(), &snapshot, result.changed)
             .expect("restore snapshot");
 
         assert_eq!(
-            fs::read_to_string(work_root.path().join("models/version.txt"))
-                .expect("read version"),
+            fs::read_to_string(work_root.path().join("models/version.txt")).expect("read version"),
             "1.4.3\n"
         );
     }
@@ -842,8 +838,7 @@ mod tests {
             err
         );
         assert_eq!(
-            fs::read_to_string(work_root.path().join("models/version.txt"))
-                .expect("read version"),
+            fs::read_to_string(work_root.path().join("models/version.txt")).expect("read version"),
             "1.4.2\n"
         );
         let state: serde_json::Value = serde_json::from_slice(
@@ -1054,17 +1049,14 @@ mod tests {
         fs::write(work_root.path().join("models/local.txt"), "local-data\n")
             .expect("write local models file");
 
-        let snapshot = capture_project_remote_snapshot_with_group(
-            work_root.path(),
-            Some(RemoteGroup::Models),
-        )
-        .expect("capture snapshot");
+        let snapshot =
+            capture_project_remote_snapshot_with_group(work_root.path(), Some(RemoteGroup::Models))
+                .expect("capture snapshot");
 
         sync_project_remote_group(work_root.path(), RemoteGroup::Models, &conf, Some("1.4.3"))
             .expect("sync models v1.4.3");
         assert_eq!(
-            fs::read_to_string(work_root.path().join("models/version.txt"))
-                .expect("read version"),
+            fs::read_to_string(work_root.path().join("models/version.txt")).expect("read version"),
             "1.4.3\n"
         );
         assert!(!work_root.path().join("models/local.txt").exists());
@@ -1094,16 +1086,20 @@ mod tests {
         sync_project_remote_group(work_root.path(), RemoteGroup::Infra, &conf, Some("1.0.0"))
             .expect("sync infra");
 
-        assert!(work_root
-            .path()
-            .join(REMOTE_CACHE_PATH_MODELS)
-            .join(".git")
-            .exists());
-        assert!(work_root
-            .path()
-            .join(REMOTE_CACHE_PATH_INFRA)
-            .join(".git")
-            .exists());
+        assert!(
+            work_root
+                .path()
+                .join(REMOTE_CACHE_PATH_MODELS)
+                .join(".git")
+                .exists()
+        );
+        assert!(
+            work_root
+                .path()
+                .join(REMOTE_CACHE_PATH_INFRA)
+                .join(".git")
+                .exists()
+        );
         assert!(!work_root.path().join(REMOTE_CACHE_PATH).exists());
     }
 

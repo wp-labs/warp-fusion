@@ -3,15 +3,15 @@
 // Binary: wfusion
 // ---------------------------------------------------------------------------
 
+mod admin_api;
 mod cli_config;
 mod error;
 mod register;
-mod admin_api;
 
 use clap::{Parser, Subcommand};
 use orion_error::report::DiagnosticReport;
 
-use cli_config::{ConfigLoadArgs, run_config_command, run_engine_command};
+use cli_config::{ConfigLoadArgs, run_engine_command};
 use error::CliResult;
 use wf_config::FusionMode;
 
@@ -52,11 +52,6 @@ enum Commands {
         metrics_interval: Option<String>,
         #[arg(long)]
         metrics_listen: Option<String>,
-    },
-    /// Inspect and diff configuration
-    Config {
-        #[command(subcommand)]
-        command: cli_config::ConfigCommands,
     },
     /// Print version or check version requirement
     Version {
@@ -112,7 +107,6 @@ async fn run_cli() -> CliResult<()> {
             )
             .await?
         }
-        Commands::Config { command } => run_config_command(command).await?,
         Commands::Version { ge } => {
             let current = env!("CARGO_PKG_VERSION");
             match ge {

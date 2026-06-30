@@ -6,12 +6,10 @@
 use std::path::PathBuf;
 use std::str::FromStr;
 
-use clap::{Args, Subcommand};
+use clap::Args;
 use orion_error::conversion::{ConvErr, ConvStructError, SourceErr, ToStructError};
 
-use wf_config::{
-    ConfigVarContext, FusionConfig, FusionConfigLoader, FusionMode, HumanDuration, parse_vars,
-};
+use wf_config::{ConfigVarContext, FusionConfig, FusionMode, HumanDuration, parse_vars};
 use wf_runtime::{
     cli::error::{EngineError, EngineReason, EngineResult},
     error::{RuntimeError, RuntimeReason},
@@ -40,44 +38,7 @@ pub struct ConfigLoadArgs {
     pub work_dir: Option<PathBuf>,
 }
 
-#[derive(::moju_derive::MoJu, Args, Clone, Default)]
-#[moju(
-    kind = "struct",
-    domain = "Orchestra",
-    module = "Orchestra.EngineEntry"
-)]
-pub struct CompareConfigLoadArgs {
-    #[arg(long = "to-config")]
-    pub to_config: Option<PathBuf>,
-    #[arg(long = "to-overlay")]
-    pub to_overlay: Vec<PathBuf>,
-    #[arg(long = "to-var")]
-    pub to_var: Vec<String>,
-    #[arg(long = "to-work-dir")]
-    pub to_work_dir: Option<PathBuf>,
-}
-
-#[derive(::moju_derive::MoJu, Args, Clone, Default)]
-#[moju(
-    kind = "struct",
-    domain = "Orchestra",
-    module = "Orchestra.EngineEntry"
-)]
-pub struct PathFilterArgs {
-    #[arg(long = "path-prefix")]
-    pub path_prefix: Vec<String>,
-}
-
-#[derive(::moju_derive::MoJu, Args, Clone, Default)]
-#[moju(
-    kind = "struct",
-    domain = "Orchestra",
-    module = "Orchestra.EngineEntry"
-)]
-pub struct VarFilterArgs {
-    #[arg(long = "var-prefix")]
-    pub var_prefix: Vec<String>,
-}
+// -- Config resolution (uses EngineResult internally) ------------------------
 
 #[derive(::moju_derive::MoJu)]
 #[moju(
@@ -91,41 +52,6 @@ struct ResolvedConfigLoad {
     runtime_base_dir: PathBuf,
     config_ctx: ConfigVarContext,
 }
-
-#[derive(::moju_derive::MoJu, Subcommand, Clone)]
-#[moju(kind = "state", domain = "Orchestra", module = "Orchestra.EngineEntry")]
-pub enum ConfigCommands {
-    Render {
-        #[command(flatten)]
-        load: ConfigLoadArgs,
-        #[arg(long)]
-        raw: bool,
-    },
-    Origins {
-        #[command(flatten)]
-        load: ConfigLoadArgs,
-        #[command(flatten)]
-        filter: PathFilterArgs,
-    },
-    Vars {
-        #[command(flatten)]
-        load: ConfigLoadArgs,
-        #[command(flatten)]
-        filter: VarFilterArgs,
-    },
-    Diff {
-        #[command(flatten)]
-        load: ConfigLoadArgs,
-        #[command(flatten)]
-        compare: CompareConfigLoadArgs,
-        #[command(flatten)]
-        filter: PathFilterArgs,
-        #[arg(long)]
-        expanded: bool,
-    },
-}
-
-// -- Config resolution (uses EngineResult internally) ------------------------
 
 fn resolve_config_load(load: ConfigLoadArgs) -> EngineResult<ResolvedConfigLoad> {
     resolve_config_load_parts(load.config, load.overlay, load.var, load.work_dir)
@@ -179,195 +105,11 @@ fn resolve_config_load_parts(
     })
 }
 
-fn resolve_compare_config_load(
-    base: &ResolvedConfigLoad,
-    compare: CompareConfigLoadArgs,
-) -> EngineResult<ResolvedConfigLoad> {
-    resolve_config_load_parts(
-        compare
-            .to_config
-            .unwrap_or_else(|| base.config_path.clone()),
-        compare.to_overlay,
-        compare.to_var,
-        compare.to_work_dir,
-    )
-}
-
-// -- Prefix matching helpers -------------------------------------------------
-
-fn format_value<T: std::fmt::Display>(value: &T) -> String {
-    value.to_string()
-}
-
-fn matches_any_prefix(path: &str, prefixes: &[String]) -> bool {
-    prefixes.is_empty()
-        || prefixes
-            .iter()
-            .any(|prefix| path_matches_prefix(path, prefix))
-}
-
-fn path_matches_prefix(path: &str, prefix: &str) -> bool {
-    path == prefix
-        || path
-            .strip_prefix(prefix)
-            .is_some_and(|rest| rest.starts_with('.') || rest.starts_with('['))
-}
-
-fn matches_any_var_prefix(key: &str, prefixes: &[String]) -> bool {
-    prefixes.is_empty() || prefixes.iter().any(|prefix| key.starts_with(prefix))
-}
-
 fn render_runtime_error(err: RuntimeError) -> EngineError {
     err.conv()
 }
 
-// -- Public command handlers (convert EngineError -> CliError) ---------------
-
-pub async fn run_config_command(command: ConfigCommands) -> CliResult<()> {
-    run_config_inner(command).await.map_err(into_cli_error)
-}
-
-async fn run_config_inner(command: ConfigCommands) -> EngineResult<()> {
-    match command {
-        ConfigCommands::Render { load, raw } => {
-            let resolved = resolve_config_load(load)?;
-            let loader = FusionConfigLoader::new(
-                &resolved.config_path,
-                &resolved.overlay_paths,
-                &resolved.config_ctx,
-                Some(&resolved.runtime_base_dir),
-            );
-            let rendered = if raw {
-                loader.load_merged_toml().conv_err()?
-            } else {
-                loader.load_expanded_toml().conv_err()?
-            };
-            print!("{rendered}");
-        }
-        ConfigCommands::Origins { load, filter } => {
-            let resolved = resolve_config_load(load)?;
-            let raw = FusionConfigLoader::new(
-                &resolved.config_path,
-                &resolved.overlay_paths,
-                &resolved.config_ctx,
-                Some(&resolved.runtime_base_dir),
-            )
-            .load_raw()
-            .conv_err()?;
-            let mut matched = 0usize;
-            for (path, origin) in raw.origin_entries() {
-                if !matches_any_prefix(&path, &filter.path_prefix) {
-                    continue;
-                }
-                matched += 1;
-                println!("{path}\t{}", origin.display());
-            }
-            if matched == 0 {
-                println!("no matching paths");
-            }
-        }
-        ConfigCommands::Vars { load, filter } => {
-            let resolved = resolve_config_load(load)?;
-            let vars = FusionConfigLoader::new(
-                &resolved.config_path,
-                &resolved.overlay_paths,
-                &resolved.config_ctx,
-                Some(&resolved.runtime_base_dir),
-            )
-            .load_effective_vars()
-            .conv_err()?;
-            let mut matched = 0usize;
-            for entry in vars {
-                if !matches_any_var_prefix(&entry.key, &filter.var_prefix) {
-                    continue;
-                }
-                matched += 1;
-                println!("{}\t{}\t{}", entry.key, entry.value, entry.source);
-            }
-            if matched == 0 {
-                println!("no matching vars");
-            }
-        }
-        ConfigCommands::Diff {
-            load,
-            compare,
-            filter,
-            expanded,
-        } => {
-            let resolved = resolve_config_load(load)?;
-            let compare_resolved = resolve_compare_config_load(&resolved, compare)?;
-            let left_loader = FusionConfigLoader::new(
-                &resolved.config_path,
-                &resolved.overlay_paths,
-                &resolved.config_ctx,
-                Some(&resolved.runtime_base_dir),
-            );
-            let right_loader = FusionConfigLoader::new(
-                &compare_resolved.config_path,
-                &compare_resolved.overlay_paths,
-                &compare_resolved.config_ctx,
-                Some(&compare_resolved.runtime_base_dir),
-            );
-            let left = if expanded {
-                left_loader.load_expanded_raw().conv_err()?
-            } else {
-                left_loader.load_raw().conv_err()?
-            };
-            let right = if expanded {
-                right_loader.load_expanded_raw().conv_err()?
-            } else {
-                right_loader.load_raw().conv_err()?
-            };
-
-            let changes: Vec<_> = left
-                .diff(&right)
-                .into_iter()
-                .filter(|change| matches_any_prefix(&change.path, &filter.path_prefix))
-                .collect();
-            if changes.is_empty() {
-                println!("no changes");
-                return Ok(());
-            }
-
-            for change in changes {
-                println!("path: {}", change.path);
-                println!(
-                    "  old: {}",
-                    change
-                        .old_value
-                        .as_ref()
-                        .map(format_value)
-                        .unwrap_or_else(|| "<none>".to_string())
-                );
-                println!(
-                    "  new: {}",
-                    change
-                        .new_value
-                        .as_ref()
-                        .map(format_value)
-                        .unwrap_or_else(|| "<none>".to_string())
-                );
-                println!(
-                    "  old_origin: {}",
-                    change
-                        .old_origin
-                        .as_deref()
-                        .map(|p| p.display().to_string())
-                        .unwrap_or_else(|| "<none>".to_string())
-                );
-                println!(
-                    "  new_origin: {}",
-                    change
-                        .new_origin
-                        .as_deref()
-                        .map(|p| p.display().to_string())
-                        .unwrap_or_else(|| "<none>".to_string())
-                );
-            }
-        }
-    }
-    Ok(())
-}
+// -- Engine command handlers ------------------------------------------------
 
 pub async fn run_engine_command(
     load: ConfigLoadArgs,
@@ -428,12 +170,13 @@ async fn run_engine_inner(
     tracing::info!(domain = "sys", "WarpFusion reactor started");
 
     // Start admin API if enabled
-    let _admin_api =
-        crate::admin_api::start_if_enabled(&resolved.runtime_base_dir, &admin_api_config, reactor.cancel_token())
-            .await
-            .map_err(|e| {
-                render_runtime_error(RuntimeReason::core_conf().to_err().with_detail(e))
-            })?;
+    let _admin_api = crate::admin_api::start_if_enabled(
+        &resolved.runtime_base_dir,
+        &admin_api_config,
+        reactor.cancel_token(),
+    )
+    .await
+    .map_err(|e| render_runtime_error(RuntimeReason::core_conf().to_err().with_detail(e)))?;
     if metrics_enabled {
         tracing::info!(
             domain = "res",

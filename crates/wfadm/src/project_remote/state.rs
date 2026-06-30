@@ -3,9 +3,9 @@ use std::path::Path;
 
 use super::managed::{managed_dirs_for, restore_managed_dirs};
 use super::{
-    conf_err_source, GroupState, ProjectRemoteLockGuard, ProjectRemoteSnapshot, ProjectRemoteState,
-    ProjectRemoteUpdateResult, ProjectRuntimeArtifactSnapshot, RemoteGroup, AUTHORITY_DB_PATH,
-    LOCK_PATH, RULE_MAPPING_PATH, STATE_PATH,
+    AUTHORITY_DB_PATH, GroupState, LOCK_PATH, ProjectRemoteLockGuard, ProjectRemoteSnapshot,
+    ProjectRemoteState, ProjectRemoteUpdateResult, ProjectRuntimeArtifactSnapshot,
+    RULE_MAPPING_PATH, RemoteGroup, STATE_PATH, conf_err_source,
 };
 
 pub fn acquire_project_remote_lock<P: AsRef<Path>>(
@@ -34,6 +34,7 @@ pub fn acquire_project_remote_lock<P: AsRef<Path>>(
     Ok(ProjectRemoteLockGuard { file })
 }
 
+#[allow(dead_code)]
 pub fn capture_project_remote_snapshot<P: AsRef<Path>>(
     work_root: P,
 ) -> Result<ProjectRemoteSnapshot, String> {
@@ -53,12 +54,13 @@ pub fn capture_project_remote_snapshot_with_group<P: AsRef<Path>>(
             return Err(conf_err_source(
                 format!("read {} failed", state_path.display()),
                 err,
-            ))
+            ));
         }
     };
     Ok(ProjectRemoteSnapshot { state_file, group })
 }
 
+#[allow(dead_code)]
 pub fn restore_project_remote_snapshot<P: AsRef<Path>>(
     work_root: P,
     snapshot: &ProjectRemoteSnapshot,
@@ -80,6 +82,7 @@ pub fn restore_project_remote_update<P: AsRef<Path>>(
     Ok(())
 }
 
+#[allow(dead_code)]
 pub fn capture_runtime_artifact_snapshot<P: AsRef<Path>>(
     work_root: P,
 ) -> Result<ProjectRuntimeArtifactSnapshot, String> {
@@ -90,6 +93,7 @@ pub fn capture_runtime_artifact_snapshot<P: AsRef<Path>>(
     })
 }
 
+#[allow(dead_code)]
 pub fn restore_runtime_artifact_snapshot<P: AsRef<Path>>(
     work_root: P,
     snapshot: &ProjectRuntimeArtifactSnapshot,
@@ -115,7 +119,7 @@ pub(super) fn load_state(work_root: &Path) -> Result<Option<ProjectRemoteState>,
             return Err(conf_err_source(
                 format!("read {} failed", path.display()),
                 err,
-            ))
+            ));
         }
     };
     let state = serde_json::from_slice(&bytes)
@@ -163,19 +167,20 @@ fn restore_optional_file(path: &Path, bytes: Option<&[u8]>) -> Result<(), String
     match bytes {
         Some(bytes) => atomic_write_file(path, bytes)?,
         None => {
-            if let Err(err) = fs::remove_file(path) {
-                if err.kind() != std::io::ErrorKind::NotFound {
-                    return Err(conf_err_source(
-                        format!("remove {} failed", path.display()),
-                        err,
-                    ));
-                }
+            if let Err(err) = fs::remove_file(path)
+                && err.kind() != std::io::ErrorKind::NotFound
+            {
+                return Err(conf_err_source(
+                    format!("remove {} failed", path.display()),
+                    err,
+                ));
             }
         }
     }
     Ok(())
 }
 
+#[allow(dead_code)]
 fn read_optional_file(path: &Path) -> Result<Option<Vec<u8>>, String> {
     match fs::read(path) {
         Ok(bytes) => Ok(Some(bytes)),
@@ -232,7 +237,10 @@ fn project_remote_lock_busy_err(lock_path: impl Into<String>) -> String {
     )
 }
 
-pub(super) fn persist_state(work_root: &Path, result: &ProjectRemoteUpdateResult) -> Result<(), String> {
+pub(super) fn persist_state(
+    work_root: &Path,
+    result: &ProjectRemoteUpdateResult,
+) -> Result<(), String> {
     // Prevent overwriting dual-repo state with single-repo state
     if let Some(ProjectRemoteState::Dual { .. }) = load_state(work_root)? {
         return Err(

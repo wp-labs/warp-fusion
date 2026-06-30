@@ -4,7 +4,7 @@ use std::path::Path;
 
 use walkdir::WalkDir;
 
-use super::{conf_err_source, BackupManifest, RemoteGroup, BACKUP_MANIFEST_PATH, BACKUP_PATH};
+use super::{BACKUP_MANIFEST_PATH, BACKUP_PATH, BackupManifest, RemoteGroup, conf_err_source};
 
 const DIRS_MODELS: &[&str] = &["models"];
 const DIRS_INFRA: &[&str] = &["conf", "topology", "connectors"];
@@ -81,7 +81,7 @@ pub(super) fn restore_managed_dirs(work_root: &Path, dirs: &[&str]) -> Result<()
             return Err(conf_err_source(
                 format!("read {} failed", manifest_path.display()),
                 err,
-            ))
+            ));
         }
     };
     let manifest: BackupManifest = serde_json::from_slice(&body)
@@ -196,8 +196,9 @@ fn copy_path(src: &Path, dst: &Path) -> Result<(), String> {
             let target = dst.join(rel);
             let file_type = entry.file_type();
             if file_type.is_dir() {
-                fs::create_dir_all(&target)
-                    .map_err(|e| conf_err_source(format!("create {} failed", target.display()), e))?;
+                fs::create_dir_all(&target).map_err(|e| {
+                    conf_err_source(format!("create {} failed", target.display()), e)
+                })?;
             } else if file_type.is_file() {
                 if let Some(parent) = target.parent() {
                     fs::create_dir_all(parent).map_err(|e| {
@@ -320,7 +321,7 @@ pub(super) fn remove_path(path: &Path) -> Result<(), String> {
             return Err(conf_err_source(
                 format!("stat {} failed", path.display()),
                 err,
-            ))
+            ));
         }
     };
     if meta.file_type().is_dir() {

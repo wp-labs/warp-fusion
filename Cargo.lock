@@ -5367,8 +5367,8 @@ dependencies = [
 
 [[package]]
 name = "wf-config"
-version = "0.1.23"
-source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v0.1.23#13aa6a877abf478c4b78391c2574134cb60438a0"
+version = "0.1.24"
+source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v0.1.24#8cba2651a8f2bf014f538fccc0d04118db253996"
 dependencies = [
  "glob",
  "moju-derive",
@@ -5376,7 +5376,7 @@ dependencies = [
  "serde",
  "serde_json",
  "toml 1.1.2+spec-1.1.0",
- "wf-lang 0.1.23",
+ "wf-lang 0.1.24 (git+https://github.com/wp-labs/wp-reactor.git?tag=v0.1.24)",
  "wildmatch",
  "wp-connector-api",
 ]
@@ -5394,8 +5394,8 @@ dependencies = [
 
 [[package]]
 name = "wf-engine"
-version = "0.1.23"
-source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v0.1.23#13aa6a877abf478c4b78391c2574134cb60438a0"
+version = "0.1.24"
+source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v0.1.24#8cba2651a8f2bf014f538fccc0d04118db253996"
 dependencies = [
  "arrow",
  "async-trait",
@@ -5411,20 +5411,9 @@ dependencies = [
  "thiserror 2.0.18",
  "tokio",
  "wf-config",
- "wf-lang 0.1.23",
+ "wf-lang 0.1.24 (git+https://github.com/wp-labs/wp-reactor.git?tag=v0.1.24)",
  "wp-connector-api",
  "wp-model-core",
-]
-
-[[package]]
-name = "wf-lang"
-version = "0.1.23"
-source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v0.1.23#13aa6a877abf478c4b78391c2574134cb60438a0"
-dependencies = [
- "moju-derive",
- "orion-error",
- "regex-syntax",
- "winnow 1.0.3",
 ]
 
 [[package]]
@@ -5438,9 +5427,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "wf-lang"
+version = "0.1.24"
+source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v0.1.24#8cba2651a8f2bf014f538fccc0d04118db253996"
+dependencies = [
+ "moju-derive",
+ "orion-error",
+ "regex-syntax",
+ "winnow 1.0.3",
+]
+
+[[package]]
 name = "wf-runtime"
-version = "0.1.23"
-source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v0.1.23#13aa6a877abf478c4b78391c2574134cb60438a0"
+version = "0.1.24"
+source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v0.1.24#8cba2651a8f2bf014f538fccc0d04118db253996"
 dependencies = [
  "arrow",
  "async-broadcast",
@@ -5464,7 +5464,7 @@ dependencies = [
  "wf-config",
  "wf-connector-api",
  "wf-engine",
- "wf-lang 0.1.23",
+ "wf-lang 0.1.24 (git+https://github.com/wp-labs/wp-reactor.git?tag=v0.1.24)",
  "wp-arrow",
  "wp-connector-api",
  "wp-core-connectors",
@@ -5513,7 +5513,7 @@ dependencies = [
  "tracing-subscriber",
  "wf-config",
  "wf-engine",
- "wf-lang 0.1.23",
+ "wf-lang 0.1.24 (git+https://github.com/wp-labs/wp-reactor.git?tag=v0.1.24)",
  "wf-runtime",
  "winnow 1.0.3",
  "wp-arrow",
@@ -5533,7 +5533,7 @@ dependencies = [
  "tree-sitter-wfl",
  "wf-config",
  "wf-engine",
- "wf-lang 0.1.23",
+ "wf-lang 0.1.24 (git+https://github.com/wp-labs/wp-reactor.git?tag=v0.1.24)",
  "wfgen",
 ]
 

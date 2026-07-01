@@ -51,8 +51,13 @@ pub fn generate_connector_templates(work_root: &Path) -> Result<(), String> {
     let source_dir = work_root.join("connectors/source.d");
     let sink_dir = work_root.join("connectors/sink.d");
 
-    let source_defs = registry::registered_source_defs();
-    let sink_defs = registry::registered_sink_defs();
+    let mut source_defs = registry::registered_source_defs();
+    let mut sink_defs = registry::registered_sink_defs();
+
+    // Stable ordering: sort by connector kind so generated file names
+    // and content are deterministic across runs.
+    source_defs.sort_by(|a, b| a.id.cmp(&b.id));
+    sink_defs.sort_by(|a, b| a.id.cmp(&b.id));
 
     if !source_defs.is_empty() {
         fs::create_dir_all(&source_dir).map_err(|e| format!("create connectors/source.d: {e}"))?;
@@ -113,8 +118,10 @@ fn connector_to_value(def: &ConnectorDef) -> Value {
 
 fn param_map_to_toml(params: &wp_connector_api::ParamMap) -> Value {
     let mut table = toml::value::Table::new();
-    for (key, val) in params {
-        table.insert(key.clone(), json_to_toml(val));
+    let mut keys: Vec<&String> = params.keys().collect();
+    keys.sort();
+    for key in keys {
+        table.insert(key.clone(), json_to_toml(&params[key]));
     }
     Value::Table(table)
 }
@@ -136,8 +143,10 @@ fn json_to_toml(val: &serde_json::Value) -> Value {
         serde_json::Value::Array(arr) => Value::Array(arr.iter().map(json_to_toml).collect()),
         serde_json::Value::Object(obj) => {
             let mut table = toml::value::Table::new();
-            for (k, v) in obj {
-                table.insert(k.clone(), json_to_toml(v));
+            let mut keys: Vec<&String> = obj.keys().collect();
+            keys.sort();
+            for k in keys {
+                table.insert(k.clone(), json_to_toml(&obj[k]));
             }
             Value::Table(table)
         }

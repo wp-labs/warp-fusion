@@ -64,7 +64,7 @@ All notable changes to wfusion will be documented in this file.
 
 - **新增**: `wfadm check` 深度校验——WFL/WFS/WFG 解析 + lint（`wf_lang::parse_wfl/wfs/wfg`）。
 - **合并**: `wfadm sink` 合并到 `wfadm check`。
-- **新增**: `wfadm config diff` 从 `wfusion config` 迁移。
+- **新增**: `wfadm conf diff` 从 `wfusion config` 迁移。
 - **新增**: `wfadm engine status` / `engine reload`，通过 admin API 查询引擎状态。
 - **重构**: `init_tpl` 合并到 `wfadm` 子模块（`src/init_tpl/`），模板文件在 `templates/`。
 - **新增**: `wfadm self-update`（从 GitHub Releases 下载最新二进制）。

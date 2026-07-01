@@ -1,13 +1,13 @@
-//! `wfadm conf` — remote rule-source version sync (`conf update`).
+//! `wfadm conf` — config diff + remote rule-source version sync.
 //!
-//! Mirrors wparse `wproj conf update`: load config → lock → snapshot → sync
-//! managed dirs from remote git → validate → rollback on failure → output.
-//! See `docs/design/project_remote_alignment.md`.
+//! * `conf diff` — compare two wfusion configuration sets.
+//! * `conf update` — sync managed dirs from remote git (mirrors wparse
+//!   `wproj conf update`). See `docs/design/project_remote_alignment.md`.
 
 use std::path::{Path, PathBuf};
 
 use clap::{Args, Subcommand};
-use wf_config::{ConfigVarContext, FusionConfig};
+use wf_config::{ConfigVarContext, FusionConfig, FusionConfigLoader, parse_vars};
 
 use crate::project_remote::{
     self, RemoteGroup, acquire_project_remote_lock, capture_project_remote_snapshot_with_group,
@@ -18,10 +18,36 @@ const CONF_REL_PATH: &str = "conf/wfusion.toml";
 
 #[derive(Subcommand, Debug)]
 pub enum ConfCmd {
+    /// Diff two wfusion configuration sets
+    Diff(ConfDiffArgs),
     /// Update managed dirs (models/conf/topology/connectors) from the remote
     /// git repo configured in `[project_remote]`, at a given version tag.
     #[command(visible_alias = "更新", disable_version_flag = true)]
     Update(ConfUpdateArgs),
+}
+
+#[derive(Args, Debug, Clone)]
+pub struct ConfDiffArgs {
+    #[arg(short, long, default_value = "conf/wfusion.toml")]
+    pub config: PathBuf,
+    #[arg(long)]
+    pub overlay: Vec<PathBuf>,
+    #[arg(long)]
+    pub var: Vec<String>,
+    #[arg(long)]
+    pub work_dir: Option<PathBuf>,
+    #[arg(long = "to-config")]
+    pub to_config: Option<PathBuf>,
+    #[arg(long = "to-overlay")]
+    pub to_overlay: Vec<PathBuf>,
+    #[arg(long = "to-var")]
+    pub to_var: Vec<String>,
+    #[arg(long = "to-work-dir")]
+    pub to_work_dir: Option<PathBuf>,
+    #[arg(long = "path-prefix")]
+    pub path_prefix: Vec<String>,
+    #[arg(long)]
+    pub expanded: bool,
 }
 
 #[derive(Args, Debug, Clone)]
@@ -45,6 +71,7 @@ pub struct ConfUpdateArgs {
 
 pub fn run(command: ConfCmd) -> Result<(), String> {
     match command {
+        ConfCmd::Diff(args) => run_conf_diff(args),
         ConfCmd::Update(args) => run_conf_update(args),
     }
 }
@@ -249,4 +276,175 @@ fn parse_group(raw: Option<&str>) -> Result<Option<RemoteGroup>, String> {
 
 fn resolve_work_root(raw: &str) -> Result<PathBuf, String> {
     std::fs::canonicalize(raw).map_err(|e| format!("resolve work root '{}' failed: {e}", raw))
+}
+
+// ── Diff ──────────────────────────────────────────────────────────────
+
+struct LoadCtx {
+    config_path: PathBuf,
+    overlay_paths: Vec<PathBuf>,
+    config_ctx: ConfigVarContext,
+    base_dir: PathBuf,
+}
+
+fn resolve_load(
+    config: &Path,
+    overlays: &[PathBuf],
+    vars: &[String],
+    work_dir: Option<&Path>,
+) -> Result<LoadCtx, String> {
+    let config_path = config
+        .canonicalize()
+        .map_err(|e| format!("config path '{}': {e}", config.display()))?;
+    let overlay_paths: Vec<PathBuf> = overlays
+        .iter()
+        .map(|p| {
+            p.canonicalize()
+                .map_err(|e| format!("overlay path '{}': {e}", p.display()))
+        })
+        .collect::<Result<_, _>>()?;
+    let base_dir = if let Some(wd) = work_dir {
+        let path = wd
+            .canonicalize()
+            .map_err(|e| format!("work-dir '{}': {e}", wd.display()))?;
+        if !path.is_dir() {
+            return Err(format!("work-dir '{}' is not a directory", path.display()));
+        }
+        path
+    } else {
+        config_path
+            .parent()
+            .map(Path::to_path_buf)
+            .unwrap_or_else(|| PathBuf::from("."))
+    };
+    let cli_vars = parse_vars(vars).map_err(|e| format!("parse vars: {e}"))?;
+    let config_ctx = ConfigVarContext::from_explicit_vars(cli_vars);
+    Ok(LoadCtx {
+        config_path,
+        overlay_paths,
+        config_ctx,
+        base_dir,
+    })
+}
+
+fn run_conf_diff(args: ConfDiffArgs) -> Result<(), String> {
+    let ctx = resolve_load(
+        &args.config,
+        &args.overlay,
+        &args.var,
+        args.work_dir.as_deref(),
+    )?;
+    let cmp_config = args.to_config.as_deref().unwrap_or(&ctx.config_path);
+    let cmp_ctx = resolve_load(
+        cmp_config,
+        &args.to_overlay,
+        &args.to_var,
+        args.to_work_dir.as_deref(),
+    )?;
+
+    let l = FusionConfigLoader::new(
+        &ctx.config_path,
+        &ctx.overlay_paths,
+        &ctx.config_ctx,
+        Some(&ctx.base_dir),
+    );
+    let r = FusionConfigLoader::new(
+        &cmp_ctx.config_path,
+        &cmp_ctx.overlay_paths,
+        &cmp_ctx.config_ctx,
+        Some(&cmp_ctx.base_dir),
+    );
+
+    let left = if args.expanded {
+        l.load_expanded_raw().map_err(|e| format!("{e}"))?
+    } else {
+        l.load_raw().map_err(|e| format!("{e}"))?
+    };
+    let right = if args.expanded {
+        r.load_expanded_raw().map_err(|e| format!("{e}"))?
+    } else {
+        r.load_raw().map_err(|e| format!("{e}"))?
+    };
+
+    let changes: Vec<_> = left
+        .diff(&right)
+        .into_iter()
+        .filter(|c| matches_any_prefix(&c.path, &args.path_prefix))
+        .collect();
+
+    if changes.is_empty() {
+        println!("(no changes)");
+        return Ok(());
+    }
+    for c in &changes {
+        println!("path: {}", c.path);
+        println!(
+            "  old: {}",
+            c.old_value
+                .as_ref()
+                .map(|v| v.to_string())
+                .unwrap_or_else(|| "<none>".to_string())
+        );
+        println!(
+            "  new: {}",
+            c.new_value
+                .as_ref()
+                .map(|v| v.to_string())
+                .unwrap_or_else(|| "<none>".to_string())
+        );
+        println!(
+            "  old_origin: {}",
+            c.old_origin
+                .as_deref()
+                .map(|p| p.display().to_string())
+                .unwrap_or_else(|| "<none>".to_string())
+        );
+        println!(
+            "  new_origin: {}",
+            c.new_origin
+                .as_deref()
+                .map(|p| p.display().to_string())
+                .unwrap_or_else(|| "<none>".to_string())
+        );
+    }
+    Ok(())
+}
+
+fn matches_any_prefix(path: &str, prefixes: &[String]) -> bool {
+    prefixes.is_empty() || prefixes.iter().any(|p| path_matches_prefix(path, p))
+}
+
+fn path_matches_prefix(path: &str, prefix: &str) -> bool {
+    path == prefix
+        || path
+            .strip_prefix(prefix)
+            .is_some_and(|rest| rest.starts_with('.') || rest.starts_with('['))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn match_exact_path() {
+        assert!(path_matches_prefix("mode", "mode"));
+        assert!(matches_any_prefix("mode", &["mode".into()]));
+    }
+
+    #[test]
+    fn match_child_path() {
+        assert!(path_matches_prefix("runtime.executor", "runtime"));
+        assert!(path_matches_prefix("window[0].name", "window"));
+    }
+
+    #[test]
+    fn no_match_unrelated() {
+        assert!(!path_matches_prefix("mode", "runtime"));
+        assert!(!path_matches_prefix("runtime", "mode"));
+    }
+
+    #[test]
+    fn empty_prefixes_match_all() {
+        assert!(matches_any_prefix("anything", &[]));
+    }
 }

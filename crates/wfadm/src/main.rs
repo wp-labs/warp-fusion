@@ -1,6 +1,5 @@
 mod check;
 mod conf;
-mod config;
 mod connectors;
 mod engine;
 mod init;
@@ -43,12 +42,7 @@ enum Commands {
         #[arg(long, requires = "repo")]
         version: Option<String>,
     },
-    /// Inspect and diff configuration
-    Config {
-        #[command(subcommand)]
-        command: config::ConfigCommands,
-    },
-    /// Remote rule-source version sync (`conf update`)
+    /// Remote rule-source version sync + config diff (`conf update` / `conf diff`)
     Conf {
         #[command(subcommand)]
         command: conf::ConfCmd,
@@ -76,7 +70,6 @@ fn main() {
             repo,
             version,
         } => cmd_init(name, dir, mode, repo, version),
-        Commands::Config { command } => config::run(command),
         Commands::Conf { command } => conf::run(command),
         Commands::Check => check::run(),
         Commands::Engine { command } => engine::run(command),

@@ -1,20 +1,20 @@
 {
-  "version": "0.1.16",
+  "version": "0.1.17",
   "channel": "stable",
-  "published_at": "2026-07-01T03:19:49Z",
-  "git_ref": "v0.1.16",
-  "git_commit": "592dd5c91f9f6a8002aac4d5b018e37fb6d25fbe",
+  "published_at": "2026-07-01T05:41:07Z",
+  "git_ref": "v0.1.17",
+  "git_commit": "5d0c49bb0e781b1c5225429dbe36cf63d9e674e9",
   "assets": {
     "aarch64-apple-darwin": {
-      "url": "https://github.com/wp-labs/warp-fusion/releases/download/v0.1.16/warp-fusion-v0.1.16-aarch64-apple-darwin.tar.gz",
+      "url": "https://github.com/wp-labs/warp-fusion/releases/download/v0.1.17/warp-fusion-v0.1.17-aarch64-apple-darwin.tar.gz",
       "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
     },
     "aarch64-unknown-linux-gnu": {
-      "url": "https://github.com/wp-labs/warp-fusion/releases/download/v0.1.16/warp-fusion-v0.1.16-aarch64-unknown-linux-gnu.tar.gz",
+      "url": "https://github.com/wp-labs/warp-fusion/releases/download/v0.1.17/warp-fusion-v0.1.17-aarch64-unknown-linux-gnu.tar.gz",
       "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
     },
     "x86_64-unknown-linux-gnu": {
-      "url": "https://github.com/wp-labs/warp-fusion/releases/download/v0.1.16/warp-fusion-v0.1.16-x86_64-unknown-linux-gnu.tar.gz",
+      "url": "https://github.com/wp-labs/warp-fusion/releases/download/v0.1.17/warp-fusion-v0.1.17-x86_64-unknown-linux-gnu.tar.gz",
       "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
     }
   }

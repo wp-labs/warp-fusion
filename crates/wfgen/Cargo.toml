@@ -1,6 +1,6 @@
 [package]
 name = "wfgen"
-version = "0.1.17" #@gxl:set(version)
+version = "0.1.18" #@gxl:set(version)
 edition.workspace = true
 license.workspace = true
 

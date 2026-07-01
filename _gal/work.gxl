@@ -49,6 +49,8 @@ mod main  {
     gx.cmd (  "cp ${MAIN_BLD_BINS}/wfusion ${MAIN_HOME_BIN}/"  );
     gx.cmd (  "cp ${MAIN_BLD_BINS}/wfgen ${MAIN_HOME_BIN}/"  );
     gx.cmd (  "cp ${MAIN_BLD_BINS}/wfadm ${MAIN_HOME_BIN}/"  );
+    gx.cmd (  "rm -rf docker/default_setting ; mkdir docker/default_setting "  );
+    gx.cmd (  "cd  docker/default_setting ;  wfadm init"  );
   }
   flow use_local  {
     gx.patch_file(file: "./Cargo.toml", action: "comment_block", marker: "remote_reactor");

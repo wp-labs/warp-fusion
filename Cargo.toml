@@ -14,16 +14,16 @@ arrow = { version = "59", default-features = false, features = ["ipc"] }
 async-trait = "0.1"
 orion-error = { version = "0.8", features = ["derive", "serde_json", "toml", "tracing"] }
 # @gxl:block(remote_reactor)
-#wf-engine = { git = "https://github.com/wp-labs/wp-reactor.git", tag = "v0.1.23" }
-#wf-config = { git = "https://github.com/wp-labs/wp-reactor.git", tag = "v0.1.23" }
-#wf-lang = { git = "https://github.com/wp-labs/wp-reactor.git", tag = "v0.1.23" }
-#wf-runtime = { git = "https://github.com/wp-labs/wp-reactor.git", tag = "v0.1.23" }
+wf-engine = { git = "https://github.com/wp-labs/wp-reactor.git", tag = "v0.1.24" }
+wf-config = { git = "https://github.com/wp-labs/wp-reactor.git", tag = "v0.1.24" }
+wf-lang = { git = "https://github.com/wp-labs/wp-reactor.git", tag = "v0.1.24" }
+wf-runtime = { git = "https://github.com/wp-labs/wp-reactor.git", tag = "v0.1.24" }
 # @gxl:end(remote_reactor)
 # @gxl:block(local_reactor)
-wf-engine = { path = "../wp-reactor/crates/wf-engine" }
-wf-config = { path = "../wp-reactor/crates/wf-config" }
-wf-lang = { path = "../wp-reactor/crates/wf-lang" }
-wf-runtime = { path = "../wp-reactor/crates/wf-runtime" }
+#wf-engine = { path = "../wp-reactor/crates/wf-engine" }
+#wf-config = { path = "../wp-reactor/crates/wf-config" }
+#wf-lang = { path = "../wp-reactor/crates/wf-lang" }
+#wf-runtime = { path = "../wp-reactor/crates/wf-runtime" }
 # @gxl:end(local_reactor)
 
 

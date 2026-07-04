@@ -9,15 +9,7 @@ tags = ["biz:parsed"]
 connect = "tcp_sink"
 name = "arrow_tcp_out"
 [sink_group.sinks.params]
-protocol = "arrow"
-data_format = "arrow_framed"
 addr = "127.0.0.1"
-port = 9802
-
-[[sink_group.sinks]]
-name = "json"
-connect = "file_json_sink"
-tags = ["sink:json"]
-
-[sink_group.sinks.params]
-file = "demo.json"
+port = "9802"
+framing = "len"
+data_format = "arrow_framed"

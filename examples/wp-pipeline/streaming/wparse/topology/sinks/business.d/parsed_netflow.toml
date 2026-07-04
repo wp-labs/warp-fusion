@@ -13,3 +13,11 @@ protocol = "arrow"
 data_format = "arrow_framed"
 addr = "127.0.0.1"
 port = 9802
+
+[[sink_group.sinks]]
+name = "json"
+connect = "file_json_sink"
+tags = ["sink:json"]
+
+[sink_group.sinks.params]
+file = "demo.json"

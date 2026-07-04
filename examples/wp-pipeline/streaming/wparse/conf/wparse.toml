@@ -4,9 +4,9 @@ skip_parse = false
 skip_sink = false
 
 [models]
-wpl = "./models/wpl"
-oml = "./models/oml"
-knowledge = "./models/knowledge"
+wpl = "../../models/wpl"
+oml = "../../models/oml"
+knowledge = "../../models/knowledge"
 
 [topology]
 sources = "./topology/sources"

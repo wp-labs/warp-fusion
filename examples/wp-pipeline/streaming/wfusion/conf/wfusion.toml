@@ -42,6 +42,9 @@ mode = "local"
 max_window_bytes = "1MB"
 over_cap = "0s"
 
-[logging]
+[log_conf]
 level = "info"
-format = "plain"
+output = "File"
+
+[log_conf.file]
+path = "../data/logs/"

@@ -70,7 +70,7 @@ echo "   wparse ready on :9801"
 
 # 3. wpgen sends data over TCP, then closes connection
 echo "3> wpgen: sending $LINE_CNT nginx logs over TCP :9801..."
-(cd wparse && wpgen sample -n "$LINE_CNT" > /dev/null 2>&1)
+(cd wparse && wpgen sample -n "$LINE_CNT" --wpl ../../models/wpl > /dev/null 2>&1)
 echo "   → wpgen done, TCP connection closed"
 
 # 4. Wait for wparse to finish processing

@@ -6,5 +6,5 @@ tags = []
 
 [sources.params]
 addr = "127.0.0.1"
-port = "9800"
+port = 9800
 framing = "line"

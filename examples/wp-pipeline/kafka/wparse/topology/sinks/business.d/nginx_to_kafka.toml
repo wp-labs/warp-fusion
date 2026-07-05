@@ -11,3 +11,5 @@ name = "kafka_output"
 tags = ["sink:kafka"]
 [sink_group.sinks.params]
 topic = "wp_nginx_logs"
+fmt = "json"
+protocol = "text"

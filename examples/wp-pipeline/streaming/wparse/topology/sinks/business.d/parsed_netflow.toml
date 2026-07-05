@@ -10,6 +10,6 @@ connect = "tcp_sink"
 name = "arrow_tcp_out"
 [sink_group.sinks.params]
 addr = "127.0.0.1"
-port = "9802"
+port = 9802
 framing = "len"
 data_format = "arrow_framed"

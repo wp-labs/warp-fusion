@@ -10,7 +10,7 @@ connect = "tcp_sink"
 
 [output.params]
 addr = "127.0.0.1"
-port = "9801"
+port = 9801
 framing = "line"
 
 [logging]

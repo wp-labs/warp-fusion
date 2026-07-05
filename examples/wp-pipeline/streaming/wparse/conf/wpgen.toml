@@ -1,5 +1,8 @@
 version = "1.0"
 
+[models]
+wpl = "../../models/wpl"
+
 [generator]
 count = 1000
 speed = 1000

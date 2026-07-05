@@ -20,8 +20,8 @@ if ! wfusion version --ge 0.1.0 >/dev/null 2>&1; then
     echo "ERROR: wfusion >= 0.1.0 required" >&2
     exit 1
 fi
-if ! wparse version --ge 0.25.0 >/dev/null 2>&1; then
-    echo "ERROR: wparse >= 0.25.0 required" >&2
+if ! wparse version --ge 0.25.4 >/dev/null 2>&1; then
+    echo "ERROR: wparse >= 0.25.4 required" >&2
     exit 1
 fi
 

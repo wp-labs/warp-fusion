@@ -11,7 +11,7 @@ use chrono::{DateTime, Utc};
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{EnvFilter, Layer, fmt};
-use wf_config::{RawFusionConfigTree};
+use wf_config::{FusionConfig, RawFusionConfigTree};
 use wf_runtime::lifecycle::Reactor;
 use wf_runtime::tracing_init::{DomainFormat, FileFields};
 use wfgen::verify::ActualAlert;

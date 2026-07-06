@@ -57,7 +57,7 @@ pub(crate) fn check_project(root: &Path) -> Result<(), String> {
     if conf_path.exists() {
         match fs::read_to_string(&conf_path) {
             Ok(content) => {
-                match content.parse::<toml::Value>() {
+                match toml::from_str::<toml::Value>(&content) {
                     Ok(toml_val) => {
                         ok += 1;
                         println!("  {}  wfusion.toml", green("✓"));
@@ -566,9 +566,7 @@ fn validate_sink_dir(dir: &Path, quiet: bool) -> (u32, u32) {
 
 fn validate_sink_file(path: &Path) -> Result<(), String> {
     let content = fs::read_to_string(path).map_err(|e| format!("read error: {e}"))?;
-    let _val: toml::Value = content
-        .parse::<toml::Value>()
-        .map_err(|e| format!("invalid TOML: {e}"))?;
+    let _val: toml::Value = toml::from_str(&content).map_err(|e| format!("invalid TOML: {e}"))?;
     Ok(())
 }
 
@@ -625,6 +623,41 @@ mod tests {
         )
         .unwrap();
         let _ = check_project(&dir);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn valid_toml_documents_parse_for_conf_and_sinks() {
+        let dir = temp_dir();
+        std::fs::create_dir_all(dir.join("conf")).unwrap();
+        std::fs::create_dir_all(dir.join("topology/sinks/business.d")).unwrap();
+        std::fs::write(
+            dir.join("conf/wfusion.toml"),
+            r#"
+sources_dir = "topology/sources"
+sinks = "topology/sinks"
+
+[runtime]
+schemas = "../models/schemas/*.wfs"
+rules = "../models/wfl/*.wfl"
+"#,
+        )
+        .unwrap();
+        std::fs::write(
+            dir.join("topology/sinks/business.d/scan.toml"),
+            r#"
+version = "1.0"
+
+[sink_group]
+name = "scan"
+windows = ["scan_alerts"]
+"#,
+        )
+        .unwrap();
+
+        let content = std::fs::read_to_string(dir.join("conf/wfusion.toml")).unwrap();
+        assert!(toml::from_str::<toml::Value>(&content).is_ok());
+        assert!(validate_sink_file(&dir.join("topology/sinks/business.d/scan.toml")).is_ok());
         let _ = std::fs::remove_dir_all(&dir);
     }
 

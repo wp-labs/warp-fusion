@@ -3,15 +3,13 @@
 
 sources_dir = "topology/sources"
 sinks = "topology/sinks"
+windows = "models/schemas/windows.toml"
 
 [runtime]
 executor_parallelism = 4
 rule_exec_timeout = "30s"
 schemas = "models/schemas/*.wfs"
 rules = "models/rules/*/*.wfl"
-
-# Window config is maintained in a separate file.
-windows = "models/windows.toml"
 
 # Admin API — runtime status & (future) reload. `wfadm init` generates a
 # bearer token at ${HOME}/.warp_fusion/admin_api.token (owner-only, shared

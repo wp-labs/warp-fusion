@@ -1,0 +1,13 @@
+sources_dir = "topology/sources"
+sinks = "topology/sinks"
+windows = "windows.toml"
+
+[runtime]
+executor_parallelism = 2
+rule_exec_timeout = "30s"
+schemas = "schemas/*.wfs"
+rules   = "rules/*.wfl"
+
+[logging]
+level = "info"
+format = "plain"

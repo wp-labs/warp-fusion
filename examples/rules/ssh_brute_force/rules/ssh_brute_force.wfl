@@ -1,0 +1,117 @@
+use "auth.wfs"
+
+// SSH 暴力破解检测 — 单 IP 短时间大量失败登录
+//
+// 检测逻辑：
+//   1. event filter: SSH 服务 + 登录失败
+//   2. on event: 5 分钟内同一 sip 累计失败 >= 10 次时触发
+//   3. join anti: 排除已知漏扫器 IP
+//   4. targets: 统计被攻击的目标主机列表
+//
+// 场景：
+//   - 攻击者对多台服务器尝试弱口令
+//   - 爆破工具（hydra/medusa）产生大量失败日志
+//   - 单个目标可能被多次尝试不同密码
+
+rule ssh_brute_force {
+    events {
+        e : auth_events
+            && e.service == "ssh"
+            && e.result == "failed"
+    }
+    match<sip:5m> {
+        on event { e | count >= 10; }
+    } -> score(70.0)
+    join scanner_whitelist anti on e.sip == scanner_whitelist.sip
+    entity(ip, e.sip)
+    yield security_alerts (
+        sip = e.sip,
+        dip = first(e.dip),
+        user = e.user,
+        alert_type = "ssh_brute_force",
+        detail = "failed login >= 10 in 5min"
+    )
+
+    limits {
+        max_memory = "64MB";
+        max_instances = 10000;
+        on_exceed = throttle;
+    }
+}
+
+// ---------------------------------------------------------------------------
+// 测试用例
+// ---------------------------------------------------------------------------
+
+// 单 IP 爆破多台服务器 — 应该告警
+test brute_force_detected for ssh_brute_force {
+  input {
+    row(e, sip = "10.0.0.99", dip = "192.168.1.01", dport = "22", service = "ssh",
+        user = "root", result = "failed", event_time = "2026-01-01T00:00:00Z");
+    row(e, sip = "10.0.0.99", dip = "192.168.1.02", dport = "22", service = "ssh",
+        user = "root", result = "failed", event_time = "2026-01-01T00:00:10Z");
+    row(e, sip = "10.0.0.99", dip = "192.168.1.03", dport = "22", service = "ssh",
+        user = "admin", result = "failed", event_time = "2026-01-01T00:00:20Z");
+    row(e, sip = "10.0.0.99", dip = "192.168.1.04", dport = "22", service = "ssh",
+        user = "admin", result = "failed", event_time = "2026-01-01T00:00:30Z");
+    row(e, sip = "10.0.0.99", dip = "192.168.1.05", dport = "22", service = "ssh",
+        user = "root", result = "failed", event_time = "2026-01-01T00:00:40Z");
+    row(e, sip = "10.0.0.99", dip = "192.168.1.06", dport = "22", service = "ssh",
+        user = "root", result = "failed", event_time = "2026-01-01T00:00:50Z");
+    row(e, sip = "10.0.0.99", dip = "192.168.1.07", dport = "22", service = "ssh",
+        user = "ubuntu", result = "failed", event_time = "2026-01-01T00:01:00Z");
+    row(e, sip = "10.0.0.99", dip = "192.168.1.08", dport = "22", service = "ssh",
+        user = "test", result = "failed", event_time = "2026-01-01T00:01:10Z");
+    row(e, sip = "10.0.0.99", dip = "192.168.1.09", dport = "22", service = "ssh",
+        user = "test", result = "failed", event_time = "2026-01-01T00:01:20Z");
+    row(e, sip = "10.0.0.99", dip = "192.168.1.10", dport = "22", service = "ssh",
+        user = "root", result = "failed", event_time = "2026-01-01T00:01:30Z");
+  }
+  expect {
+    hits == 1;
+    hit[0].entity_id == "10.0.0.99";
+  }
+}
+
+// 失败次数不足 — 不告警
+test below_threshold for ssh_brute_force {
+  input {
+    row(e, sip = "10.0.0.50", dip = "192.168.1.01", dport = "22", service = "ssh",
+        user = "root", result = "failed", event_time = "2026-01-01T00:00:00Z");
+    row(e, sip = "10.0.0.50", dip = "192.168.1.02", dport = "22", service = "ssh",
+        user = "root", result = "failed", event_time = "2026-01-01T00:00:10Z");
+    row(e, sip = "10.0.0.50", dip = "192.168.1.02", dport = "22", service = "ssh",
+        user = "root", result = "success", event_time = "2026-01-01T00:00:15Z");
+  }
+  expect { hits == 0; }
+}
+
+// 成功登录 — 不告警（event filter 排除了 result != "failed"）
+test successful_login_ignored for ssh_brute_force {
+  input {
+    row(e, sip = "10.0.0.123", dip = "192.168.1.01", dport = "22", service = "ssh",
+        user = "root", result = "success", event_time = "2026-01-01T00:00:00Z");
+    row(e, sip = "10.0.0.123", dip = "192.168.1.02", dport = "22", service = "ssh",
+        user = "root", result = "success", event_time = "2026-01-01T00:00:10Z");
+  }
+  expect { hits == 0; }
+}
+
+// 多个 IP 独立计数 — 各自不达阈值
+test isolated_by_sip for ssh_brute_force {
+  input {
+    row(e, sip = "10.0.0.1", dip = "192.168.1.01", dport = "22", service = "ssh",
+        user = "root", result = "failed", event_time = "2026-01-01T00:00:00Z");
+    row(e, sip = "10.0.0.1", dip = "192.168.1.02", dport = "22", service = "ssh",
+        user = "root", result = "failed", event_time = "2026-01-01T00:00:10Z");
+    row(e, sip = "10.0.0.2", dip = "192.168.1.03", dport = "22", service = "ssh",
+        user = "root", result = "failed", event_time = "2026-01-01T00:00:20Z");
+    row(e, sip = "10.0.0.2", dip = "192.168.1.04", dport = "22", service = "ssh",
+        user = "root", result = "failed", event_time = "2026-01-01T00:00:30Z");
+    row(e, sip = "10.0.0.3", dip = "192.168.1.05", dport = "22", service = "ssh",
+        user = "root", result = "failed", event_time = "2026-01-01T00:00:40Z");
+    row(e, sip = "10.0.0.3", dip = "192.168.1.06", dport = "22", service = "ssh",
+        user = "root", result = "failed", event_time = "2026-01-01T00:00:50Z");
+  }
+  expect { hits == 0; }
+}

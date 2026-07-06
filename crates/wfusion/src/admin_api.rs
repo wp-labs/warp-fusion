@@ -82,7 +82,8 @@ pub struct ReloadConfigSource {
     overlay_paths: Vec<PathBuf>,
     config_ctx: ConfigVarContext,
     /// Work dir passed to the loader (resolves relative paths in config). The
-    /// engine's runtime base dir (config file's parent, or `--work-dir`).
+    /// engine's runtime base dir (project root for `conf/wfusion.toml`, config
+    /// file's parent otherwise, or explicit `--work-dir`).
     work_dir: PathBuf,
     /// CLI override for `mode`, if the engine was launched via a subcommand
     /// (`daemon`/`batch`) that differs from the TOML value.
@@ -646,7 +647,6 @@ fn json_response(status: StatusCode, body: &str) -> Response<Full<Bytes>> {
         .body(Full::from(body.to_string()))
         .unwrap()
 }
-
 
 #[cfg(test)]
 #[path = "admin_api_tests.rs"]

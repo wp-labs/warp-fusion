@@ -110,6 +110,10 @@ pub(crate) const SCHEMAS_NETWORK: TemplateFile = (
     "models/schemas/network.wfs",
     include_str!("../../templates/models/schemas/network.wfs"),
 );
+pub(crate) const WINDOWS: TemplateFile = (
+    "models/schemas/windows.toml",
+    include_str!("../../templates/models/schemas/windows.toml"),
+);
 
 // ── models / scenarios ─────────────────────────────────────────────────
 

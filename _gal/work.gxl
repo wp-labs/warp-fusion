@@ -52,6 +52,9 @@ mod main  {
     gx.cmd (  "rm -rf docker/default_setting ; mkdir docker/default_setting "  );
     gx.cmd (  "cd  docker/default_setting ;  wfadm init"  );
   }
+  flow need_update {
+    gx.cmd ("cargo update --dry-run --verbose");
+  }
   flow use_local  {
     gx.patch_file(file: "./Cargo.toml", action: "comment_block", marker: "remote_reactor");
     gx.patch_file(file: "./Cargo.toml", action: "uncomment_block", marker: "local_reactor");
@@ -60,4 +63,5 @@ mod main  {
     gx.patch_file(file: "./Cargo.toml", action: "comment_block", marker: "local_reactor");
     gx.patch_file(file: "./Cargo.toml", action: "uncomment_block", marker: "remote_reactor");
   }
+
 }

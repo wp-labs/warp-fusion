@@ -19,6 +19,9 @@ use wf_config::{ConfigVarContext, FusionConfigLoader, RawFusionConfigTree};
 use wf_runtime::lifecycle::Reactor;
 use wf_runtime::tracing_init::{DomainFormat, FileFields};
 
+const AUTH_SECURITY_WINDOWS_TOML: &str =
+    include_str!("../../../tests/fixtures/auth_security_windows.toml");
+
 /// Build an RFC 6587 octet-counting TCP frame from an Arrow IPC payload.
 ///
 /// Format: `<len><SP><payload>` where `<len>` is the payload length as
@@ -73,40 +76,14 @@ async fn e2e_brute_force_alert() {
     // `data_format = "arrow_framed"` tells our BatchSource adapter how to decode
     // each framed payload.
     const TCP_PORT: u16 = 17900;
-
-    // Write window config to a separate file.
-    let windows_dir = artifact_dir.join("models");
-    std::fs::create_dir_all(&windows_dir).unwrap();
-    std::fs::write(
-        windows_dir.join("windows.toml"),
-        r#"
-[window_defaults]
-evict_interval = "30s"
-max_window_bytes = "256MB"
-max_total_bytes = "2GB"
-evict_policy = "time_first"
-watermark = "5s"
-allowed_lateness = "0s"
-late_policy = "drop"
-
-[window.auth_events]
-mode = "local"
-max_window_bytes = "256MB"
-over_cap = "30m"
-
-[window.security_alerts]
-mode = "local"
-max_window_bytes = "64MB"
-over_cap = "1h"
-"#,
-    )
-    .unwrap();
-
+    let windows_path = artifact_dir.join("models/windows.toml");
+    std::fs::create_dir_all(windows_path.parent().unwrap()).expect("create windows dir");
+    std::fs::write(&windows_path, AUTH_SECURITY_WINDOWS_TOML).expect("write windows config");
     let toml_str = format!(
         r#"
 mode = "daemon"
-windows = "models/windows.toml"
 sinks = "sinks"
+windows = "{}"
 work_root = "{}"
 
 [[sources]]
@@ -128,6 +105,7 @@ rules   = "count/rules/*.wfl"
 [vars]
 FAIL_THRESHOLD = "3"
 "#,
+        windows_path.display(),
         artifact_dir.display(),
         TCP_PORT,
         TCP_PORT

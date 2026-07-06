@@ -1,0 +1,61 @@
+use "network.wfs"
+
+// 端口扫描检测 + 白名单排除 + IP富化
+//
+// join scanner_whitelist anti：排除已知漏扫器
+// join internal_ips snapshot：富化告警（运行时注入 department/owner）
+// 注：WFL test runner 不支持 join 窗口数据预加载，富化效果在完整引擎验证
+
+rule port_scan_whitelist {
+    events { c : conn_events && action == "syn" }
+    match<sip:5m> {
+        on event { c.dport | distinct | count >= 10; }
+        and close { total: c | count >= 10; }
+    } -> score(80.0)
+    join scanner_whitelist anti on c.sip == scanner_whitelist.sip
+    join internal_ips snapshot on c.sip == internal_ips.ip
+    entity(ip, c.sip)
+    yield network_alerts (
+        sip = c.sip,
+        alert_type = "port_scan",
+        detail = "distinct ports >= 10",
+        department = internal_ips.department,
+        owner = internal_ips.owner
+    )
+
+    limits {
+        max_memory = "64MB";
+        max_instances = 10000;
+        on_exceed = throttle;
+    }
+}
+
+test scan_detected for port_scan_whitelist {
+  input {
+    row(c, sip = "10.0.0.99", dip = "192.168.1.1", dport = "80", bytes = "100", protocol = "tcp", action = "syn", event_time = "2026-01-01T00:00:00Z");
+    row(c, sip = "10.0.0.99", dip = "192.168.1.1", dport = "443", bytes = "100", protocol = "tcp", action = "syn", event_time = "2026-01-01T00:00:01Z");
+    row(c, sip = "10.0.0.99", dip = "192.168.1.1", dport = "8080", bytes = "100", protocol = "tcp", action = "syn", event_time = "2026-01-01T00:00:02Z");
+    row(c, sip = "10.0.0.99", dip = "192.168.1.1", dport = "22", bytes = "100", protocol = "tcp", action = "syn", event_time = "2026-01-01T00:00:03Z");
+    row(c, sip = "10.0.0.99", dip = "192.168.1.1", dport = "3306", bytes = "100", protocol = "tcp", action = "syn", event_time = "2026-01-01T00:00:04Z");
+    row(c, sip = "10.0.0.99", dip = "192.168.1.1", dport = "5432", bytes = "100", protocol = "tcp", action = "syn", event_time = "2026-01-01T00:00:05Z");
+    row(c, sip = "10.0.0.99", dip = "192.168.1.1", dport = "6379", bytes = "100", protocol = "tcp", action = "syn", event_time = "2026-01-01T00:00:06Z");
+    row(c, sip = "10.0.0.99", dip = "192.168.1.1", dport = "27017", bytes = "100", protocol = "tcp", action = "syn", event_time = "2026-01-01T00:00:07Z");
+    row(c, sip = "10.0.0.99", dip = "192.168.1.1", dport = "9200", bytes = "100", protocol = "tcp", action = "syn", event_time = "2026-01-01T00:00:08Z");
+    row(c, sip = "10.0.0.99", dip = "192.168.1.1", dport = "11211", bytes = "100", protocol = "tcp", action = "syn", event_time = "2026-01-01T00:00:09Z");
+  }
+  expect {
+    hits == 1;
+    hit[0].entity_id == "10.0.0.99";
+  }
+}
+
+test below_threshold for port_scan_whitelist {
+  input {
+    row(c, sip = "10.0.0.1", dip = "192.168.1.1", dport = "80", bytes = "100", protocol = "tcp", action = "syn", event_time = "2026-01-01T00:00:00Z");
+    row(c, sip = "10.0.0.1", dip = "192.168.1.1", dport = "80", bytes = "100", protocol = "tcp", action = "syn", event_time = "2026-01-01T00:00:01Z");
+    row(c, sip = "10.0.0.1", dip = "192.168.1.1", dport = "443", bytes = "100", protocol = "tcp", action = "syn", event_time = "2026-01-01T00:00:02Z");
+  }
+  expect {
+    hits == 0;
+  }
+}

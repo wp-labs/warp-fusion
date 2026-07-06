@@ -2,6 +2,16 @@
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")"
 LINE_CNT=${LINE_CNT:-3000}
+REPO_ROOT="$(cd ../../.. && pwd)"
+BIN_PROFILE="${1:-debug}"
+case "$BIN_PROFILE" in
+    debug) BIN_DIR="$REPO_ROOT/target/debug" ;;
+    release) BIN_DIR="$REPO_ROOT/target/release" ;;
+    *) echo "usage: $0 [debug|release]" >&2; exit 2 ;;
+esac
+if [ -x "$BIN_DIR/wfusion" ] || [ -x "$BIN_DIR/wfadm" ]; then
+    export PATH="$BIN_DIR:$PATH"
+fi
 
 # ---- pre-check ----
 source "$(dirname "${BASH_SOURCE[0]}")/../deps-check.sh"

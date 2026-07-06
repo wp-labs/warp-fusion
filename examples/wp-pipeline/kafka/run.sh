@@ -2,9 +2,21 @@
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")"
 LINE_CNT=${LINE_CNT:-5000}
+REPO_ROOT="$(cd ../../.. && pwd)"
+BIN_PROFILE="${1:-debug}"
+case "$BIN_PROFILE" in
+    debug) BIN_DIR="$REPO_ROOT/target/debug" ;;
+    release) BIN_DIR="$REPO_ROOT/target/release" ;;
+    *) echo "usage: $0 [debug|release]" >&2; exit 2 ;;
+esac
+if [ -x "$BIN_DIR/wfusion" ] || [ -x "$BIN_DIR/wfadm" ]; then
+    export PATH="$BIN_DIR:$PATH"
+fi
 
 # ---- pre-check ----
 source "$(dirname "${BASH_SOURCE[0]}")/../deps-check.sh"
+echo "0> wfadm check wfusion..."
+(cd wfusion && wfadm check) || { echo "  ✗ wfusion check failed, abort"; exit 1; }
 # -------------------
 
 # Wait until a TCP port accepts connections (readiness probe).
@@ -47,18 +59,29 @@ docker-compose up -d
 wait_port 127.0.0.1 9092 60 || { echo "   Kafka not reachable on :9092" >&2; exit 1; }
 echo "   Kafka ready at localhost:9092"
 
-# 2. Fresh consumer group
+# 2. Fresh consumer group in a runtime source copy; do not mutate tracked config.
 GROUP_ID="wfusion_$(date +%s)"
-sed -i '' "s/group_id = .*/group_id = \"$GROUP_ID\"/" wfusion/topology/sources/kafka_nginx.toml
+mkdir -p wfusion/.run/sources
+cp wfusion/topology/sources/kafka_nginx.toml wfusion/.run/sources/kafka_nginx.toml
+perl -0pi -e "s/^group_id\\s*=\\s*\"[^\"]*\"/group_id = \"$GROUP_ID\"/m" \
+    wfusion/.run/sources/kafka_nginx.toml
+cat > wfusion/.run/source-overlay.toml <<'EOF'
+sources_dir = ".run/sources"
+EOF
 
 # 3. Start wfusion (daemon mode)
 echo "2> wfusion: daemon, consuming from Kafka..."
 cd wfusion
 rm -rf ../data/alerts; mkdir -p ../data/alerts
-wfusion daemon --config conf/wfusion.toml &
+wfusion daemon --config conf/wfusion.toml --overlay .run/source-overlay.toml &
 WFUSION_PID=$!
 cd ..
 echo "   wfusion PID=$WFUSION_PID"
+sleep 1
+if ! kill -0 "$WFUSION_PID" 2>/dev/null; then
+    echo "   ✗ wfusion exited before consuming Kafka; check wfusion logs above" >&2
+    exit 1
+fi
 
 # 4. Start wparse (daemon mode — must listen on TCP to receive wpgen data)
 echo "3> wparse: listening on TCP :9800, then wpgen sending..."
@@ -86,9 +109,15 @@ sleep 1
 
 # 6. Show alerts
 echo ""; echo "wfusion alerts:"
-for f in data/alerts/*.ndjson; do
-    name=$(basename "$f")
-    size=$(wc -c < "$f" 2>/dev/null || echo 0 | tr -d ' ')
-    [ "$size" -gt 0 ] && echo "  $name ($size bytes)" || echo "  $name (empty)"
-done
+shopt -s nullglob
+alert_files=(data/alerts/*.ndjson)
+if [ "${#alert_files[@]}" -eq 0 ]; then
+    echo "  (no alert files)"
+else
+    for f in "${alert_files[@]}"; do
+        name=$(basename "$f")
+        size=$(wc -c < "$f" 2>/dev/null | tr -d ' ')
+        [ "$size" -gt 0 ] && echo "  $name ($size bytes)" || echo "  $name (empty)"
+    done
+fi
 echo ""

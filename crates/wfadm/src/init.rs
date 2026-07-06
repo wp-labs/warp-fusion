@@ -70,7 +70,10 @@ pub fn init_project(project_dir: &str, _name: &str, scope: &str) -> Result<(), S
         "wf-rules project created at {} (scope: {scope:?})",
         root.canonicalize().unwrap_or(root.to_path_buf()).display()
     );
-    println!("  cd {} && wfusion run", project_dir);
+    println!(
+        "  cd {} && wfusion daemon --config conf/wfusion.toml",
+        project_dir
+    );
 
     // 3. Ensure a bearer token exists for the admin API. The default config
     //    points admin_api.auth.token_file at $HOME/.warp_fusion/admin_api.token;
@@ -203,8 +206,12 @@ mod tests {
         assert!(dir.join("conf/wfusion.toml").exists());
         assert!(dir.join("topology/sinks").is_dir());
         assert!(dir.join("topology/sources").is_dir());
-        // Conf scope should NOT have models
-        assert!(!dir.join("models").exists());
+        // Conf scope needs the external window config referenced by
+        // conf/wfusion.toml, but should not include rules/scenarios.
+        assert!(dir.join("models/schemas/windows.toml").exists());
+        assert!(!dir.join("models/rules").exists());
+        assert!(!dir.join("models/scenarios").exists());
+        assert!(!dir.join("models/schemas/auth.wfs").exists());
         let _ = std::fs::remove_dir_all(&dir);
     }
 

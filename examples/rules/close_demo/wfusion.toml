@@ -1,0 +1,24 @@
+# close_demo — 窗口关闭模式演示
+# 演示 eos / timeout / flush 三种 close 触发方式
+# 运行: wfusion batch -c examples/close_demo/wfusion.toml --work-dir examples/close_demo
+
+sinks = "sinks"
+windows = "windows.toml"
+
+# 从 NDJSON 文件回放到 netflow stream
+[[sources]]
+connect = "file_src"
+name = "seed_netflow"
+path = "data/conn_events.ndjson"
+stream = "netflow"
+data_format = "ndjson"
+
+[runtime]
+executor_parallelism = 2
+rule_exec_timeout = "30s"
+schemas = "schemas/*.wfs"
+rules   = "rules/*.wfl"
+
+[logging]
+level = "info"
+format = "plain"

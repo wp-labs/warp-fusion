@@ -14,16 +14,16 @@ arrow = { version = "59", default-features = false, features = ["ipc"] }
 async-trait = "0.1"
 orion-error = { version = "0.8", features = ["derive", "serde_json", "toml", "tracing"] }
 # @gxl:block(remote_reactor)
-#wf-engine = { git = "https://github.com/wp-labs/wp-reactor.git", tag = "v0.1.24" }
-#wf-config = { git = "https://github.com/wp-labs/wp-reactor.git", tag = "v0.1.24" }
-#wf-lang = { git = "https://github.com/wp-labs/wp-reactor.git", tag = "v0.1.24" }
-#wf-runtime = { git = "https://github.com/wp-labs/wp-reactor.git", tag = "v0.1.24" }
+wf-engine = { git = "https://github.com/wp-labs/wp-reactor.git", tag = "v0.1.25" }
+wf-config = { git = "https://github.com/wp-labs/wp-reactor.git", tag = "v0.1.25" }
+wf-lang = { git = "https://github.com/wp-labs/wp-reactor.git", tag = "v0.1.25" }
+wf-runtime = { git = "https://github.com/wp-labs/wp-reactor.git", tag = "v0.1.25" }
 # @gxl:end(remote_reactor)
 # @gxl:block(local_reactor)
-wf-engine = { path = "../wp-reactor/crates/wf-engine" }
-wf-config = { path = "../wp-reactor/crates/wf-config" }
-wf-lang = { path = "../wp-reactor/crates/wf-lang" }
-wf-runtime = { path = "../wp-reactor/crates/wf-runtime" }
+#wf-engine = { path = "../wp-reactor/crates/wf-engine" }
+#wf-config = { path = "../wp-reactor/crates/wf-config" }
+#wf-lang = { path = "../wp-reactor/crates/wf-lang" }
+#wf-runtime = { path = "../wp-reactor/crates/wf-runtime" }
 # @gxl:end(local_reactor)
 
 
@@ -34,15 +34,15 @@ serde_json = "1.0"
 chrono = { version = "0.4", features = ["serde"] }
 clap = { version = "4", features = ["derive"] }
 tokio = { version = "1", features = ["net", "time", "rt", "rt-multi-thread", "macros", "signal"] }
-rand = "=0.9.0"
+rand = "=0.9"
 wp-arrow = "0.2"
 wp-connector-api = "0.10"
 tracing = "0.1"
-toml = "0.8"
+toml = "1.0"
 ureq = { version = "3", features = ["gzip"] }
 flate2 = "1"
 tar = "0.4"
 walkdir = "2"
-git2 = { version = "0.19", default-features = false, features = ["vendored-libgit2", "https"] }
+git2 = { version = "0.21", default-features = false, features = ["vendored-libgit2", "https"] }
 semver = "1"
 libc = "0.2"

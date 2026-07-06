@@ -83,7 +83,7 @@ fn clear_local_release_tags(repo: &Repository) -> Result<(), String> {
         .map_err(|e| conf_err_source("list local tags failed", e))?;
     for reference in refs {
         let mut reference = reference.map_err(|e| conf_err_source("read local tag failed", e))?;
-        let Some(name) = reference.name() else {
+        let Ok(name) = reference.name() else {
             continue;
         };
         let Some(tag) = name.strip_prefix("refs/tags/") else {
@@ -102,7 +102,7 @@ fn clear_local_release_tags(repo: &Repository) -> Result<(), String> {
 fn ensure_remote<'a>(repo: &'a Repository, repo_url: &str) -> Result<Remote<'a>, String> {
     match repo.find_remote("origin") {
         Ok(remote) => {
-            if remote.url() != Some(repo_url) {
+            if remote.url().ok() != Some(repo_url) {
                 repo.remote_set_url("origin", repo_url)
                     .map_err(|e| conf_err_source("set origin URL failed", e))?;
             }
@@ -157,7 +157,7 @@ fn resolve_latest_released_target(repo: &Repository) -> Result<Option<ResolvedTa
         .map_err(|e| conf_err_source("list tags failed", e))?;
     let latest = names
         .iter()
-        .filter_map(|s| s.and_then(parse_tag_version))
+        .filter_map(|s| s.ok().flatten().and_then(parse_tag_version))
         .max_by(|a, b| a.1.cmp(&b.1))
         .map(|(version, _)| version);
     match latest {
@@ -172,6 +172,7 @@ fn resolve_remote_head_target(repo: &Repository) -> Result<ResolvedTag, String> 
         .map_err(|e| conf_err_source("resolve origin HEAD failed", e))?;
     let target_name = head
         .symbolic_target()
+        .map_err(|e| conf_err_source("resolve symbolic target failed", e))?
         .ok_or_else(origin_head_not_symbolic_err)?;
     let branch = target_name
         .strip_prefix("refs/remotes/origin/")
@@ -200,7 +201,7 @@ pub(super) fn resolve_tag_for_version(
     let names = repo
         .tag_names(None)
         .map_err(|e| conf_err_source("list tags failed", e))?;
-    for name in names.iter().flatten() {
+    for name in names.iter().filter_map(|s| s.ok().flatten()) {
         let Some((normalized, _)) = parse_tag_version(name) else {
             continue;
         };

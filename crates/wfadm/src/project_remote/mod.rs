@@ -532,7 +532,5 @@ where
 mod test_support;
 
 #[cfg(test)]
-
-#[cfg(test)]
 #[path = "tests.rs"]
 mod tests;

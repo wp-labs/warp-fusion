@@ -76,8 +76,7 @@ fn resolve_config_load_parts(
             )
         })
         .collect::<Result<_, _>>()?;
-    let default_base_dir =
-        std::env::current_dir().source_err(EngineReason::Cli, "current working directory")?;
+    let default_base_dir = default_runtime_base_dir(&config_path);
     let runtime_base_dir = if let Some(work_dir) = work_dir {
         let path = work_dir.canonicalize().source_err(
             EngineReason::Cli,
@@ -102,6 +101,19 @@ fn resolve_config_load_parts(
         runtime_base_dir,
         config_ctx,
     })
+}
+
+fn default_runtime_base_dir(config_path: &std::path::Path) -> &std::path::Path {
+    let config_dir = config_path
+        .parent()
+        .expect("config path must have a parent directory");
+    if config_path.file_name().and_then(|n| n.to_str()) == Some("wfusion.toml")
+        && config_dir.file_name().and_then(|n| n.to_str()) == Some("conf")
+        && let Some(project_dir) = config_dir.parent()
+    {
+        return project_dir;
+    }
+    config_dir
 }
 
 fn render_runtime_error(err: RuntimeError) -> EngineError {
@@ -235,4 +247,25 @@ async fn run_engine_inner(
         Err(err) => return Err(render_runtime_error(err)),
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::default_runtime_base_dir;
+    use std::path::Path;
+
+    #[test]
+    fn default_runtime_base_dir_uses_project_root_for_conf_wfusion() {
+        let config = Path::new("/tmp/project/conf/wfusion.toml");
+        assert_eq!(default_runtime_base_dir(config), Path::new("/tmp/project"));
+    }
+
+    #[test]
+    fn default_runtime_base_dir_keeps_config_dir_for_plain_wfusion() {
+        let config = Path::new("/tmp/project/examples/case/wfusion.toml");
+        assert_eq!(
+            default_runtime_base_dir(config),
+            Path::new("/tmp/project/examples/case")
+        );
+    }
 }

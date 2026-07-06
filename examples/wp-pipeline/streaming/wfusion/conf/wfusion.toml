@@ -1,6 +1,5 @@
 
 sources_dir = "../topology/sources"
-windows = "windows.toml"
 sinks = "../topology/sinks"
 
 [runtime]
@@ -8,6 +7,40 @@ executor_parallelism = 4
 rule_exec_timeout = "30s"
 schemas = "../models/schemas/*.wfs"
 rules = "../rules/wfl/*.wfl"
+
+[window_defaults]
+evict_interval = "30s"
+max_window_bytes = "64MB"
+max_total_bytes = "256MB"
+evict_policy = "time_first"
+watermark = "1s"
+allowed_lateness = "0s"
+late_policy = "drop"
+
+[window.conn_events]
+mode = "local"
+max_window_bytes = "64MB"
+over_cap = "30m"
+
+[window.scan_alerts]
+mode = "local"
+max_window_bytes = "1MB"
+over_cap = "0s"
+
+[window.error_alerts]
+mode = "local"
+max_window_bytes = "1MB"
+over_cap = "0s"
+
+[window.traffic_alerts]
+mode = "local"
+max_window_bytes = "1MB"
+over_cap = "0s"
+
+[window.bot_alerts]
+mode = "local"
+max_window_bytes = "1MB"
+over_cap = "0s"
 
 [logging]
 level = "info"

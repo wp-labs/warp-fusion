@@ -5474,7 +5474,7 @@ dependencies = [
 
 [[package]]
 name = "wfgen"
-version = "0.1.19"
+version = "0.1.20"
 dependencies = [
  "arrow",
  "chrono",
@@ -5499,7 +5499,7 @@ dependencies = [
 
 [[package]]
 name = "wfl"
-version = "0.1.19"
+version = "0.1.20"
 dependencies = [
  "chrono",
  "clap",
@@ -5515,7 +5515,7 @@ dependencies = [
 
 [[package]]
 name = "wfusion"
-version = "0.1.19"
+version = "0.1.20"
 dependencies = [
  "clap",
  "http-body-util",

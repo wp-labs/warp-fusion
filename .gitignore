@@ -29,3 +29,4 @@ examples/wp-pipeline/kafka/data/
 examples/wp-pipeline/kafka/wfusion/data/
 examples/wp-pipeline/kafka/wparse/data/
 examples/wp-pipeline/streaming/data/
+examples/wp-pipeline/data/

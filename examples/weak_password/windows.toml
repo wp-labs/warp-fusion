@@ -1,0 +1,27 @@
+[window_defaults]
+evict_interval = "30s"
+max_window_bytes = "64MB"
+max_total_bytes = "256MB"
+evict_policy = "time_first"
+watermark = "1s"
+allowed_lateness = "0s"
+late_policy = "drop"
+
+
+[window.auth_events]
+mode = "local"
+max_window_bytes = "64MB"
+over_cap = "30m"
+
+
+[window.weak_password_db]
+mode = "local"
+max_window_bytes = "1MB"
+over_cap = "0s"
+
+
+[window.security_alerts]
+mode = "local"
+max_window_bytes = "1MB"
+over_cap = "0s"
+

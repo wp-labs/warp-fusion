@@ -1170,6 +1170,7 @@ mod tests {
             format!(
                 r#"
 mode = "daemon"
+windows = "models/windows.toml"
 sinks = "sinks"
 
 [[sources]]
@@ -1185,6 +1186,17 @@ rule_exec_timeout = "30s"
 schemas = "schemas/*.wfs"
 rules = "{rules_glob}"
 
+[vars]
+FAIL_THRESHOLD = "3"
+"#
+            ),
+        )
+        .unwrap();
+        // Write window config to external file.
+        std::fs::create_dir_all(root.join("models")).unwrap();
+        std::fs::write(
+            root.join("models/windows.toml"),
+            r#"
 [window_defaults]
 evict_interval = "30s"
 max_window_bytes = "256MB"
@@ -1203,11 +1215,7 @@ over_cap = "30m"
 mode = "local"
 max_window_bytes = "64MB"
 over_cap = "1h"
-
-[vars]
-FAIL_THRESHOLD = "3"
-"#
-            ),
+"#,
         )
         .unwrap();
         std::fs::create_dir_all(root.join("schemas")).unwrap();

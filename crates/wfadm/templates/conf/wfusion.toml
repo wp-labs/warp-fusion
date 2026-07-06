@@ -3,7 +3,7 @@
 
 sources_dir = "topology/sources"
 sinks = "topology/sinks"
-windows = "conf/windows.toml"
+windows = "models/windows.toml"
 
 [runtime]
 executor_parallelism = 4

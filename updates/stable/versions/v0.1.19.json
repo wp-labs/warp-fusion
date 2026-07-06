@@ -1,0 +1,21 @@
+{
+  "version": "0.1.19",
+  "channel": "stable",
+  "published_at": "2026-07-06T00:42:18Z",
+  "git_ref": "v0.1.19",
+  "git_commit": "1028f4aac0913e77497de76fac7ed2ba42e02544",
+  "assets": {
+    "aarch64-apple-darwin": {
+      "url": "https://github.com/wp-labs/warp-fusion/releases/download/v0.1.19/warp-fusion-v0.1.19-aarch64-apple-darwin.tar.gz",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    "aarch64-unknown-linux-gnu": {
+      "url": "https://github.com/wp-labs/warp-fusion/releases/download/v0.1.19/warp-fusion-v0.1.19-aarch64-unknown-linux-gnu.tar.gz",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    "x86_64-unknown-linux-gnu": {
+      "url": "https://github.com/wp-labs/warp-fusion/releases/download/v0.1.19/warp-fusion-v0.1.19-x86_64-unknown-linux-gnu.tar.gz",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+    }
+  }
+}

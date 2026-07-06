@@ -43,6 +43,6 @@ ureq = { version = "3", features = ["gzip"] }
 flate2 = "1"
 tar = "0.4"
 walkdir = "2"
-git2 = { version = "0.19", default-features = false, features = ["vendored-libgit2", "https"] }
+git2 = { version = "0.21", default-features = false, features = ["vendored-libgit2", "https"] }
 semver = "1"
 libc = "0.2"

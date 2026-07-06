@@ -18,6 +18,7 @@ fn sample_config() -> &'static str {
     r#"
 mode = "batch"
 sinks = "${CASE_PATH}/sinks"
+windows = "${WORK_DIR}/models/windows.toml"
 work_root = "$HOME"
 
 [[sources]]
@@ -32,24 +33,19 @@ rule_exec_timeout = "30s"
 schemas = "${CASE_PATH}/schemas/base/*.wfs"
 rules = "${CASE_PATH}/rules/base/*.wfl"
 
-[window_defaults]
-evict_interval = "30s"
-max_window_bytes = "256MB"
-max_total_bytes = "2GB"
-evict_policy = "time_first"
-watermark = "5s"
-allowed_lateness = "0s"
-late_policy = "drop"
-
-[window.base_events]
-mode = "local"
-max_window_bytes = "256MB"
-over_cap = "30m"
-
 [vars]
 CASE_PATH = "/tmp/from-file"
 FAIL_THRESHOLD = "3"
 "#
+}
+
+fn sample_windows() -> &'static str {
+    include_str!("fixtures/base_windows.toml")
+}
+
+fn write_sample_project_config(config_path: &Path, workspace: &Path) {
+    write_file(config_path, sample_config());
+    write_file(&workspace.join("models/windows.toml"), sample_windows());
 }
 
 #[test]
@@ -58,7 +54,7 @@ fn config_render_and_vars_reflect_cli_overrides() {
     let config_path = temp.path().join("conf/wfusion.toml");
     let workspace = temp.path().join("workspace");
     std::fs::create_dir_all(&workspace).expect("create workspace");
-    write_file(&config_path, sample_config());
+    write_sample_project_config(&config_path, &workspace);
 
     let render = wfusion()
         .arg("config")
@@ -116,7 +112,8 @@ fn config_origins_and_diff_support_prefix_filters() {
     let config_path = temp.path().join("conf/wfusion.toml");
     let old_overlay = temp.path().join("env/dev/old.toml");
     let new_overlay = temp.path().join("env/dev/new.toml");
-    write_file(&config_path, sample_config());
+    let workspace = temp.path().join("workspace");
+    write_sample_project_config(&config_path, &workspace);
     write_file(
         &old_overlay,
         r#"
@@ -140,6 +137,8 @@ CASE_PATH = "/tmp/overlay"
         .arg("origins")
         .arg("--config")
         .arg(&config_path)
+        .arg("--work-dir")
+        .arg(&workspace)
         .arg("--path-prefix")
         .arg("runtime")
         .output()
@@ -158,6 +157,8 @@ CASE_PATH = "/tmp/overlay"
         .arg("diff")
         .arg("--config")
         .arg(&config_path)
+        .arg("--work-dir")
+        .arg(&workspace)
         .arg("--overlay")
         .arg(&old_overlay)
         .arg("--to-overlay")
@@ -182,13 +183,16 @@ CASE_PATH = "/tmp/overlay"
 fn config_diff_expanded_detects_toml_value_changes_from_vars() {
     let temp = TempDir::new().expect("create temp dir");
     let config_path = temp.path().join("conf/wfusion.toml");
-    write_file(&config_path, sample_config());
+    let workspace = temp.path().join("workspace");
+    write_sample_project_config(&config_path, &workspace);
 
     let diff = wfusion()
         .arg("config")
         .arg("diff")
         .arg("--config")
         .arg(&config_path)
+        .arg("--work-dir")
+        .arg(&workspace)
         .arg("--var")
         .arg("CASE_PATH=/tmp/left")
         .arg("--to-var")
@@ -216,13 +220,16 @@ fn config_diff_expanded_detects_toml_value_changes_from_vars() {
 fn config_diff_expanded_reports_array_field_sources() {
     let temp = TempDir::new().expect("create temp dir");
     let config_path = temp.path().join("conf/wfusion.toml");
-    write_file(&config_path, sample_config());
+    let workspace = temp.path().join("workspace");
+    write_sample_project_config(&config_path, &workspace);
 
     let diff = wfusion()
         .arg("config")
         .arg("diff")
         .arg("--config")
         .arg(&config_path)
+        .arg("--work-dir")
+        .arg(&workspace)
         .arg("--var")
         .arg("CASE_PATH=/tmp/left")
         .arg("--to-var")

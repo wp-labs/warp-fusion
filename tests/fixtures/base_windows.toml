@@ -1,0 +1,13 @@
+[window_defaults]
+evict_interval = "30s"
+max_window_bytes = "256MB"
+max_total_bytes = "2GB"
+evict_policy = "time_first"
+watermark = "5s"
+allowed_lateness = "0s"
+late_policy = "drop"
+
+[window.base_events]
+mode = "local"
+max_window_bytes = "256MB"
+over_cap = "30m"

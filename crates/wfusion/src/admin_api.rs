@@ -28,6 +28,10 @@ use wf_config::{
 };
 use wf_runtime::lifecycle::{ReloadOutcome, RuntimeControlHandle};
 
+#[cfg(test)]
+const AUTH_SECURITY_WINDOWS_TOML: &str =
+    include_str!("../../../tests/fixtures/auth_security_windows.toml");
+
 // ── AdminApiRuntime ───────────────────────────────────────────────────
 
 #[derive(Debug)]
@@ -1171,6 +1175,7 @@ mod tests {
                 r#"
 mode = "daemon"
 sinks = "sinks"
+windows = "models/windows.toml"
 
 [[sources]]
 type = "file"
@@ -1185,31 +1190,14 @@ rule_exec_timeout = "30s"
 schemas = "schemas/*.wfs"
 rules = "{rules_glob}"
 
-[window_defaults]
-evict_interval = "30s"
-max_window_bytes = "256MB"
-max_total_bytes = "2GB"
-evict_policy = "time_first"
-watermark = "5s"
-allowed_lateness = "0s"
-late_policy = "drop"
-
-[window.auth_events]
-mode = "local"
-max_window_bytes = "256MB"
-over_cap = "30m"
-
-[window.security_alerts]
-mode = "local"
-max_window_bytes = "64MB"
-over_cap = "1h"
-
 [vars]
 FAIL_THRESHOLD = "3"
 "#
             ),
         )
         .unwrap();
+        std::fs::create_dir_all(root.join("models")).unwrap();
+        std::fs::write(root.join("models/windows.toml"), AUTH_SECURITY_WINDOWS_TOML).unwrap();
         std::fs::create_dir_all(root.join("schemas")).unwrap();
         std::fs::write(root.join("schemas/security.wfs"), SECURITY_SCHEMA).unwrap();
         // Derive the rule directory from the glob so a glob like

@@ -43,6 +43,9 @@ jobs:
       - name: Cargo test
         run: cargo test --all
 
+      - name: Run rule examples
+        run: examples/rules/run_all.sh
+
       - name: Cargo fmt
         run: cargo fmt --check
 

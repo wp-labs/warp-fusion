@@ -72,6 +72,7 @@ use templates::{
     TOPO_SINKS_SECURITY,
     // sources
     TOPO_SOURCES_INGRESS,
+    WINDOWS,
 };
 
 /// Returns all template files, filtered by the given [`Scope`].
@@ -120,6 +121,7 @@ const ALL: &[TemplateFile] = &[
     SCHEMAS_HTTP,
     SCHEMAS_MANAGEMENT,
     SCHEMAS_NETWORK,
+    WINDOWS,
     // scenarios
     SCENARIOS_PORT_SCAN,
     SCENARIOS_PORT_SCAN_QUICK,
@@ -171,6 +173,7 @@ const RULES_ONLY: &[TemplateFile] = &[
     SCHEMAS_HTTP,
     SCHEMAS_MANAGEMENT,
     SCHEMAS_NETWORK,
+    WINDOWS,
     SCENARIOS_PORT_SCAN,
     SCENARIOS_PORT_SCAN_QUICK,
     SCENARIOS_SSH_BRUTE_FORCE,
@@ -184,6 +187,7 @@ const RULES_ONLY: &[TemplateFile] = &[
 /// Conf-only scope: topology/{sinks,sources} + conf + connectors + scripts.
 const CONF_ONLY: &[TemplateFile] = &[
     CONF_WFUSION,
+    WINDOWS,
     TOPO_SINKS_DEFAULTS,
     TOPO_SINKS_DNS,
     TOPO_SINKS_HTTP,
@@ -229,7 +233,17 @@ mod tests {
         assert!(!files.is_empty());
         assert!(files.iter().any(|(p, _)| *p == "conf/wfusion.toml"));
         assert!(files.iter().any(|(p, _)| p.starts_with("topology/")));
-        assert!(!files.iter().any(|(p, _)| p.starts_with("models/")));
+        assert!(
+            files
+                .iter()
+                .any(|(p, _)| *p == "models/schemas/windows.toml")
+        );
+        assert!(!files.iter().any(|(p, _)| p.starts_with("models/rules/")));
+        assert!(
+            !files
+                .iter()
+                .any(|(p, _)| p.starts_with("models/scenarios/"))
+        );
     }
 
     #[test]

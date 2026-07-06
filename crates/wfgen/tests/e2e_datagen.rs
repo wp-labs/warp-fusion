@@ -17,6 +17,8 @@ use wf_runtime::tracing_init::{DomainFormat, FileFields};
 use wfgen::verify::ActualAlert;
 
 const ARROW_FRAME_CHUNK_ROWS: usize = 2048;
+const AUTH_SECURITY_WINDOWS_TOML: &str =
+    include_str!("../../../tests/fixtures/auth_security_windows.toml");
 
 fn read_alerts_from_sink_dir(
     alert_dir: &std::path::Path,
@@ -152,11 +154,15 @@ async fn e2e_datagen_brute_force() {
         .map(wfgen::oracle::extract_oracle_tolerances)
         .unwrap_or_default();
 
-    // ---- Build FusionConfig (inline TOML, file source, connector-based sinks) ----
+    // ---- Build FusionConfig (file source, connector-based sinks) ----
+    let windows_path = base_dir.join("models/windows.toml");
+    std::fs::create_dir_all(windows_path.parent().unwrap()).expect("create windows dir");
+    std::fs::write(&windows_path, AUTH_SECURITY_WINDOWS_TOML).expect("write windows config");
     let toml_str = format!(
         r#"
 mode = "batch"
 sinks = "sinks"
+windows = "{}"
 work_root = "{}"
 
 [[sources]]
@@ -172,28 +178,10 @@ rule_exec_timeout = "30s"
 schemas = "count/schemas/*.wfs"
 rules   = "count/rules/*.wfl"
 
-[window_defaults]
-evict_interval = "30s"
-max_window_bytes = "256MB"
-max_total_bytes = "2GB"
-evict_policy = "time_first"
-watermark = "5s"
-allowed_lateness = "0s"
-late_policy = "drop"
-
-[window.auth_events]
-mode = "local"
-max_window_bytes = "256MB"
-over_cap = "30m"
-
-[window.security_alerts]
-mode = "local"
-max_window_bytes = "64MB"
-over_cap = "1h"
-
 [vars]
 FAIL_THRESHOLD = "3"
 "#,
+        windows_path.display(),
         artifact_dir.display(),
         source_path.display()
     );

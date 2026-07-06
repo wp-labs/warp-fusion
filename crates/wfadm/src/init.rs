@@ -203,8 +203,12 @@ mod tests {
         assert!(dir.join("conf/wfusion.toml").exists());
         assert!(dir.join("topology/sinks").is_dir());
         assert!(dir.join("topology/sources").is_dir());
-        // Conf scope should NOT have models
-        assert!(!dir.join("models").exists());
+        // Conf scope needs the external window config referenced by
+        // conf/wfusion.toml, but should not include rules/scenarios.
+        assert!(dir.join("models/schemas/windows.toml").exists());
+        assert!(!dir.join("models/rules").exists());
+        assert!(!dir.join("models/scenarios").exists());
+        assert!(!dir.join("models/schemas/auth.wfs").exists());
         let _ = std::fs::remove_dir_all(&dir);
     }
 

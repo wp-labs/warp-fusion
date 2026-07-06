@@ -103,6 +103,13 @@ bind = "127.0.0.1:19080"
 [admin_api.auth]
 token_file = "${HOME}/.warp_fusion/admin_api.token"
 
+[admin_api.tls]
+# TLS is disabled by default. Uncomment `enabled = true` and provide
+# cert_file / key_file paths to enable HTTPS on the admin API.
+enabled = false
+# cert_file = "path/to/cert.pem"
+# key_file = "path/to/key.pem"
+
 [logging]
 level = "debug"
 format = "plain"

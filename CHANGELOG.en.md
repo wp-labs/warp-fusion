@@ -1,5 +1,18 @@
 # Changelog (English)
 
+## [0.1.22] — 2026-07-07
+
+### wfusion — admin API binding and TLS loading
+
+- **Fixed**: allow `admin_api.bind = "0.0.0.0:..."` with `admin_api.tls.enabled = false`; non-loopback admin listeners no longer require TLS.
+- **Fixed**: initialize the rustls ring `CryptoProvider` from the production TLS loading path, avoiding TLS startup panics when the provider was not installed elsewhere.
+- **Tests**: added coverage for non-loopback admin API startup with TLS disabled and kept HTTPS coverage for non-loopback binds.
+
+### wfgen
+
+- **Added**: top-level `wfgen --version` output.
+- **Tests**: added a regression test for the clap version flag.
+
 ## [Unreleased] — 2026-07-06
 
 ### wfusion — path base changed from config-file-relative to working-dir-relative

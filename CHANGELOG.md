@@ -2,6 +2,19 @@
 
 All notable changes to wfusion will be documented in this file.
 
+## [0.1.22] — 2026-07-07
+
+### wfusion — admin API 监听与 TLS 加载
+
+- **修复**: 支持 `admin_api.bind = "0.0.0.0:..."` 且 `admin_api.tls.enabled = false` 的启动方式，不再强制非 loopback 地址必须启用 TLS。
+- **修复**: TLS 启用时在生产代码路径初始化 rustls ring `CryptoProvider`，避免 TLS 配置加载依赖测试初始化或触发 provider 未安装 panic。
+- **测试**: 增加 admin API 非 loopback + TLS disabled 覆盖，并保留非 loopback HTTPS 请求验证。
+
+### wfgen
+
+- **新增**: `wfgen --version` 顶层版本输出。
+- **测试**: 增加 `--version` 回归测试，确认 clap 版本输出可用。
+
 ## [0.1.21] — 2026-07-06
 
 ### wfusion — 路径基准从 config-file-relative 改为 working-dir-relative

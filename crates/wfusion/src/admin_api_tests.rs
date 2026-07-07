@@ -345,17 +345,6 @@ async fn unknown_route_returns_404() {
 
 // ── TLS + non-loopback bind (P0) ───────────────────────────────────
 
-/// Install the rustls ring crypto provider once (idempotent).
-fn init_tls_crypto() {
-    use std::sync::Once;
-    static INIT: Once = Once::new();
-    INIT.call_once(|| {
-        rustls::crypto::ring::default_provider()
-            .install_default()
-            .expect("install rustls ring crypto provider");
-    });
-}
-
 /// Generate a self-signed cert/key pair via the `openssl` CLI into `dir`.
 fn generate_self_signed_cert(dir: &Path) -> (PathBuf, PathBuf) {
     let cert_path = dir.join("cert.pem");
@@ -399,29 +388,28 @@ fn tls_config(_dir: &Path, bind: &str, cert: &str, key: &str) -> AdminApiConf {
 }
 
 #[tokio::test]
-async fn rejects_non_loopback_without_tls() {
+async fn allows_non_loopback_when_tls_disabled() {
     let temp = tempfile::tempdir().unwrap();
     write_token(temp.path(), "runtime/admin_api.token");
     let mut config = test_config(true);
     config.bind = "0.0.0.0:0".to_string();
     config.auth.token_file = "runtime/admin_api.token".to_string();
-    let err = start_if_enabled(
+    config.tls.enabled = false;
+    let runtime = start_if_enabled(
         temp.path(),
         &config,
         test_control_handle(),
         test_config_source(temp.path()),
     )
     .await
-    .expect_err("should reject non-loopback without tls");
-    assert!(
-        err.contains("non-loopback") && err.contains("requires admin_api.tls.enabled=true"),
-        "unexpected error: {err}"
-    );
+    .expect("start non-loopback without tls")
+    .expect("enabled");
+    assert_eq!(runtime.local_addr().ip().to_string(), "0.0.0.0");
+    runtime.shutdown().await;
 }
 
 #[tokio::test]
 async fn tls_accepts_https_requests() {
-    init_tls_crypto();
     let temp = tempfile::tempdir().unwrap();
     write_token(temp.path(), "runtime/admin_api.token");
     let (cert_path, key_path) = generate_self_signed_cert(temp.path());
@@ -470,7 +458,6 @@ async fn tls_accepts_https_requests() {
 
 #[tokio::test]
 async fn tls_works_with_non_loopback() {
-    init_tls_crypto();
     let temp = tempfile::tempdir().unwrap();
     write_token(temp.path(), "runtime/admin_api.token");
     let (cert_path, key_path) = generate_self_signed_cert(temp.path());

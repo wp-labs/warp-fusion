@@ -7,6 +7,7 @@ use std::fs;
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::sync::Once;
 
 use http_body_util::{BodyExt, Full, Limited};
 use hyper::body::Bytes;
@@ -156,7 +157,8 @@ pub async fn start_if_enabled(
         .parse()
         .map_err(|e| conf_err(format!("invalid admin_api.bind \"{}\": {e}", config.bind)))?;
 
-    // Resolve TLS before binding so non-loopback binds can be rejected early.
+    // Resolve TLS before binding so certificate/key errors are reported before
+    // the admin listener is exposed.
     let tls = if config.tls.enabled {
         Some(load_tls_config(
             &resolve_path(work_root, &config.tls.cert_file),
@@ -165,13 +167,6 @@ pub async fn start_if_enabled(
     } else {
         None
     };
-
-    if !bind.ip().is_loopback() && tls.is_none() {
-        return Err(conf_err(format!(
-            "non-loopback admin_api.bind '{}' requires admin_api.tls.enabled=true",
-            bind
-        )));
-    }
 
     let listener = TcpListener::bind(bind)
         .await
@@ -247,6 +242,7 @@ fn resolve_path(work_root: &Path, p: &str) -> PathBuf {
 
 /// Build a rustls `ServerConfig` from PEM-encoded cert/key files.
 fn load_tls_config(cert_path: &Path, key_path: &Path) -> Result<ServerConfig, String> {
+    install_tls_crypto_provider()?;
     if cert_path.as_os_str().is_empty() || key_path.as_os_str().is_empty() {
         return Err(conf_err(
             "admin_api.tls.cert_file and admin_api.tls.key_file must be set when TLS is enabled",
@@ -275,6 +271,21 @@ fn load_tls_config(cert_path: &Path, key_path: &Path) -> Result<ServerConfig, St
         .map_err(|e| conf_err(format!("build TLS server config: {e}")))?;
     server_config.alpn_protocols = vec![b"http/1.1".to_vec()];
     Ok(server_config)
+}
+
+fn install_tls_crypto_provider() -> Result<(), String> {
+    if rustls::crypto::CryptoProvider::get_default().is_some() {
+        return Ok(());
+    }
+    static INIT: Once = Once::new();
+    INIT.call_once(|| {
+        let _ = rustls::crypto::ring::default_provider().install_default();
+    });
+    if rustls::crypto::CryptoProvider::get_default().is_some() {
+        Ok(())
+    } else {
+        Err(conf_err("install rustls ring crypto provider"))
+    }
 }
 
 /// Validate the bearer token file: must be a regular file, and on Unix its

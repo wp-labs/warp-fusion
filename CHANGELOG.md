@@ -2,6 +2,37 @@
 
 All notable changes to wfusion will be documented in this file.
 
+## [0.1.23] — 2026-07-08
+
+### wf-project-remote — 独立 crate 提取
+
+- **新增**: `wf-project-remote` 独立库 crate，从 `wfadm` 中提取 `project_remote/` 模块（`managed.rs` / `repo.rs` / `state.rs`）。
+- **新增**: `run_remote_update` 高级 API — 锁 → 快照 → 同步 → 验证 → 失败回滚。`wfadm conf update` 委托给此方法，仅保留 CLI 输出。
+- **新增**: `test-support` feature — 暴露 `RemoteFixture::from_parts` 让下游 crate 可创建自定义 git remote fixture。
+- **依赖**: `wfadm` 移除直接 `git2` / `semver` / `libc` 依赖（通过 `wf-project-remote` 间接引入）。
+- **测试**: 26 个（同步逻辑从 wfadm 迁移，不变）。
+
+### wfusion — daemon 远程更新 → 重载
+
+- **新增**: `POST /admin/v1/reloads/model` 请求体支持 `update_remote` / `version` 全量 JSON 字段（空 body 向后兼容）。
+- **新增**: `update_remote=true` 时，daemon 在重新读取配置之前调用 `run_remote_sync` → `run_remote_update` → git fetch + 版本解析 + sync managed dirs。失败返回 502 Bad Gateway。
+- **新增**: `ReloadingGuard` RAII 模式 — 重载期间 `reloading=true`，即使 panic 也能清除标记。
+- **新增**: `GET /admin/v1/runtime/status` 响应增加 `reloading` 字段。
+- **测试**: 新增 3 个测试（`status_includes_reloading_field` / `reload_update_remote_disabled_returns_502` / `reload_update_remote_unknown_version_returns_502`），验证 daemon 进程内 git-fetch + 版本解析路径可达。
+- **测试**: 新增 `reload_update_remote_success_applies_new_rules` — 完整 e2e 路径：本地 git remote (v1.0.0 → v1.0.1) → daemon sync + reload → 规则热替换 → 200 + result=applied。
+
+### wfadm — engine reload CLI
+
+- **新增**: `wfadm engine reload` 支持 `--update-remote` / `--version` / `--full` 参数，透传到 daemon 的 `/admin/v1/reloads/model`。
+- **修复**: 子命令上 `disable_version_flag` 与 `--version` 参数共存。
+
+### 测试
+
+- **wfusion**: 31 个（+4，含 e2e 远程更新→重载全链路）
+- **workspace 总计**: 255 passed, 0 failed
+
+---
+
 ## [0.1.22] — 2026-07-07
 
 ### wfusion — admin API 监听与 TLS 加载

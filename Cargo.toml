@@ -30,7 +30,7 @@ wf-project-remote = { path = "crates/wf-project-remote" }
 
 
 wf-connector-api =  "0.2"
-wp-connectors = { git = "https://github.com/wp-labs/wp-connectors.git", tag = "v0.15.8" }
+wp-connectors = { git = "https://github.com/wp-labs/wp-connectors.git", tag = "v0.15.9" }
 wp-core-connectors = "0.5.5"
 serde_json = "1.0"
 chrono = { version = "0.4", features = ["serde"] }

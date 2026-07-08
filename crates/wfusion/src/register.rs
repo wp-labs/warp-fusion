@@ -16,4 +16,7 @@ pub fn register_connectors() {
     // Kafka
     register_source_factory(wp_connectors::kafka::KafkaSourceFactory);
     register_sink_factory(wp_connectors::kafka::KafkaSinkFactory);
+
+    // VictoriaMetrics
+    register_sink_factory(wp_connectors::victoriametrics::VictoriaMetricFactory);
 }

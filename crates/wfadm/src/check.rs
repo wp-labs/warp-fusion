@@ -287,7 +287,7 @@ pub fn run(args: CheckArgs) -> Result<(), String> {
         json: args.json,
         only_fail: args.only_fail,
     };
-    check_project(&Path::new(&args.work_root).to_path_buf(), &opts, &comps)
+    check_project(Path::new(&args.work_root), &opts, &comps)
 }
 
 fn check_project(root: &Path, opts: &CheckOptions, comps: &CheckComponents) -> Result<(), String> {
@@ -337,8 +337,15 @@ fn evaluate_target(root: &Path, opts: &CheckOptions, comps: &CheckComponents) ->
 
     // Start from "all skipped" so an early `--fail-fast` return never leaves a
     // component looking like it passed. Evaluated components overwrite these.
-    let [c_conf, c_sources, c_connectors, c_sinks, c_rules, c_schemas, c_scenarios] =
-        Row::all_skipped();
+    let [
+        c_conf,
+        c_sources,
+        c_connectors,
+        c_sinks,
+        c_rules,
+        c_schemas,
+        c_scenarios,
+    ] = Row::all_skipped();
     row.conf = c_conf;
     row.sources = c_sources;
     row.connectors = c_connectors;
@@ -435,7 +442,10 @@ fn check_conf(root: &Path, conf_value: Option<&toml::Value>) -> (Cell, Option<St
             Cell::success_with_message("wfusion.toml".to_string()),
             Some(detail),
         ),
-        None => (Cell::failure("wfusion.toml — invalid TOML".to_string()), None),
+        None => (
+            Cell::failure("wfusion.toml — invalid TOML".to_string()),
+            None,
+        ),
     }
 }
 
@@ -662,11 +672,11 @@ fn check_schemas(root: &Path, base_dir: &Path, cfg_schemas_path: &Option<String>
             // windows.toml is referenced by [windows] in wfusion.toml; validate it too.
             let windows_path = schemas_dir.join("windows.toml");
             let mut windows_err = false;
-            if windows_path.exists() {
-                if let Err(e) = validate_toml_file(&windows_path) {
-                    windows_err = true;
-                    eprintln!("  {}  windows.toml — {e}", red("✗"));
-                }
+            if windows_path.exists()
+                && let Err(e) = validate_toml_file(&windows_path)
+            {
+                windows_err = true;
+                eprintln!("  {}  windows.toml — {e}", red("✗"));
             }
 
             if parse_errs > 0 || windows_err {
@@ -776,10 +786,7 @@ fn missing_note(label: &str, cfg_path: &Option<String>) -> String {
 
 fn model_label(resolved: &ResolvedFiles) -> String {
     if resolved.is_external {
-        format!(
-            " → {}",
-            resolved.display_path.as_deref().unwrap_or("?")
-        )
+        format!(" → {}", resolved.display_path.as_deref().unwrap_or("?"))
     } else {
         String::new()
     }
@@ -1012,7 +1019,11 @@ fn render_output(
 /// Build the `--json` payload as a JSON value, separated from printing so it
 /// can be unit-tested. Shape mirrors wpadm: `{ "stat": { "total": N, ... },
 /// "detail": [Row] }`.
-fn build_json_output(row: &Row, stats: &SummaryCounts, comps: &CheckComponents) -> serde_json::Value {
+fn build_json_output(
+    row: &Row,
+    stats: &SummaryCounts,
+    comps: &CheckComponents,
+) -> serde_json::Value {
     use serde_json::{Map, Value, json};
     let mut stat = Map::new();
     stat.insert("total".into(), Value::from(1));
@@ -1025,8 +1036,14 @@ fn build_json_output(row: &Row, stats: &SummaryCounts, comps: &CheckComponents) 
         "connectors".into(),
         component_stat_value(comps.connectors, &stats.connectors),
     );
-    stat.insert("sinks".into(), component_stat_value(comps.sinks, &stats.sinks));
-    stat.insert("rules".into(), component_stat_value(comps.rules, &stats.rules));
+    stat.insert(
+        "sinks".into(),
+        component_stat_value(comps.sinks, &stats.sinks),
+    );
+    stat.insert(
+        "rules".into(),
+        component_stat_value(comps.rules, &stats.rules),
+    );
     stat.insert(
         "schemas".into(),
         component_stat_value(comps.schemas, &stats.schemas),
@@ -1273,11 +1290,7 @@ fn output_failure_details(row: &Row, comps: &CheckComponents, opts: &CheckOption
 }
 
 fn status_mark(cell: &Cell) -> &'static str {
-    if cell.ok {
-        "✓"
-    } else {
-        "✗"
-    }
+    if cell.ok { "✓" } else { "✗" }
 }
 
 fn cell_data(cell: &Cell) -> String {
@@ -1498,7 +1511,11 @@ mod tests {
             .expect("init conf-scope project");
 
         let result = check_project(&dir, &default_opts(), &CheckComponents::default());
-        assert!(result.is_ok(), "conf-scope project should pass: {:?}", result);
+        assert!(
+            result.is_ok(),
+            "conf-scope project should pass: {:?}",
+            result
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -1513,7 +1530,11 @@ mod tests {
             .expect("init rules-scope project");
 
         let result = check_project(&dir, &default_opts(), &CheckComponents::default());
-        assert!(result.is_ok(), "rules-scope project should pass: {:?}", result);
+        assert!(
+            result.is_ok(),
+            "rules-scope project should pass: {:?}",
+            result
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -1758,10 +1779,7 @@ schemas = "models/schemas/*.wfs"
 
     #[test]
     fn missing_note_includes_config_when_set() {
-        assert_eq!(
-            missing_note("rules", &None),
-            "rules/ — (missing)"
-        );
+        assert_eq!(missing_note("rules", &None), "rules/ — (missing)");
         assert_eq!(
             missing_note("rules", &Some("models/rules/*/*.wfl".into())),
             "rules/ — (missing, config: models/rules/*/*.wfl)"
@@ -2045,7 +2063,11 @@ scenario with_use<seed=1> {
         // Configured path does not resolve — non-fatal (wpadm Miss semantics).
         let cfg_rules = Some("nonexistent/*.wfl".to_string());
         let cell = check_rules(&dir, &dir, &cfg_rules);
-        assert!(cell.ok, "missing external rules must not fail: {:?}", cell.msg);
+        assert!(
+            cell.ok,
+            "missing external rules must not fail: {:?}",
+            cell.msg
+        );
         assert!(cell.msg.as_deref().unwrap_or("").contains("missing"));
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -2086,7 +2108,13 @@ scenario with_use<seed=1> {
 
     #[test]
     fn truncate_path_relative() {
-        assert_eq!(truncate_path("./conf/wfusion.toml", 3), "./conf/wfusion.toml");
-        assert_eq!(truncate_path("./conf/wfusion.toml", 2), ".../conf/wfusion.toml");
+        assert_eq!(
+            truncate_path("./conf/wfusion.toml", 3),
+            "./conf/wfusion.toml"
+        );
+        assert_eq!(
+            truncate_path("./conf/wfusion.toml", 2),
+            ".../conf/wfusion.toml"
+        );
     }
 }

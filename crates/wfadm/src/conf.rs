@@ -8,11 +8,7 @@ use std::path::{Path, PathBuf};
 
 use clap::{Args, Subcommand};
 use wf_config::{ConfigVarContext, FusionConfig, FusionConfigLoader, parse_vars};
-
-use crate::project_remote::{
-    self, RemoteGroup, acquire_project_remote_lock, capture_project_remote_snapshot_with_group,
-    restore_project_remote_update,
-};
+use wf_project_remote::{self, RemoteGroup};
 
 const CONF_REL_PATH: &str = "conf/wfusion.toml";
 
@@ -91,8 +87,8 @@ fn run_conf_update(args: ConfUpdateArgs) -> Result<(), String> {
         json,
         group,
         |wr, ver, _group| match group {
-            Some(g) => project_remote::sync_project_remote_group(wr, g, &remote_conf, ver),
-            None => project_remote::sync_project_remote(wr, &remote_conf, ver),
+            Some(g) => wf_project_remote::sync_project_remote_group(wr, g, &remote_conf, ver),
+            None => wf_project_remote::sync_project_remote(wr, &remote_conf, ver),
         },
     )
 }
@@ -118,13 +114,14 @@ pub fn run_conf_update_from_repo(
         requested_version,
         false,
         None,
-        |wr, ver, _group| project_remote::sync_project_remote_from_repo(wr, repo_url, ver),
+        |wr, ver, _group| wf_project_remote::sync_project_remote_from_repo(wr, repo_url, ver),
     )
 }
 
-/// Shared update orchestration: lock → snapshot → sync → validate → rollback
-/// (on failure) → output. `sync_fn` decides how managed dirs are synced
-/// (from `[project_remote]` config or from an explicit `--repo` URL).
+/// CLI wrapper around `wf_project_remote::run_remote_update`: runs the full
+/// safe sync (lock → snapshot → sync → validate → rollback) and prints the
+/// result. `sync_fn` decides how managed dirs are synced (from
+/// `[project_remote]` config or from an explicit `--repo` URL).
 fn run_conf_update_with_sync<F>(
     work_root: &Path,
     requested_version: Option<&str>,
@@ -133,86 +130,13 @@ fn run_conf_update_with_sync<F>(
     sync_fn: F,
 ) -> Result<(), String>
 where
-    F: Fn(
+    F: FnOnce(
         &Path,
         Option<&str>,
         Option<RemoteGroup>,
-    ) -> Result<project_remote::ProjectRemoteUpdateResult, String>,
+    ) -> Result<wf_project_remote::ProjectRemoteUpdateResult, String>,
 {
-    tracing::info!(
-        domain = "sys",
-        "wfadm conf update start work_root={} requested_version={} json={} group={}",
-        work_root.display(),
-        requested_version.unwrap_or("(auto)"),
-        json,
-        group
-            .map(|g| match g {
-                RemoteGroup::Models => "models",
-                RemoteGroup::Infra => "infra",
-            })
-            .unwrap_or("-")
-    );
-
-    let _lock_guard = acquire_project_remote_lock(work_root)?;
-    let rollback_snapshot = capture_project_remote_snapshot_with_group(work_root, group)?;
-
-    let result = sync_fn(work_root, requested_version, group)?;
-    tracing::info!(
-        domain = "sys",
-        "wfadm conf update synced work_root={} current_version={} resolved_tag={} from_revision={} to_revision={} changed={}",
-        work_root.display(),
-        result.current_version,
-        result.resolved_tag,
-        result.from_revision.as_deref().unwrap_or("-"),
-        result.to_revision,
-        result.changed
-    );
-
-    // Validate: the newly synced config must load. On failure, roll back.
-    tracing::info!(
-        domain = "sys",
-        "wfadm conf update validate start work_root={} version={}",
-        work_root.display(),
-        result.current_version
-    );
-    if let Err(check_err) = validate_config_loads(work_root) {
-        tracing::warn!(
-            domain = "sys",
-            "wfadm conf update validate failed work_root={} current_version={} resolved_tag={} error={}",
-            work_root.display(),
-            result.current_version,
-            result.resolved_tag,
-            check_err
-        );
-        if let Err(rollback_err) =
-            restore_project_remote_update(work_root, &rollback_snapshot, result.changed)
-        {
-            tracing::warn!(
-                domain = "sys",
-                "wfadm conf update rollback failed work_root={} error={}",
-                work_root.display(),
-                rollback_err
-            );
-            return Err(format!(
-                "project check failed after update: {}; rollback failed: {}",
-                check_err, rollback_err
-            ));
-        }
-        tracing::info!(
-            domain = "sys",
-            "wfadm conf update rollback done work_root={} reverted_from_version={}",
-            work_root.display(),
-            result.current_version
-        );
-        return Err(format!("project check failed after update: {}", check_err));
-    }
-    tracing::info!(
-        domain = "sys",
-        "wfadm conf update validate passed work_root={} current_version={} resolved_tag={}",
-        work_root.display(),
-        result.current_version,
-        result.resolved_tag
-    );
+    let result = wf_project_remote::run_remote_update(work_root, requested_version, group, sync_fn)?;
 
     if json {
         let body = serde_json::to_string_pretty(&result)
@@ -254,18 +178,6 @@ fn load_project_remote_conf(
     Ok(config.project_remote)
 }
 
-/// Validation gate: the synced config must be loadable.
-///
-/// This mirrors the intent of wparse's `validate_load_model` (ensure the new
-/// rules/conf can be loaded by the engine) using wfusion's public config
-/// loader. Full rule-compilation validation requires a wf-runtime validate
-/// entry point (not yet public) and is tracked as a follow-up.
-fn validate_config_loads(work_root: &Path) -> Result<(), String> {
-    let conf_path = work_root.join(CONF_REL_PATH);
-    FusionConfig::load_with_context(&conf_path, &ConfigVarContext::new(), Some(work_root))
-        .map(|_| ())
-        .map_err(|e| format!("validate {} failed: {e}", conf_path.display()))
-}
 
 fn parse_group(raw: Option<&str>) -> Result<Option<RemoteGroup>, String> {
     match raw {

@@ -6,6 +6,7 @@ use std::convert::Infallible;
 use std::fs;
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::sync::Once;
 
@@ -67,6 +68,10 @@ struct AppState {
     /// the *same* `--config` path + `--overlay` files with the *same* `--var`
     /// context — not a hard-coded `wfusion.toml` with empty vars.
     config_source: ReloadConfigSource,
+    /// True while a reload (and optional remote sync) is in flight. Exposed via
+    /// `/runtime/status` as `reloading`, so callers can tell a reload is
+    /// ongoing even though `accepting` stays true.
+    reloading: Arc<AtomicBool>,
 }
 
 /// What `POST /admin/v1/reloads/model` re-reads on each request. Captured at
@@ -195,6 +200,7 @@ pub async fn start_if_enabled(
         version: env!("CARGO_PKG_VERSION").to_string(),
         control,
         config_source,
+        reloading: Arc::new(AtomicBool::new(false)),
     });
 
     let (shutdown_tx, shutdown_rx) = oneshot::channel();
@@ -422,16 +428,18 @@ async fn handle_request(
     match (method.clone(), path.as_str()) {
         (Method::GET, "/admin/v1/runtime/status") => {
             let accepting = !state.control.cancel_token().is_cancelled();
+            let reloading = state.reloading.load(Ordering::Relaxed);
             tracing::info!(
                 domain = "sys",
-                "admin api status request_id={} remote={} accepting={}",
+                "admin api status request_id={} remote={} accepting={} reloading={}",
                 request_id,
                 remote_addr,
-                accepting
+                accepting,
+                reloading
             );
             let body = format!(
-                r#"{{"instance_id":"{}","version":"{}","accepting":{}}}"#,
-                state.instance_id, state.version, accepting
+                r#"{{"instance_id":"{}","version":"{}","accepting":{},"reloading":{}}}"#,
+                state.instance_id, state.version, accepting, reloading
             );
             Ok(json_response(StatusCode::OK, &body))
         }
@@ -451,28 +459,42 @@ async fn handle_request(
 /// `POST /admin/v1/reloads/model` — hot-reload the rule set.
 ///
 /// Re-resolves the fusion config (raw + effective) from `work_root` and asks
-/// the running Reactor to apply it. The request body is ignored for now
-/// (reload always reads the on-disk config under `work_root`); a future
-/// `update_remote` field will gate an optional remote sync first.
+/// the running Reactor to apply it. Request body (JSON, all fields optional):
+///
+/// ```json
+/// { "full": false, "update_remote": false, "version": null }
+/// ```
+///
+/// - `full` — upgrade a blocked (requires-restart) reload to a graceful restart.
+/// - `update_remote` — sync managed dirs from the `[project_remote]` repo
+///   *before* re-reading the config, giving the end-to-end
+///   publish → daemon-sync → reload flow. Uses `wf_project_remote::run_remote_update`
+///   (lock → snapshot → sync → validate → rollback), the same path `wfadm conf
+///   update` takes.
+/// - `version` — target version for the remote sync (auto-resolved if absent).
+///
+/// An empty or unparseable body is treated as all-defaults (back-compatible
+/// with the old string-match behaviour).
 async fn handle_reload(
     req: Request<hyper::body::Incoming>,
     request_id: String,
     remote_addr: SocketAddr,
     state: Arc<AppState>,
 ) -> Response<Full<Bytes>> {
-    // Read the body (capped at 1 MiB), then look for `"full": true`.
+    // Read the body (capped at 1 MiB), then parse as JSON.
     const RELOAD_BODY_LIMIT: usize = 1024 * 1024;
-    let full = match Limited::new(req.into_body(), RELOAD_BODY_LIMIT)
+    let reload_req = match Limited::new(req.into_body(), RELOAD_BODY_LIMIT)
         .collect()
         .await
-        .map(|collected| {
+    {
+        Ok(collected) => {
             let bytes = collected.to_bytes();
-            std::str::from_utf8(&bytes)
-                .ok()
-                .map(|s| s.contains("\"full\": true") || s.contains("\"full\":true"))
-                .unwrap_or(false)
-        }) {
-        Ok(full) => full,
+            if bytes.is_empty() {
+                ReloadRequest::default()
+            } else {
+                serde_json::from_slice::<ReloadRequest>(&bytes).unwrap_or_default()
+            }
+        }
         Err(_) => {
             let body = format!(
                 r#"{{"request_id":"{}","accepted":false,"result":"error","error":"request body exceeds {} bytes"}}"#,
@@ -481,19 +503,54 @@ async fn handle_reload(
             return json_response(StatusCode::PAYLOAD_TOO_LARGE, &body);
         }
     };
+    let full = reload_req.full;
 
     tracing::info!(
         domain = "sys",
-        "admin api reload request_id={} remote={}",
+        "admin api reload request_id={} remote={} full={} update_remote={} version={}",
         request_id,
-        remote_addr
+        remote_addr,
+        full,
+        reload_req.update_remote,
+        reload_req.version.as_deref().unwrap_or("-")
     );
+
+    // Mark the engine as reloading for the duration of this request so
+    // `/runtime/status` can report `reloading:true`. Cleared on drop.
+    let _reloading = ReloadingGuard::new(&state.reloading);
+
+    let src = &state.config_source;
+
+    // Optional remote sync before re-reading the on-disk config.
+    if reload_req.update_remote {
+        match run_remote_sync(src, reload_req.version.as_deref()) {
+            Ok(()) => {
+                tracing::info!(
+                    domain = "sys",
+                    "admin api reload update_remote sync done request_id={}",
+                    request_id
+                );
+            }
+            Err(err) => {
+                tracing::warn!(
+                    domain = "sys",
+                    "admin api reload update_remote sync failed request_id={}: {err}",
+                    request_id
+                );
+                let body = format!(
+                    r#"{{"request_id":"{}","accepted":false,"result":"error","error":"remote update failed: {}"}}"#,
+                    request_id,
+                    json_escape(&err)
+                );
+                return json_response(StatusCode::BAD_GATEWAY, &body);
+            }
+        }
+    }
 
     // Re-resolve the config the engine booted from, using the *same* config
     // path / overlays / var context captured at boot — NOT a hard-coded
     // `wfusion.toml`. This keeps reload consistent with `--config`/`--overlay`/
     // `--var` (e.g. the default `conf/wfusion.toml`).
-    let src = &state.config_source;
     let loader = FusionConfigLoader::new(
         &src.config_path,
         &src.overlay_paths,
@@ -604,6 +661,68 @@ fn compile_reload_check(
     let _raw = loader.load_raw().map_err(|e| e.to_string())?;
     let _config = loader.load().map_err(|e| e.to_string())?;
     Ok(())
+}
+
+/// `POST /admin/v1/reloads/model` request body. All fields optional; an empty
+/// or unparseable body yields `Default` (no-op local reload).
+#[derive(serde::Deserialize, Default)]
+struct ReloadRequest {
+    #[serde(default)]
+    full: bool,
+    #[serde(default)]
+    update_remote: bool,
+    #[serde(default)]
+    version: Option<String>,
+}
+
+/// Sets `reloading=true` on construction and `false` on drop, so the flag
+/// always clears even if the reload errors or panics.
+struct ReloadingGuard<'a> {
+    flag: &'a AtomicBool,
+}
+
+impl<'a> ReloadingGuard<'a> {
+    fn new(flag: &'a AtomicBool) -> Self {
+        flag.store(true, Ordering::Relaxed);
+        Self { flag }
+    }
+}
+
+impl Drop for ReloadingGuard<'_> {
+    fn drop(&mut self) {
+        self.flag.store(false, Ordering::Relaxed);
+    }
+}
+
+/// Run the remote rule-source sync (publish → daemon-sync) before a reload.
+/// Loads `[project_remote]` from the booted config, then delegates to
+/// `wf_project_remote::run_remote_update` for lock → snapshot → sync →
+/// validate → rollback. The `version` is auto-resolved when `None`.
+fn run_remote_sync(src: &ReloadConfigSource, version: Option<&str>) -> Result<(), String> {
+    let loader = FusionConfigLoader::new(
+        &src.config_path,
+        &src.overlay_paths,
+        &src.config_ctx,
+        Some(&src.work_dir),
+    );
+    let remote_conf = loader
+        .load()
+        .map_err(|e| format!("failed to load config for [project_remote]: {e}"))?
+        .project_remote;
+    if !remote_conf.enabled {
+        return Err(
+            "update_remote requested but [project_remote] is disabled in config".to_string(),
+        );
+    }
+    wf_project_remote::run_remote_update(
+        &src.work_dir,
+        version,
+        None,
+        |work_root, ver, _group| {
+            wf_project_remote::sync_project_remote(work_root, &remote_conf, ver)
+        },
+    )
+    .map(|_| ())
 }
 
 /// Escape a string for safe embedding in a JSON string literal.

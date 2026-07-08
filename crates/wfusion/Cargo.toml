@@ -14,9 +14,12 @@ wf-runtime.workspace = true
 wp-connectors.workspace = true
 wp-core-connectors.workspace = true
 wf-config.workspace = true
+wf-project-remote = { workspace = true }
 orion-error.workspace = true
 clap = { workspace = true }
 tracing = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
 moju-derive = { git = "https://github.com/dayu-sec/moju-derive.git", branch = "main" }
 hyper = { version = "1", features = ["server", "http1"] }
 hyper-util = { version = "0.1", features = ["server-auto", "tokio"] }
@@ -30,3 +33,4 @@ tokio-util = { version = "0.7", default-features = false, features = ["rt"] }
 tempfile = "3"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 serde_json = "1"
+wf-project-remote = { workspace = true, features = ["test-support"] }

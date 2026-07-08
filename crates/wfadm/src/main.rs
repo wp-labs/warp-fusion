@@ -4,7 +4,6 @@ mod connectors;
 mod engine;
 mod init;
 pub(crate) mod init_tpl;
-mod project_remote;
 mod self_update;
 
 use clap::{Parser, Subcommand};
@@ -47,8 +46,8 @@ enum Commands {
         #[command(subcommand)]
         command: conf::ConfCmd,
     },
-    /// Check project integrity
-    Check,
+    /// Check project integrity (conf/sources/connectors/sinks/rules/schemas/scenarios)
+    Check(check::CheckArgs),
     /// Engine management (status/reload)
     Engine {
         #[command(subcommand)]
@@ -71,7 +70,7 @@ fn main() {
             version,
         } => cmd_init(name, dir, mode, repo, version),
         Commands::Conf { command } => conf::run(command),
-        Commands::Check => check::run(),
+        Commands::Check(args) => check::run(args),
         Commands::Engine { command } => engine::run(command),
         Commands::SelfUpdate => self_update::run(),
     };

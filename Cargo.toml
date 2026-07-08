@@ -1,6 +1,6 @@
 [workspace]
-members = ["crates/wfusion", "crates/wfgen", "crates/wfl", "crates/wfadm"]
-default-members = ["crates/wfusion", "crates/wfgen", "crates/wfl", "crates/wfadm"]
+members = ["crates/wfusion", "crates/wfgen", "crates/wfl", "crates/wfadm", "crates/wf-project-remote"]
+default-members = ["crates/wfusion", "crates/wfgen", "crates/wfl", "crates/wfadm", "crates/wf-project-remote"]
 resolver = "2"
 
 [workspace.package]
@@ -25,6 +25,8 @@ wf-runtime = { git = "https://github.com/wp-labs/wp-reactor.git", tag = "v0.1.25
 #wf-lang = { path = "../wp-reactor/crates/wf-lang" }
 #wf-runtime = { path = "../wp-reactor/crates/wf-runtime" }
 # @gxl:end(local_reactor)
+
+wf-project-remote = { path = "crates/wf-project-remote" }
 
 
 wf-connector-api =  "0.2"

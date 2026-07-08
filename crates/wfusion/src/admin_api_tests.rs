@@ -1068,3 +1068,84 @@ async fn reload_full_true_broken_config_returns_error_not_restart() {
     assert_eq!(body["result"], "error");
     servant.shutdown().await;
 }
+
+#[tokio::test]
+async fn status_includes_reloading_field() {
+    let (_temp, base, servant) = boot_engine_with_admin(BRUTE_FORCE_RULE).await;
+    let client = reqwest::Client::builder().no_proxy().build().unwrap();
+    let resp = client
+        .get(format!("{base}/admin/v1/runtime/status"))
+        .bearer_auth("test-token")
+        .send()
+        .await
+        .expect("get status");
+    assert_eq!(resp.status(), reqwest::StatusCode::OK);
+    let body: serde_json::Value = resp.json().await.expect("json");
+    assert!(body.get("reloading").is_some(), "status must include reloading");
+    assert_eq!(body["reloading"], false);
+    servant.shutdown().await;
+}
+
+#[tokio::test]
+async fn reload_update_remote_disabled_returns_502() {
+    // No [project_remote] in the fixture config → update_remote is rejected.
+    let (_temp, base, servant) = boot_engine_with_admin(BRUTE_FORCE_RULE).await;
+    let client = reqwest::Client::builder().no_proxy().build().unwrap();
+    let resp = client
+        .post(format!("{base}/admin/v1/reloads/model"))
+        .bearer_auth("test-token")
+        .body(r#"{"update_remote": true}"#)
+        .send()
+        .await
+        .expect("post");
+    assert_eq!(resp.status(), reqwest::StatusCode::BAD_GATEWAY);
+    let body: serde_json::Value = resp.json().await.expect("json");
+    assert_eq!(body["accepted"], false);
+    assert_eq!(body["result"], "error");
+    let err = body["error"].as_str().expect("error string");
+    assert!(
+        err.contains("disabled"),
+        "expected disabled error, got: {err}"
+    );
+    servant.shutdown().await;
+}
+
+#[tokio::test]
+async fn reload_update_remote_unknown_version_returns_502() {
+    // [project_remote] points at a real local git remote; requesting a
+    // non-existent version makes the in-process sync fail → 502. This proves
+    // the daemon invokes the full run_remote_update path (git fetch + version
+    // resolution) before reload.
+    let remote = wf_project_remote::test_support::create_remote_fixture();
+    let (temp, base, servant) = boot_engine_with_admin(BRUTE_FORCE_RULE).await;
+    append_project_remote(temp.path(), remote.repo_url(), "1.4.2");
+
+    let client = reqwest::Client::builder().no_proxy().build().unwrap();
+    let resp = client
+        .post(format!("{base}/admin/v1/reloads/model"))
+        .bearer_auth("test-token")
+        .body(r#"{"update_remote": true, "version": "9.9.9"}"#)
+        .send()
+        .await
+        .expect("post");
+    assert_eq!(resp.status(), reqwest::StatusCode::BAD_GATEWAY);
+    let body: serde_json::Value = resp.json().await.expect("json");
+    assert_eq!(body["accepted"], false);
+    assert_eq!(body["result"], "error");
+    servant.shutdown().await;
+}
+
+/// Append an enabled single-repo `[project_remote]` section to the fixture's
+/// `wfusion.toml` (run_remote_sync re-reads the file from disk). Uses a TOML
+/// literal string for the repo path to avoid escaping.
+fn append_project_remote(root: &Path, repo_url: &str, init_version: &str) {
+    let path = root.join("wfusion.toml");
+    let mut content = std::fs::read_to_string(&path).unwrap();
+    if !content.ends_with('\n') {
+        content.push('\n');
+    }
+    content.push_str(&format!(
+        "\n[project_remote]\nenabled = true\nrepo = '{repo_url}'\ninit_version = '{init_version}'\n"
+    ));
+    std::fs::write(&path, content).unwrap();
+}

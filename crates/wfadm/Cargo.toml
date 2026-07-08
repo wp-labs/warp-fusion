@@ -22,9 +22,8 @@ ureq = { workspace = true }
 flate2 = { workspace = true }
 tar = { workspace = true }
 walkdir = { workspace = true }
-git2 = { workspace = true }
-semver = { workspace = true }
-libc = { workspace = true }
+comfy-table = { version = "7", default-features = false }
+wf-project-remote = { workspace = true }
 tracing = { workspace = true }
 
 [dev-dependencies]

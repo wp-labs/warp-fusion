@@ -12,19 +12,19 @@ use tempfile::{TempDir, tempdir};
 
 use wf_config::project_remote::{ProjectRemoteConf, RepoGroupConf};
 
-pub(super) struct RemoteFixture {
+pub struct RemoteFixture {
     _temp: TempDir,
     remote_path: PathBuf,
 }
 
 impl RemoteFixture {
-    pub(super) fn repo_url(&self) -> &str {
+    pub fn repo_url(&self) -> &str {
         self.remote_path.to_str().expect("repo path utf8")
     }
 }
 
 /// Single-repo remote with two releases: v1.4.2 (init) and v1.4.3 (latest).
-pub(super) fn create_remote_fixture() -> RemoteFixture {
+pub fn create_remote_fixture() -> RemoteFixture {
     let temp = tempdir().expect("tempdir");
     let repo = Repository::init(temp.path()).expect("init remote repo");
     fs::create_dir_all(temp.path().join("models")).expect("create models dir");
@@ -45,7 +45,7 @@ pub(super) fn create_remote_fixture() -> RemoteFixture {
 }
 
 /// Remote with no release tags — exercises HEAD fallback.
-pub(super) fn create_remote_fixture_without_tags() -> RemoteFixture {
+pub fn create_remote_fixture_without_tags() -> RemoteFixture {
     let temp = tempdir().expect("tempdir");
     let repo = Repository::init(temp.path()).expect("init remote repo");
     fs::create_dir_all(temp.path().join("models")).expect("create models dir");
@@ -60,12 +60,12 @@ pub(super) fn create_remote_fixture_without_tags() -> RemoteFixture {
     }
 }
 
-pub(super) fn create_work_root(_remote: &RemoteFixture) -> TempDir {
+pub fn create_work_root(_remote: &RemoteFixture) -> TempDir {
     tempdir().expect("tempdir")
 }
 
 /// Single-repo `ProjectRemoteConf` pointing at `repo_url` with `init_version`.
-pub(super) fn single_conf(repo_url: &str, init_version: &str) -> ProjectRemoteConf {
+pub fn single_conf(repo_url: &str, init_version: &str) -> ProjectRemoteConf {
     ProjectRemoteConf {
         enabled: true,
         repo: repo_url.to_string(),
@@ -76,7 +76,7 @@ pub(super) fn single_conf(repo_url: &str, init_version: &str) -> ProjectRemoteCo
 }
 
 /// Dual-repo `ProjectRemoteConf`.
-pub(super) fn dual_conf(models_repo_url: &str, infra_repo_url: &str) -> ProjectRemoteConf {
+pub fn dual_conf(models_repo_url: &str, infra_repo_url: &str) -> ProjectRemoteConf {
     ProjectRemoteConf {
         enabled: true,
         repo: String::new(),
@@ -92,20 +92,20 @@ pub(super) fn dual_conf(models_repo_url: &str, infra_repo_url: &str) -> ProjectR
     }
 }
 
-pub(super) fn write_model_version(work_root: &Path, version: &str) {
+pub fn write_model_version(work_root: &Path, version: &str) {
     fs::create_dir_all(work_root.join("models")).expect("create current models");
     fs::write(work_root.join("models/version.txt"), format!("{version}\n"))
         .expect("write current version");
 }
 
-pub(super) fn create_empty_managed_dirs(work_root: &Path) {
+pub fn create_empty_managed_dirs(work_root: &Path) {
     fs::create_dir_all(work_root.join("conf")).expect("create conf dir");
     fs::create_dir_all(work_root.join("models")).expect("create current models");
     fs::create_dir_all(work_root.join("topology")).expect("create topology dir");
     fs::create_dir_all(work_root.join("connectors")).expect("create connectors dir");
 }
 
-pub(super) fn write_runtime_local_dirs(work_root: &Path) {
+pub fn write_runtime_local_dirs(work_root: &Path) {
     fs::create_dir_all(work_root.join("runtime")).expect("create runtime");
     fs::create_dir_all(work_root.join("data")).expect("create data");
     fs::write(work_root.join("runtime/admin_api.token"), "token\n").expect("write token");
@@ -148,7 +148,7 @@ fn tag_head(repo: &Repository, tag: &str) {
 
 // ── dual-repo fixtures ────────────────────────────────────────────────
 
-pub(super) fn create_models_remote_fixture() -> RemoteFixture {
+pub fn create_models_remote_fixture() -> RemoteFixture {
     let temp = tempdir().expect("tempdir");
     let repo = Repository::init(temp.path()).expect("init models remote repo");
     fs::create_dir_all(temp.path().join("models")).expect("create models dir");
@@ -166,7 +166,7 @@ pub(super) fn create_models_remote_fixture() -> RemoteFixture {
     }
 }
 
-pub(super) fn create_infra_remote_fixture() -> RemoteFixture {
+pub fn create_infra_remote_fixture() -> RemoteFixture {
     let temp = tempdir().expect("tempdir");
     let repo = Repository::init(temp.path()).expect("init infra remote repo");
     fs::create_dir_all(temp.path().join("conf")).expect("create conf dir");
@@ -194,7 +194,7 @@ pub(super) fn create_infra_remote_fixture() -> RemoteFixture {
     }
 }
 
-pub(super) fn create_dual_work_root(
+pub fn create_dual_work_root(
     _models_remote: &RemoteFixture,
     _infra_remote: &RemoteFixture,
 ) -> TempDir {

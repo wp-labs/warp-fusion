@@ -19,7 +19,8 @@ pub enum EngineCommands {
         #[arg(long)]
         json: bool,
     },
-    /// Trigger model reload (TODO: not yet implemented in engine)
+    /// Trigger model reload via the daemon admin API
+    #[command(disable_version_flag = true)]
     Reload {
         #[arg(short, long, default_value = "conf/wfusion.toml")]
         config: PathBuf,
@@ -27,6 +28,15 @@ pub enum EngineCommands {
         admin_url: Option<String>,
         #[arg(long)]
         token_file: Option<PathBuf>,
+        /// Sync managed dirs from `[project_remote]` before reloading
+        #[arg(long)]
+        update_remote: bool,
+        /// Target version for the remote sync (auto-resolved if omitted)
+        #[arg(long, requires = "update_remote")]
+        version: Option<String>,
+        /// Upgrade a blocked (requires-restart) reload to a graceful restart
+        #[arg(long)]
+        full: bool,
         #[arg(long)]
         json: bool,
     },
@@ -46,8 +56,19 @@ pub fn run(command: EngineCommands) -> Result<(), String> {
             config,
             admin_url,
             token_file,
+            update_remote,
+            version,
+            full,
             json,
-        } => cmd_reload(&config, admin_url.as_deref(), token_file.as_deref(), json),
+        } => cmd_reload(
+            &config,
+            admin_url.as_deref(),
+            token_file.as_deref(),
+            update_remote,
+            version.as_deref(),
+            full,
+            json,
+        ),
     }
 }
 
@@ -176,14 +197,64 @@ fn cmd_status(
     Ok(())
 }
 
-// ── Reload (stub) ─────────────────────────────────────────────────────
+// ── Reload ─────────────────────────────────────────────────────────────
 
 fn cmd_reload(
     config_path: &Path,
     admin_url: Option<&str>,
     token_file: Option<&Path>,
-    _json: bool,
+    update_remote: bool,
+    version: Option<&str>,
+    full: bool,
+    json: bool,
 ) -> Result<(), String> {
-    let _target = resolve_target(config_path, admin_url, token_file)?;
-    Err("engine reload not yet implemented (engine admin API reload endpoint pending)".to_string())
+    let target = resolve_target(config_path, admin_url, token_file)?;
+    let url = format!("{}/admin/v1/reloads/model", target.base_url);
+
+    let body = serde_json::json!({
+        "full": full,
+        "update_remote": update_remote,
+        "version": version,
+    });
+    let resp = ureq::post(&url)
+        .header("Authorization", &format!("Bearer {}", target.token))
+        .header("Accept", "application/json")
+        .send(body.to_string())
+        .map_err(|e| format!("request failed: {e}"))?;
+
+    let status = resp.status();
+    let resp_body = resp
+        .into_body()
+        .read_to_string()
+        .map_err(|e| format!("read response: {e}"))?;
+
+    if json {
+        // Forward the daemon's JSON response verbatim.
+        println!("{resp_body}");
+    } else {
+        let val: serde_json::Value =
+            serde_json::from_str(&resp_body).map_err(|e| format!("parse response JSON: {e}"))?;
+        println!("Engine reload");
+        println!("  Endpoint : {}", target.base_url);
+        if let Some(r) = val.get("result").and_then(|v| v.as_str()) {
+            println!("  Result   : {r}");
+        }
+        if let Some(a) = val.get("accepted").and_then(|v| v.as_bool()) {
+            println!("  Accepted : {a}");
+        }
+        if let Some(h) = val.get("hot_reload").and_then(|v| v.as_u64()) {
+            println!("  Hot swap : {h} rule(s)");
+        }
+        if let Some(rr) = val.get("requires_restart").and_then(|v| v.as_u64()) {
+            println!("  Restart  : {rr} blocker(s)");
+        }
+        if let Some(e) = val.get("error").and_then(|v| v.as_str()) {
+            println!("  Error    : {e}");
+        }
+    }
+
+    if !status.is_success() {
+        return Err(format!("HTTP {status}"));
+    }
+    Ok(())
 }

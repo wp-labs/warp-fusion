@@ -14,6 +14,7 @@ use std::path::Path;
 use git2::Oid;
 use serde::{Deserialize, Serialize};
 use wf_config::project_remote::{ProjectRemoteConf, RepoGroupConf};
+use wf_config::{ConfigVarContext, FusionConfig};
 
 mod managed;
 mod repo;
@@ -62,20 +63,20 @@ pub struct ProjectRemoteUpdateResult {
 
 #[derive(Debug, Clone)]
 pub struct ProjectRemoteSnapshot {
-    pub(super) state_file: Option<Vec<u8>>,
+    pub(crate) state_file: Option<Vec<u8>>,
     pub group: Option<RemoteGroup>,
 }
 
 #[derive(Debug, Clone)]
 #[allow(dead_code)]
 pub struct ProjectRuntimeArtifactSnapshot {
-    pub(super) rule_mapping: Option<Vec<u8>>,
+    pub(crate) rule_mapping: Option<Vec<u8>>,
     authority_db: Option<Vec<u8>>,
 }
 
 #[derive(Debug)]
 pub struct ProjectRemoteLockGuard {
-    pub(super) file: fs::File,
+    pub(crate) file: fs::File,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -227,6 +228,105 @@ pub fn sync_project_remote_from_repo<P: AsRef<Path>>(
         return Err(project_remote_repo_required_err());
     }
     sync_project_remote_with_repo_inner(work_root, repo_url, requested_version, None, None)
+}
+
+/// Validate that `conf/wfusion.toml` under `work_root` loads as a fusion
+/// config (the post-sync safety gate). Used by [`run_remote_update`] and
+/// reusable by callers (e.g. the daemon) that want the same check.
+pub fn validate_config_loads(work_root: &Path) -> Result<(), String> {
+    let conf_path = work_root.join("conf").join("wfusion.toml");
+    FusionConfig::load_with_context(&conf_path, &ConfigVarContext::new(), Some(work_root))
+        .map(|_| ())
+        .map_err(|e| format!("validate {} failed: {e}", conf_path.display()))
+}
+
+/// Full safe remote-update orchestration: acquire lock → snapshot → `sync_fn`
+/// → validate the synced config loads → roll back the snapshot on validation
+/// failure. Returns the sync result on success.
+///
+/// `sync_fn` decides *how* managed dirs are synced (single-repo / group /
+/// explicit repo URL) and is invoked as `sync_fn(work_root, version, group)`.
+/// CLI/daemon output is the caller's responsibility — this function only
+/// performs the side-effecting sync + validation + rollback and logs via
+/// `tracing`.
+pub fn run_remote_update<F>(
+    work_root: &Path,
+    requested_version: Option<&str>,
+    group: Option<RemoteGroup>,
+    sync_fn: F,
+) -> Result<ProjectRemoteUpdateResult, String>
+where
+    F: FnOnce(&Path, Option<&str>, Option<RemoteGroup>) -> Result<ProjectRemoteUpdateResult, String>,
+{
+    tracing::info!(
+        domain = "sys",
+        "project remote update start work_root={} requested_version={} group={}",
+        work_root.display(),
+        requested_version.unwrap_or("(auto)"),
+        group
+            .map(|g| match g {
+                RemoteGroup::Models => "models",
+                RemoteGroup::Infra => "infra",
+            })
+            .unwrap_or("-")
+    );
+
+    let _lock_guard = acquire_project_remote_lock(work_root)?;
+    let rollback_snapshot = capture_project_remote_snapshot_with_group(work_root, group)?;
+
+    let result = sync_fn(work_root, requested_version, group)?;
+    tracing::info!(
+        domain = "sys",
+        "project remote update synced work_root={} current_version={} resolved_tag={} from_revision={} to_revision={} changed={}",
+        work_root.display(),
+        result.current_version,
+        result.resolved_tag,
+        result.from_revision.as_deref().unwrap_or("-"),
+        result.to_revision,
+        result.changed
+    );
+
+    // Validate: the newly synced config must load. On failure, roll back.
+    if let Err(check_err) = validate_config_loads(work_root) {
+        tracing::warn!(
+            domain = "sys",
+            "project remote update validate failed work_root={} current_version={} resolved_tag={} error={}",
+            work_root.display(),
+            result.current_version,
+            result.resolved_tag,
+            check_err
+        );
+        if let Err(rollback_err) =
+            restore_project_remote_update(work_root, &rollback_snapshot, result.changed)
+        {
+            tracing::warn!(
+                domain = "sys",
+                "project remote update rollback failed work_root={} error={}",
+                work_root.display(),
+                rollback_err
+            );
+            return Err(format!(
+                "project check failed after update: {}; rollback failed: {}",
+                check_err, rollback_err
+            ));
+        }
+        tracing::info!(
+            domain = "sys",
+            "project remote update rollback done work_root={} reverted_from_version={}",
+            work_root.display(),
+            result.current_version
+        );
+        return Err(format!("project check failed after update: {}", check_err));
+    }
+    tracing::info!(
+        domain = "sys",
+        "project remote update validate passed work_root={} current_version={} resolved_tag={}",
+        work_root.display(),
+        result.current_version,
+        result.resolved_tag
+    );
+
+    Ok(result)
 }
 
 #[allow(dead_code)]
@@ -521,15 +621,15 @@ fn requested_version_not_found_err(version: &str) -> String {
     format!("requested version '{}' was not found", version)
 }
 
-pub(super) fn conf_err_source<E>(message: impl Into<String>, source: E) -> String
+pub(crate) fn conf_err_source<E>(message: impl Into<String>, source: E) -> String
 where
     E: std::error::Error + Send + Sync + 'static,
 {
     format!("{}: {source}", message.into())
 }
 
-#[cfg(test)]
-mod test_support;
+#[cfg(any(test, feature = "test-support"))]
+pub mod test_support;
 
 #[cfg(test)]
 #[path = "tests.rs"]

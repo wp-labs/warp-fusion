@@ -1,6 +1,6 @@
 [package]
 name = "wfusion"
-version = "0.1.26" #@gxl:set(version)
+version = "0.1.27" #@gxl:set(version)
 edition.workspace = true
 license.workspace = true
 

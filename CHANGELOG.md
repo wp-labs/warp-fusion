@@ -2,18 +2,20 @@
 
 All notable changes to wfusion will be documented in this file.
 
-## [0.1.25 Unreleased]
+## [0.1.26 Unreleased]
 
 ### 依赖与语言能力
 
-- **依赖**: `wf-engine` / `wf-config` / `wf-lang` / `wf-data` / `wf-runtime` 对齐 `wp-reactor` v0.1.27。
+- **依赖**: `wf-engine` / `wf-config` / `wf-lang` / `wf-data` / `wf-runtime` 对齐 `wp-reactor` v0.1.28。
 - **WFL helper**: `wfl` / `wfusion` 通过 `wp-reactor` 新增规则表达式 helper 支持：`now()`、`now_s()`、`now_ms()`、`now_us()`、`now_ns()`、`is_blank()`、`null_if_blank()`、`default_if_blank()`、`md5()`、`sha1()`、`sha256()`、`hex()`、`stable_id()`。
 - **时间语义**: `now_*` 在同一条输出记录内复用同一个内部时间戳，避免 `created_time` / `created_ns` 等字段在同一 alert 中出现漂移。
 - **稳定 ID**: `stable_id()` 使用带类型和长度的稳定编码参与 SHA-256，避免简单拼接输入导致的歧义。
+- **WFL 诊断**: `wfl` / `wfusion` 通过 `wp-reactor` 新增源码感知的 WFL 解析与语义编译诊断，发布失败时输出文件路径、诊断类别、规则/测试上下文、行列号和源码片段。
+- **Topology 诊断**: `wfusion` 启动/重载时的 intermediate topology cycle 错误现在会尽量定位到对应规则源码，便于排查跨规则 yield 依赖环。
 
 ### 发布元数据
 
-- **版本**: CLI crate 版本推进到 `0.1.25`，stable update manifest 指向 `v0.1.24` 发布包。
+- **版本**: CLI crate 版本推进到 `0.1.26`，stable update manifest 指向 `v0.1.25` 发布包。
 
 ## [0.1.24] — 2026-07-09
 

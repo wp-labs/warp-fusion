@@ -1,6 +1,6 @@
 // 网络流事件 — 覆盖流量/连接类规则（扫描、横向、C2、外发）
 window conn_events {
-    stream = "conn_events"
+    stream_tag = "conn_events"
     time = event_time
     over = 30m
     fields {

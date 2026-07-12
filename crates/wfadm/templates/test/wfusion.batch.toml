@@ -12,7 +12,7 @@ connect = "file_src"
 enable = true
 name = "seed_conn_events"
 path = "data/generated/port_scan_quick.jsonl"
-stream = "conn_events"
+stream_tag = "conn_events"
 data_format = "ndjson"
 
 [runtime]

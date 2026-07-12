@@ -1,6 +1,6 @@
 // DNS 事件 — 覆盖 DGA / DNS 隧道 / 信标域名
 window dns_events {
-    stream = "dns_events"
+    stream_tag = "dns_events"
     time = event_time
     over = 10m
     fields {

@@ -1,0 +1,13 @@
+[[connectors]]
+allow_override = ["endpoint", "database", "table", "user", "password", "timeout_secs", "timeout", "max_retries", "retries", "headers", "protocol"]
+id = "doris_sink"
+type = "doris"
+
+[connectors.params]
+database = "wp_data"
+endpoint = "http://localhost:8040"
+max_retries = 3
+password = ""
+table = "wp_events"
+timeout_secs = 60
+user = "root"

@@ -517,7 +517,7 @@ sinks = "sinks"
 type = "file"
 name = "seed"
 path = "seed.ndjson"
-stream = "syslog"
+stream_tag = "syslog"
 data_format = "ndjson"
 
 [runtime]
@@ -552,7 +552,7 @@ FAIL_THRESHOLD = "3"
 
 const SECURITY_SCHEMA: &str = r#"
 window auth_events {
-    stream = "syslog"
+    stream_tag = "syslog"
     time = event_time
     over = 5m
 
@@ -1252,7 +1252,7 @@ sinks = "sinks"
 type = "file"
 name = "seed"
 path = "seed.ndjson"
-stream = "syslog"
+stream_tag = "syslog"
 data_format = "ndjson"
 
 [runtime]
@@ -1289,7 +1289,7 @@ sinks = "sinks"
 type = "file"
 name = "seed"
 path = "seed.ndjson"
-stream = "syslog"
+stream_tag = "syslog"
 data_format = "ndjson"
 
 [runtime]

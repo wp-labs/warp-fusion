@@ -1,7 +1,7 @@
 connect = "tcp_src"
 enable = true
 key = "ingress"
-stream = ""
+stream_tag = ""
 addr = "127.0.0.1"
 port = "9800"
 framing = "len"

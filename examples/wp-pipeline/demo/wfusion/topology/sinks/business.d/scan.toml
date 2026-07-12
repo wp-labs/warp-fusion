@@ -2,9 +2,10 @@ version = "1.0"
 [sink_group]
 name = "scan_out"
 windows = ["scan_alerts"]
+wf_meta_disable = ["__wfu_rule_name"]
 [[sink_group.sinks]]
 connect = "file_json_sink"
 name = "scan_json"
 [sink_group.sinks.params]
-base = "../data/out_dat/alerts"
+base = "../data/alerts"
 file = "scan.ndjson"

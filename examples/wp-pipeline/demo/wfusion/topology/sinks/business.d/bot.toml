@@ -6,5 +6,5 @@ windows = ["bot_alerts"]
 connect = "file_json_sink"
 name = "bot_file"
 [sink_group.sinks.params]
-base = "../data/out_dat/alerts"
+base = "../data/alerts"
 file = "bot.ndjson"

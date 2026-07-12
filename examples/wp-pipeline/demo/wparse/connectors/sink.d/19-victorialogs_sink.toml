@@ -1,9 +1,0 @@
-[[connectors]]
-allow_override = ["endpoint", "api_path", "timestamp_field", "timeout_secs", "tags"]
-id = "victorialogs_sink"
-type = "victorialogs"
-
-[connectors.params]
-api_path = "/insert/jsonline"
-endpoint = "http://127.0.0.1:9428"
-timeout_secs = 60

@@ -44,6 +44,45 @@ file = "alerts.ndjson"
 | `name` | sink 实例名 |
 | `params` | connector 特定参数 |
 
+## 禁用 wfusion 元字段输出
+
+规则告警输出会附带 wfusion 管理的元字段，字段名前缀为 `__wfu_`，例如：
+
+- `__wfu_rule_name`
+- `__wfu_score`
+- `__wfu_entity_type`
+- `__wfu_entity_id`
+- `__wfu_origin`
+- `__wfu_close_reason`
+- `__wfu_fired_at`
+- `__wfu_emit_time`
+- `__wfu_summary`
+
+如果某个 sink group 不希望输出其中一部分元字段，可以在 `[sink_group]` 中配置
+`wf_meta_disable`：
+
+```toml
+[sink_group]
+name = "alerts"
+windows = ["security_alerts"]
+wf_meta_disable = ["__wfu_rule_name"]
+
+[[sink_group.sinks]]
+connect = "file_json_sink"
+name = "alerts_out"
+[sink_group.sinks.params]
+file = "alerts.ndjson"
+```
+
+`wf_meta_disable` 只允许填写 `__wfu_` 前缀的字段。运行时不会删除业务字段；它会在发送
+record 前把匹配的 wfusion 元字段标记为 `Ignore`，由 sink 编码阶段跳过输出。
+
+如果 sink 同时配置了 `fields` 投影，执行顺序是先按 `fields` 投影，再应用
+`wf_meta_disable`。因此：
+
+- `fields` 用于选择要输出哪些字段。
+- `wf_meta_disable` 用于在该 sink group 中屏蔽指定 `__wfu_*` 元字段。
+
 ## 基础设施
 
 ### Default（兜底）

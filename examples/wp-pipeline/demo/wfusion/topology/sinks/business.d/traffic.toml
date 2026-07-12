@@ -6,5 +6,5 @@ windows = ["traffic_alerts"]
 connect = "file_json_sink"
 name = "traffic_json"
 [sink_group.sinks.params]
-base = "../data/out_dat/alerts"
+base = "../data/alerts"
 file = "traffic.ndjson"

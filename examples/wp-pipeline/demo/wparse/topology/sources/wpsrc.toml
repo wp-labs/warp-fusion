@@ -6,6 +6,7 @@ tags = []
 
 [sources.params]
 encode = "text"
+base = "../data/in_dat"
 file = "gen*.dat"
 
 [[sources]]

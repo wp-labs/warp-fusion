@@ -6,5 +6,5 @@ windows = ["error_alerts"]
 connect = "file_json_sink"
 name = "error_burst_json"
 [sink_group.sinks.params]
-base = "../data/out_dat/alerts"
+base = "../data/alerts"
 file = "error_burst.ndjson"

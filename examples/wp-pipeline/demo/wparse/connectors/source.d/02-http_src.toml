@@ -1,8 +1,0 @@
-[[connectors]]
-allow_override = ["port", "path"]
-id = "http_src"
-type = "http"
-
-[connectors.params]
-path = "/ingest"
-port = 18080

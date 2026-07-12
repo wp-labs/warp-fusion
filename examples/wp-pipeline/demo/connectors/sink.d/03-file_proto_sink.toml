@@ -1,9 +1,0 @@
-[[connectors]]
-allow_override = ["base", "file"]
-id = "file_proto_sink"
-type = "file"
-
-[connectors.params]
-base = "./data/out_dat"
-file = "default.proto"
-fmt = "proto-text"

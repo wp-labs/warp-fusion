@@ -1,3 +1,0 @@
-[[connectors]]
-id = "blackhole_sink"
-type = "blackhole"

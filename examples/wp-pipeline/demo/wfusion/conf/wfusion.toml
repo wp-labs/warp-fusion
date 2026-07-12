@@ -1,13 +1,13 @@
 
-sources_dir = "../topology/sources"
-sinks = "../topology/sinks"
-windows = "../models/windows.toml"
+sources_dir = "topology/sources"
+sinks = "topology/sinks"
+windows = "../../models/windows.toml"
 
 [runtime]
 executor_parallelism = 4
 rule_exec_timeout = "30s"
-schemas = "../models/schemas/*.wfs"
-rules = "../rules/wfl/*.wfl"
+schemas = "../../models/schemas/*.wfs"
+rules = "../../models/wfl/*.wfl"
 
 [logging]
 level = "info"

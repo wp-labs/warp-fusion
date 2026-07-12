@@ -1,9 +1,0 @@
-[[connectors]]
-allow_override = ["endpoint", "insert_path", "fmt"]
-id = "victorialog_sink"
-type = "victorialogs"
-
-[connectors.params]
-endpoint = "http://localhost:8481"
-fmt = "json"
-insert_path = "/insert/json"

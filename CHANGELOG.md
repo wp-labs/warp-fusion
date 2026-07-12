@@ -13,9 +13,33 @@ All notable changes to wfusion will be documented in this file.
 - **WFL 诊断**: `wfl` / `wfusion` 通过 `wp-reactor` 新增源码感知的 WFL 解析与语义编译诊断，发布失败时输出文件路径、诊断类别、规则/测试上下文、行列号和源码片段。
 - **Topology 诊断**: `wfusion` 启动/重载时的 intermediate topology cycle 错误现在会尽量定位到对应规则源码，便于排查跨规则 yield 依赖环。
 
+### Stream / Window 分发
+
+- **WFS**: 示例与文档统一使用 `window.stream_tag` 作为输入数据到 window 的分发键，替换旧 `stream` 表达。
+- **wparse 对接**: `warp-parse -> warp-fusion` 的非 Arrow framed 输出 carrier 对齐为 `wp_oml_name`，用于承载 OML `name` / `full_name`；不再使用旧 `wp_stream_tag`。
+- **Arrow framed**: `examples/wp-pipeline/streaming` 移除 wparse sink 中手写的固定 `tag = "nginx_access"`，改为依赖上游 OML name 自动写入 Arrow frame tag；wfusion source 未配置固定 `stream_tag` 时按 frame tag 路由。
+- **Sink 路由修复**: 修正 `examples/wp-pipeline` 中 `error_burst` sink 订阅不存在的 `error_burst_alerts` window，改为订阅 schema 中实际声明的 `error_alerts`。
+
+### 示例与文档
+
+- **新增示例**: `examples/rules/single_stream_multi_window`，演示一个固定 `stream_tag = "netflow"` 同时投递到多个 window。
+- **新增示例**: `examples/rules/multi_stream_multi_window`，演示一个 source 中混合多个 `wp_oml_name`，通过 `stream_tag_field = "wp_oml_name"` 动态分发到多个 window。
+- **示例脚本**: 为 single-stream / multi-stream 示例增加 `run.sh`，并接入 `examples/rules/run_all.sh`。
+- **使用文档**: 新增 `docs/wparse-window-routing.md`，按配置步骤说明 `warp-parse` 输出如何进入 `warp-fusion` window。
+- **设计文档**: 新增 `docs/design/stream_tag_routing.md` 与 `docs/design/wparse_window_routing.md`，记录 logical stream tag、Arrow frame tag、`wp_oml_name`、`stream_tag_field` 的关系和排查清单。
+- **配置文档**: 更新 `docs/config/source.md`，补充固定 `stream_tag`、动态 `stream_tag_field`、Arrow framed frame tag 的分发优先级。
+
 ### 发布元数据
 
 - **版本**: CLI crate 版本推进到 `0.1.26`，stable update manifest 指向 `v0.1.25` 发布包。
+
+### 验证
+
+- `examples/rules/multi_stream_multi_window/run.sh`
+- `examples/rules/single_stream_multi_window/run.sh`
+- `examples/wp-pipeline/streaming/run.sh`
+- `cargo test -p wf-runtime stream_tag_field`
+- `cargo test -p wf-config daemon_mode_accepts_arrow_framed_external_source_without_fixed_stream`
 
 ## [0.1.24] — 2026-07-09
 

@@ -1,7 +1,7 @@
 version = "1.0"
 [sink_group]
 name = "error_burst_out"
-windows = ["error_burst_alerts"]
+windows = ["error_alerts"]
 [[sink_group.sinks]]
 connect = "file_json_sink"
 name = "error_burst_json"

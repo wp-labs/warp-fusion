@@ -3,5 +3,5 @@ enable = true
 key = "http_source"
 
 path = "data/http_events.ndjson"
-stream = "http"
+stream_tag = "http"
 data_format = "ndjson"

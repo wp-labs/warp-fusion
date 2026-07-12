@@ -1,5 +1,5 @@
 window conn_events {
-    stream = "nginx_access"
+    stream_tag = "nginx_access"
     time = recv_time
     over = 30m
     fields { sip: ip  recv_time: time  digit: digit  chars: chars }

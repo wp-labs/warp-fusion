@@ -1,7 +1,7 @@
 connect = "kafka_src"
 enable = true
 key = "kafka_nginx"
-stream = "nginx_access"
+stream_tag = "nginx_access"
 brokers = "localhost:9092"
 topic = "wp_nginx_logs"
 group_id = "wfusion_default"

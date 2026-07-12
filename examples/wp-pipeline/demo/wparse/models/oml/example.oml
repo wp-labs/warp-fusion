@@ -1,4 +1,4 @@
-name : nginx
+name : nginx_access
 rule : /nginx/*
 ---
 * : auto = take() ;

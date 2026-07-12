@@ -1,0 +1,7 @@
+connect = "file_src"
+enable = true
+key = "seed_netflow"
+
+path = "data/netflow_events.ndjson"
+stream_tag = "netflow"
+data_format = "ndjson"

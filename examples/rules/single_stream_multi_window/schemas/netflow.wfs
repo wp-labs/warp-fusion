@@ -1,0 +1,44 @@
+window conn_events {
+    stream_tag = "netflow"
+    time = event_time
+    over = 10m
+    fields {
+        sip: ip
+        dip: ip
+        dport: digit
+        protocol: chars
+        action: chars
+        qtype: chars
+        query: chars
+        query_len: digit
+        event_time: time
+    }
+}
+
+window dns_events {
+    stream_tag = "netflow"
+    time = event_time
+    over = 10m
+    fields {
+        sip: ip
+        dip: ip
+        dport: digit
+        protocol: chars
+        action: chars
+        qtype: chars
+        query: chars
+        query_len: digit
+        event_time: time
+    }
+}
+
+window security_alerts {
+    over = 0
+    fields {
+        sip: ip
+        dip: ip
+        alert_type: chars
+        detail: chars
+        sample: chars
+    }
+}

@@ -76,15 +76,14 @@ Content-Type: application/json
 }
 ```
 
-失败:
+需要重启:
 
 ```json
 {
   "request_id": "...",
-  "accepted": false,
-  "result": "reload_failed",
-  "error": "reload requires restart",
-  "warning": "reload blocked by 1 restart-required changes"
+  "accepted": true,
+  "result": "restart_required",
+  "warning": "reload requires restart because 1 restart-required changes were found; synced project content was kept"
 }
 ```
 
@@ -155,7 +154,7 @@ struct ProjectRemoteReloadContext {
 }
 ```
 
-只有 `update_result.is_some()` 时才执行发布回滚；纯本地 reload 失败不回滚项目文件。
+只有 `update_result.is_some()` 且 config load / runtime reload 真正失败时才执行发布回滚；纯本地 reload 失败不回滚项目文件。`ReloadOutcome::Blocked` 表示需要重启后生效，不回滚已经同步并通过校验的项目内容。
 
 回滚内容:
 
@@ -180,7 +179,7 @@ struct ProjectRemoteReloadContext {
 
 默认行为。admin API 等待 runtime reload 任务:
 
-- runtime 在 `timeout_ms` 内完成，直接返回最终 `reload_done` / `reload_failed`。
+- runtime 在 `timeout_ms` 内完成，直接返回最终 `reload_done` / `restart_required` / `reload_failed`。
 - 等待超时，返回 `202 running`，后台 task 继续监控结果。
 
 ### `wait=false`
@@ -221,6 +220,7 @@ struct ReloadState {
 `last_reload_result` 取值:
 
 - `reload_done`
+- `restart_required`
 - `reload_failed`
 - `update_failed`
 - `update_in_progress`
@@ -232,14 +232,14 @@ runtime 返回:
 | `ReloadOutcome` | Admin API 响应 |
 |-----------------|----------------|
 | `Applied(plan)` | `200 reload_done` |
-| `Blocked(plan)` | `409 reload_failed`，必要时回滚 update |
+| `Blocked(plan)` | `200 restart_required`，保留已同步项目内容 |
 | `Err(err)` | `500 reload_failed`，必要时回滚 update |
 
 当前 Admin API 不负责进程级重启:
 
 - 无 `full=true`。
 - 无 `result:"restarting"`。
-- requires-restart 变更返回 `409 reload_failed`。
+- requires-restart 变更返回 `200 restart_required`。
 - 调用方或外部 supervisor 决定是否重启 daemon。
 
 ## 安全与校验
@@ -283,8 +283,8 @@ wfadm engine reload \
 - `reload_applied_returns_200`
 - `reload_wait_false_clears_reloading_when_done`
 - `reload_update_success_applies_new_rules`
-- `reload_update_blocked_rolls_back_project`
-- `reload_update_wait_false_blocked_rolls_back_project_in_background`
+- `reload_update_blocked_keeps_synced_project`
+- `reload_update_wait_false_blocked_keeps_synced_project_in_background`
 - `reload_update_dual_repo_requires_group`
 - `reload_update_lock_conflict_returns_409`
 - `run_remote_update_locked_uses_provided_snapshot_for_validate_rollback`

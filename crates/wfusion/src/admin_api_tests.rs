@@ -1017,10 +1017,10 @@ async fn reload_hot_applied_returns_200() {
     servant.shutdown().await;
 }
 
-/// A change that requires restart is reported as a reload failure; Admin API
-/// does not trigger restart in the wparse-aligned publish protocol.
+/// A change that requires restart is reported as a non-failure pending state;
+/// Admin API does not trigger restart in the wparse-aligned publish protocol.
 #[tokio::test]
-async fn reload_blocked_returns_409() {
+async fn reload_blocked_returns_restart_required() {
     let (temp, base, servant) = boot_engine_with_admin(BRUTE_FORCE_RULE).await;
     // Change mode from daemon to batch — a raw-diff restart-required field.
     let toml = std::fs::read_to_string(temp.path().join("wfusion.toml")).unwrap();
@@ -1037,10 +1037,17 @@ async fn reload_blocked_returns_409() {
         .send()
         .await
         .expect("post");
-    assert_eq!(resp.status(), reqwest::StatusCode::CONFLICT);
+    assert_eq!(resp.status(), reqwest::StatusCode::OK);
     let body: serde_json::Value = resp.json().await.expect("json");
-    assert_eq!(body["accepted"], false);
-    assert_eq!(body["result"], "reload_failed");
+    assert_eq!(body["accepted"], true);
+    assert_eq!(body["result"], "restart_required");
+    assert!(
+        body["warning"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("restart")
+    );
+    assert_eq!(body["error"], serde_json::Value::Null);
     servant.shutdown().await;
 }
 
@@ -1439,7 +1446,7 @@ async fn reload_update_success_applies_new_rules() {
 }
 
 #[tokio::test]
-async fn reload_update_blocked_rolls_back_project() {
+async fn reload_update_blocked_keeps_synced_project() {
     let (temp, base, servant) = boot_engine_with_remote_rules().await;
     let client = reqwest::Client::builder().no_proxy().build().unwrap();
 
@@ -1455,26 +1462,28 @@ async fn reload_update_blocked_rolls_back_project() {
     let body: serde_json::Value = resp.json().await.expect("json");
     assert_eq!(
         status,
-        reqwest::StatusCode::CONFLICT,
-        "expected 409, got {status}: {body}"
+        reqwest::StatusCode::OK,
+        "expected 200, got {status}: {body}"
     );
-    assert_eq!(body["result"], "reload_failed");
+    assert_eq!(body["accepted"], true);
+    assert_eq!(body["result"], "restart_required");
+    assert_eq!(body["error"], serde_json::Value::Null);
 
     let state = std::fs::read_to_string(temp.path().join(".run/project_remote_state.json"))
         .expect("state file");
     assert!(
-        state.contains(r#""current_version": "1.0.0""#),
-        "project state should roll back to v1.0.0: {state}"
+        state.contains(r#""current_version": "1.0.2""#),
+        "project state should keep v1.0.2 pending restart: {state}"
     );
     let version_txt = std::fs::read_to_string(temp.path().join("models/version.txt"))
         .expect("models version marker");
-    assert_eq!(version_txt, "1.0.0\n");
+    assert_eq!(version_txt, "1.0.2\n");
 
     servant.shutdown().await;
 }
 
 #[tokio::test]
-async fn reload_update_wait_false_blocked_rolls_back_project_in_background() {
+async fn reload_update_wait_false_blocked_keeps_synced_project_in_background() {
     let (temp, base, servant) = boot_engine_with_remote_rules().await;
     let client = reqwest::Client::builder().no_proxy().build().unwrap();
 
@@ -1495,10 +1504,11 @@ async fn reload_update_wait_false_blocked_rolls_back_project_in_background() {
     );
     assert_eq!(body["result"], "running");
 
-    wait_for_project_version(temp.path(), "1.0.0").await;
+    wait_for_reload_result(&client, &base, "restart_required").await;
+    wait_for_project_version(temp.path(), "1.0.2").await;
     let version_txt = std::fs::read_to_string(temp.path().join("models/version.txt"))
         .expect("models version marker");
-    assert_eq!(version_txt, "1.0.0\n");
+    assert_eq!(version_txt, "1.0.2\n");
 
     servant.shutdown().await;
 }
@@ -1603,7 +1613,7 @@ async fn wait_for_project_version(work_root: &Path, expected: &str) {
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
     }
     let state = std::fs::read_to_string(&state_path).unwrap_or_else(|err| err.to_string());
-    panic!("project state did not roll back to {expected}: {state}");
+    panic!("project state did not become {expected}: {state}");
 }
 
 async fn wait_for_reload_result(client: &reqwest::Client, base: &str, expected: &str) {

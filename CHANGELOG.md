@@ -2,7 +2,29 @@
 
 All notable changes to wfusion will be documented in this file.
 
-## [0.1.28 Unreleased]
+## [0.1.29 Unreleased]
+
+### 依赖与语言能力
+
+- **依赖**: `wf-engine` / `wf-config` / `wf-lang` / `wf-data` / `wf-runtime` 对齐 `wp-reactor` v0.1.32。
+- **Sink 元字段控制**: 通过 `wp-reactor` v0.1.32 支持 `wf_meta_disable` 的 wildmatch matcher，可使用 `__wfu_*`、`__wfu_rule_*` 等 pattern 禁用 wfusion 元字段输出。
+
+### 示例与文档
+
+- **配置文档**: 补充 `wf_meta_disable` wildmatch pattern 说明，明确仅允许 `__wfu_` 前缀的精确字段或 pattern。
+- **SSH brute force 示例**: 输出统计证据和事件/窗口时间边界，并在 sink 组中配置 `wf_meta_disable = ["__wfu_*"]`。
+
+### Admin API / project remote
+
+- **Reload 语义**: runtime 判定 requires-restart / blocked 时，Admin API 返回 `200 restart_required`，不再作为 `409 reload_failed` 处理。
+- **Update 保留**: `update=true` 后如果项目已同步并通过校验，但 runtime reload 返回 `restart_required`，daemon 保留已同步项目内容和 project state，等待进程重启后生效。
+- **状态记录**: 后台 reload 的 `last_reload_result` 增加 `restart_required`，文档和测试同步更新 wait=true / wait=false 行为。
+
+### 发布元数据
+
+- **版本**: CLI crate 版本推进到 `0.1.29`，stable update manifest 指向 `v0.1.28` 发布包，并归档 `v0.1.28` manifest。
+
+## [0.1.28] — 2026-07-13
 
 ### 依赖与语言能力
 

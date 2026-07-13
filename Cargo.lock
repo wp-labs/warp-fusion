@@ -5348,8 +5348,8 @@ dependencies = [
 
 [[package]]
 name = "wf-config"
-version = "0.1.31"
-source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v0.1.31#993a4e2ba4177d3496bf6268e532410a6fac6e97"
+version = "0.1.32"
+source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v0.1.32#18b70fbd25d5906d58bdb0cd453c12a79b45c272"
 dependencies = [
  "glob",
  "moju-derive",
@@ -5375,8 +5375,8 @@ dependencies = [
 
 [[package]]
 name = "wf-data"
-version = "0.1.31"
-source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v0.1.31#993a4e2ba4177d3496bf6268e532410a6fac6e97"
+version = "0.1.32"
+source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v0.1.32#18b70fbd25d5906d58bdb0cd453c12a79b45c272"
 dependencies = [
  "chrono",
  "serde_json",
@@ -5384,8 +5384,8 @@ dependencies = [
 
 [[package]]
 name = "wf-engine"
-version = "0.1.31"
-source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v0.1.31#993a4e2ba4177d3496bf6268e532410a6fac6e97"
+version = "0.1.32"
+source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v0.1.32#18b70fbd25d5906d58bdb0cd453c12a79b45c272"
 dependencies = [
  "arrow",
  "async-trait",
@@ -5405,14 +5405,15 @@ dependencies = [
  "tokio",
  "wf-config",
  "wf-lang",
+ "wildmatch",
  "wp-connector-api",
  "wp-model-core",
 ]
 
 [[package]]
 name = "wf-lang"
-version = "0.1.31"
-source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v0.1.31#993a4e2ba4177d3496bf6268e532410a6fac6e97"
+version = "0.1.32"
+source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v0.1.32#18b70fbd25d5906d58bdb0cd453c12a79b45c272"
 dependencies = [
  "moju-derive",
  "orion-error",
@@ -5437,8 +5438,8 @@ dependencies = [
 
 [[package]]
 name = "wf-runtime"
-version = "0.1.31"
-source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v0.1.31#993a4e2ba4177d3496bf6268e532410a6fac6e97"
+version = "0.1.32"
+source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v0.1.32#18b70fbd25d5906d58bdb0cd453c12a79b45c272"
 dependencies = [
  "arrow",
  "async-broadcast",
@@ -5497,7 +5498,7 @@ dependencies = [
 
 [[package]]
 name = "wfgen"
-version = "0.1.28"
+version = "0.1.29"
 dependencies = [
  "arrow",
  "chrono",
@@ -5522,7 +5523,7 @@ dependencies = [
 
 [[package]]
 name = "wfl"
-version = "0.1.28"
+version = "0.1.29"
 dependencies = [
  "chrono",
  "clap",
@@ -5539,7 +5540,7 @@ dependencies = [
 
 [[package]]
 name = "wfusion"
-version = "0.1.28"
+version = "0.1.29"
 dependencies = [
  "chrono",
  "clap",

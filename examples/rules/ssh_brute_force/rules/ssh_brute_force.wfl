@@ -6,7 +6,7 @@ use "auth.wfs"
 //   1. event filter: SSH 服务 + 登录失败
 //   2. on event: 5 分钟内同一 sip 累计失败 >= 10 次时触发
 //   3. join anti: 排除已知漏扫器 IP
-//   4. targets: 统计被攻击的目标主机列表
+//   4. yield: 输出统计证据和事件/窗口时间边界
 //
 // 场景：
 //   - 攻击者对多台服务器尝试弱口令
@@ -20,7 +20,7 @@ rule ssh_brute_force {
             && e.result == "failed"
     }
     match<sip:5m> {
-        on event { e | count >= 10; }
+        on event { failures: e | count >= 10; }
     } -> score(70.0)
     join scanner_whitelist anti on e.sip == scanner_whitelist.sip
     entity(ip, e.sip)
@@ -29,7 +29,15 @@ rule ssh_brute_force {
         dip = first(e.dip),
         user = e.user,
         alert_type = "ssh_brute_force",
-        detail = "failed login >= 10 in 5min"
+        detail = "failed login >= 10 in 5min",
+        window_events = stat.count(window_event(e)),
+        matched_events = stat.count(match_event(failures)),
+        trigger_count = stat.value(trigger(failures)),
+        first_seen = @event_first_time,
+        last_seen = @event_last_time,
+        rule_window_start = @window_start_time,
+        rule_window_end = @window_end_time,
+        latest_analysis_time = @emit_time
     )
 
     limits {

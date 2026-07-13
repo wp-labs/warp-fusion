@@ -74,7 +74,23 @@ name = "alerts_out"
 file = "alerts.ndjson"
 ```
 
-`wf_meta_disable` 只允许填写 `__wfu_` 前缀的字段。运行时不会删除业务字段；它会在发送
+如果要禁用全部 wfusion 元字段，可以使用 `__wfu_*`：
+
+```toml
+[sink_group]
+name = "alerts"
+windows = ["security_alerts"]
+wf_meta_disable = ["__wfu_*"]
+```
+
+`wf_meta_disable` 只允许填写 `__wfu_` 前缀的精确字段，或 `__wfu_` 前缀下的 wildmatch
+pattern，例如：
+
+```toml
+wf_meta_disable = ["__wfu_rule_*", "__wfu_emit_time"]
+```
+
+`*`、`*_time` 这类非 `__wfu_` 前缀 pattern 会被拒绝。运行时不会删除业务字段；它会在发送
 record 前把匹配的 wfusion 元字段标记为 `Ignore`，由 sink 编码阶段跳过输出。
 
 如果 sink 同时配置了 `fields` 投影，执行顺序是先按 `fields` 投影，再应用

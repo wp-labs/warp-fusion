@@ -169,7 +169,8 @@ wfadm init --dir . --repo https://example.com/project.git --version 1.0.0
 - dual-repo 模式下缺 `group` 返回 `400 invalid_request`。
 - lock 冲突返回 `409 update_in_progress`。
 - sync 成功后重新加载 config 并调用 runtime reload。
-- config load / runtime reload / blocked 失败时回滚 project 和 runtime artifacts。
+- config load / runtime reload 真正失败时回滚 project 和 runtime artifacts。
+- runtime blocked / requires-restart 时保留已同步并通过校验的项目内容，等待进程重启后生效。
 
 ## Rollback 范围
 
@@ -178,7 +179,7 @@ wfadm init --dir . --repo https://example.com/project.git --version 1.0.0
 | git sync 内部校验失败 | managed dirs + project state |
 | admin API update 后 config load 失败 | managed dirs + project state + runtime artifacts |
 | admin API runtime reload failed | managed dirs + project state + runtime artifacts |
-| admin API blocked / requires restart | managed dirs + project state + runtime artifacts |
+| admin API blocked / requires restart | 不回滚；保留已同步项目内容，等待重启生效 |
 
 runtime artifacts 当前包括:
 

@@ -7,6 +7,7 @@
 - 攻击者使用 hydra / medusa 等工具对多台服务器尝试弱口令
 - 同一源 IP 在 5 分钟内产生 ≥ 10 次 SSH 失败登录
 - 通过 `join anti` 排除已知漏扫器 IP
+- 在告警中输出统计证据和事件/窗口时间边界，便于下游解释触发原因
 
 ## 运行
 
@@ -18,7 +19,7 @@ wfl test rules/ssh_brute_force.wfl --schemas "schemas/*.wfs"
 wfl replay rules/ssh_brute_force.wfl --input data/auth_events.ndjson
 
 # 3. 完整引擎（batch 模式）
-wfusion batch -c ./wfusion.toml
+wfusion batch --config wfusion.toml --work-dir .
 ```
 
 ## 规则
@@ -29,16 +30,24 @@ rule ssh_brute_force {
         e : auth_events && e.service == "ssh" && e.result == "failed"
     }
     match<sip:5m> {
-        on event { e | count >= 10; }
+        on event { failures: e | count >= 10; }
     } -> score(70.0)
     join scanner_whitelist anti on e.sip == scanner_whitelist.sip
     entity(ip, e.sip)
     yield security_alerts (
         sip = e.sip,
+        dip = first(e.dip),
+        user = e.user,
         alert_type = "ssh_brute_force",
         detail = "failed login >= 10 in 5min",
-        targets = e.dip | values | join(","),
-        target_count = e.dip | distinct | count
+        window_events = stat.count(window_event(e)),
+        matched_events = stat.count(match_event(failures)),
+        trigger_count = stat.value(trigger(failures)),
+        first_seen = @event_first_time,
+        last_seen = @event_last_time,
+        rule_window_start = @window_start_time,
+        rule_window_end = @window_end_time,
+        latest_analysis_time = @emit_time
     )
 }
 ```
@@ -46,7 +55,15 @@ rule ssh_brute_force {
 - **分组键**: `sip`
 - **匹配条件**: 5 分钟内失败 ≥ 10 次
 - **白名单**: join anti 排除 `scanner_whitelist`
-- **产出**: 攻击源 IP、被攻击目标列表、目标数量
+- **统计证据**:
+  - `window_events = stat.count(window_event(e))`: 当前 rule instance/window 内进入 `e` 的候选事件数
+  - `matched_events = stat.count(match_event(failures))`: `failures` 这个 `on event` step 接受为证据的事件数
+  - `trigger_count = stat.value(trigger(failures))`: 触发阈值时的聚合值
+- **时间字段**:
+  - `first_seen` / `last_seen`: 本次命中证据的首尾事件时间
+  - `rule_window_start` / `rule_window_end`: 当前规则窗口边界
+  - `latest_analysis_time`: 本次输出记录的稳定产出时间
+- **产出**: 攻击源 IP、目标 IP、用户名、统计证据和时间边界
 
 ## 测试
 

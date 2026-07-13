@@ -308,21 +308,20 @@ curl -sS -X POST "$ADMIN_URL/admin/v1/reloads/model" \
 | `404` | `not_found` | 路由不存在 |
 | `409` | `reload_in_progress` | daemon 内已有 reload 正在执行 |
 | `409` | `update_in_progress` | project remote lock 被占用 |
-| `409` | `reload_failed` | runtime 判定该变更需要重启 |
+| `200` | `restart_required` | project 已同步/校验通过，但 runtime 判定需要重启后生效 |
 | `413` | `payload_too_large` | 请求体超过 `max_body_bytes` |
 | `500` | `update_failed` | project remote 未启用、sync、snapshot 或前置检查失败 |
 | `500` | `reload_failed` | config load 或 runtime reload 执行失败 |
 | `503` | `runtime_not_ready` | daemon 正在关闭或不再接受命令 |
 
-失败响应格式:
+需要重启的响应格式:
 
 ```json
 {
   "request_id": "9a1f...",
-  "accepted": false,
-  "result": "reload_failed",
-  "warning": "reload blocked by 1 restart-required changes",
-  "error": "reload requires restart"
+  "accepted": true,
+  "result": "restart_required",
+  "warning": "reload requires restart because 1 restart-required changes were found; synced project content was kept"
 }
 ```
 
@@ -333,11 +332,13 @@ Admin API 有两层保护:
 - 同一 daemon 内一次只处理一个 reload。
 - reload 会持有 `.run/project_remote.lock`，避免和 `wfadm conf update` 并发读写同一个 work root。
 
-`update=true` 后，如果 config load、runtime reload 或 blocked reload 失败，daemon 会回滚:
+`update=true` 后，如果 config load 或 runtime reload 真正失败，daemon 会回滚:
 
 - managed dirs
 - `.run/project_remote_state.json`
 - runtime artifacts: `.run/rule_mapping.dat`、`.run/authority.sqlite`
+
+如果 runtime 返回 requires-restart / blocked，daemon 不回滚已经同步并通过校验的项目内容；该版本保留在本地，等待进程重启后生效。
 
 纯本地 reload 失败不会修改磁盘内容。
 
@@ -387,9 +388,9 @@ chmod 600 "$HOME/.warp_fusion/admin_api.token"
 
 通常表示另一个 `wfadm conf update` 或 admin API reload 正在操作同一个 work root。等待当前操作完成后重试。
 
-### `409 reload_failed`
+### `200 restart_required`
 
-runtime 判定变更需要重启，例如 window/schema/topology 发生不可热更新变化。Admin API 不会自动重启进程；需要由部署系统或运维流程重启 daemon。
+runtime 判定变更需要重启，例如 window/schema/topology 发生不可热更新变化。若本次请求包含 `update=true`，项目内容已经同步到本地并通过校验，不会被自动回滚。Admin API 不会自动重启进程；需要由部署系统或运维流程重启 daemon。
 
 ### `500 update_failed`
 

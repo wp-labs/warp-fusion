@@ -1,5 +1,5 @@
 window http_events {
-    stream = "http"
+    stream_tag = "http"
     time = event_time
     over = 5m
     fields {

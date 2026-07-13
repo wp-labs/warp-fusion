@@ -3,5 +3,5 @@ enable = true
 key = "auth_source"
 
 path = "data/auth_events.ndjson"
-stream = "auth"
+stream_tag = "auth"
 data_format = "ndjson"

@@ -4,7 +4,7 @@
 // insider_alerts: 内部威胁告警输出
 
 window data_access_events {
-    stream = "data_access_events"
+    stream_tag = "data_access_events"
     time = event_time
     over = 10m
     fields {

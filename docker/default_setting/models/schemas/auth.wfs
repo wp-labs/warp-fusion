@@ -1,6 +1,6 @@
 // 认证事件 — 覆盖暴力破解 / 弱口令 / 凭据喷射 / 横向登录 / PtH
 window auth_events {
-    stream = "auth_events"
+    stream_tag = "auth_events"
     time = event_time
     over = 10m
     fields {

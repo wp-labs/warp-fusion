@@ -170,7 +170,7 @@ type = "file"
 name = "ingress"
 path = "{}"
 data_format = "arrow_framed"
-stream = ""
+stream_tag = ""
 
 [runtime]
 executor_parallelism = 2

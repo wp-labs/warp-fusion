@@ -11,7 +11,7 @@ connect = "file_src"
 enable = true
 name = "seed_netflow"
 path = "data/conn_events.ndjson"
-stream = "netflow"
+stream_tag = "netflow"
 data_format = "ndjson"
 
 [runtime]

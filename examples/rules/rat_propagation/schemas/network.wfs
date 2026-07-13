@@ -1,5 +1,5 @@
 window conn_events {
-    stream = "netflow"
+    stream_tag = "netflow"
     time = event_time
     over = 30m
     fields {
@@ -13,7 +13,7 @@ window conn_events {
 }
 
 window auth_events {
-    stream = "auth"
+    stream_tag = "auth"
     time = event_time
     over = 30m
     fields {

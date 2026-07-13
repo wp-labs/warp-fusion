@@ -1,6 +1,6 @@
 // HTTP 事件 — 覆盖 Web 探测 / SQLi / 异常 UA
 window http_events {
-    stream = "http_events"
+    stream_tag = "http_events"
     time = event_time
     over = 5m
     fields {

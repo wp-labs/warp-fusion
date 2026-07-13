@@ -20,6 +20,7 @@ pub fn generate_field_value(
 fn generate_default(field_type: &FieldType, rng: &mut StdRng) -> serde_json::Value {
     let base = match field_type {
         FieldType::Base(b) => b,
+        FieldType::ArrayAny => return serde_json::Value::Array(Vec::new()),
         FieldType::Array(b) => {
             // Generate an array of 1-5 elements
             let len = rng.random_range(1..=5);
@@ -27,6 +28,7 @@ fn generate_default(field_type: &FieldType, rng: &mut StdRng) -> serde_json::Val
                 (0..len).map(|_| generate_default_base(b, rng)).collect();
             return serde_json::Value::Array(arr);
         }
+        FieldType::Object => return serde_json::Value::Object(serde_json::Map::new()),
     };
     generate_default_base(base, rng)
 }
@@ -172,5 +174,37 @@ fn dispatch_gen_func(name: &str, args: &[GenArg], rng: &mut StdRng) -> serde_jso
             // Unknown gen function — return null
             serde_json::Value::Null
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use rand::SeedableRng;
+    use wf_lang::{BaseType, FieldType};
+
+    use super::generate_default;
+
+    #[test]
+    fn structured_field_defaults_are_json_values() {
+        let mut rng = rand::rngs::StdRng::seed_from_u64(1);
+
+        assert_eq!(
+            generate_default(&FieldType::ArrayAny, &mut rng),
+            serde_json::Value::Array(Vec::new())
+        );
+        assert_eq!(
+            generate_default(&FieldType::Object, &mut rng),
+            serde_json::Value::Object(serde_json::Map::new())
+        );
+    }
+
+    #[test]
+    fn typed_array_default_generates_array_values() {
+        let mut rng = rand::rngs::StdRng::seed_from_u64(1);
+        let value = generate_default(&FieldType::Array(BaseType::Digit), &mut rng);
+
+        let arr = value.as_array().expect("typed array default");
+        assert!(!arr.is_empty());
+        assert!(arr.iter().all(|v| v.as_i64().is_some()));
     }
 }

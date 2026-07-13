@@ -1,0 +1,7 @@
+connect = "file_src"
+enable = true
+key = "mixed_source"
+
+path = "data/mixed_events.ndjson"
+data_format = "ndjson"
+stream_tag_field = "wp_oml_name"

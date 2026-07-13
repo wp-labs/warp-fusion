@@ -1,5 +1,5 @@
 window dns_events {
-    stream = "dns_log"
+    stream_tag = "dns_log"
     time = event_time
     over = 5m
     fields {

@@ -5348,8 +5348,8 @@ dependencies = [
 
 [[package]]
 name = "wf-config"
-version = "0.1.28"
-source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v0.1.28#2d270554e8428eb19963d9f5e2f14a75c6e0a4c1"
+version = "0.1.31"
+source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v0.1.31#993a4e2ba4177d3496bf6268e532410a6fac6e97"
 dependencies = [
  "glob",
  "moju-derive",
@@ -5375,8 +5375,8 @@ dependencies = [
 
 [[package]]
 name = "wf-data"
-version = "0.1.28"
-source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v0.1.28#2d270554e8428eb19963d9f5e2f14a75c6e0a4c1"
+version = "0.1.31"
+source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v0.1.31#993a4e2ba4177d3496bf6268e532410a6fac6e97"
 dependencies = [
  "chrono",
  "serde_json",
@@ -5384,8 +5384,8 @@ dependencies = [
 
 [[package]]
 name = "wf-engine"
-version = "0.1.28"
-source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v0.1.28#2d270554e8428eb19963d9f5e2f14a75c6e0a4c1"
+version = "0.1.31"
+source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v0.1.31#993a4e2ba4177d3496bf6268e532410a6fac6e97"
 dependencies = [
  "arrow",
  "async-trait",
@@ -5411,8 +5411,8 @@ dependencies = [
 
 [[package]]
 name = "wf-lang"
-version = "0.1.28"
-source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v0.1.28#2d270554e8428eb19963d9f5e2f14a75c6e0a4c1"
+version = "0.1.31"
+source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v0.1.31#993a4e2ba4177d3496bf6268e532410a6fac6e97"
 dependencies = [
  "moju-derive",
  "orion-error",
@@ -5437,8 +5437,8 @@ dependencies = [
 
 [[package]]
 name = "wf-runtime"
-version = "0.1.28"
-source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v0.1.28#2d270554e8428eb19963d9f5e2f14a75c6e0a4c1"
+version = "0.1.31"
+source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v0.1.31#993a4e2ba4177d3496bf6268e532410a6fac6e97"
 dependencies = [
  "arrow",
  "async-broadcast",
@@ -5497,7 +5497,7 @@ dependencies = [
 
 [[package]]
 name = "wfgen"
-version = "0.1.27"
+version = "0.1.28"
 dependencies = [
  "arrow",
  "chrono",
@@ -5522,7 +5522,7 @@ dependencies = [
 
 [[package]]
 name = "wfl"
-version = "0.1.27"
+version = "0.1.28"
 dependencies = [
  "chrono",
  "clap",
@@ -5539,7 +5539,7 @@ dependencies = [
 
 [[package]]
 name = "wfusion"
-version = "0.1.27"
+version = "0.1.28"
 dependencies = [
  "chrono",
  "clap",

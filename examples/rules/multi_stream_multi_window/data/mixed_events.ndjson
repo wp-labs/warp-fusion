@@ -1,0 +1,8 @@
+{"wp_oml_name":"netflow","sip":"10.0.0.9","dip":"192.168.1.10","dport":22,"protocol":"tcp","action":"syn","event_time":"2026-01-01T00:00:00Z"}
+{"wp_oml_name":"dns","sip":"10.0.0.9","dip":"8.8.8.8","qtype":"TXT","query":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.exfil.example","query_len":54,"event_time":"2026-01-01T00:00:00Z"}
+{"wp_oml_name":"netflow","sip":"10.0.0.9","dip":"192.168.1.11","dport":80,"protocol":"tcp","action":"syn","event_time":"2026-01-01T00:00:01Z"}
+{"wp_oml_name":"dns","sip":"10.0.0.9","dip":"8.8.8.8","qtype":"TXT","query":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.exfil.example","query_len":54,"event_time":"2026-01-01T00:00:01Z"}
+{"wp_oml_name":"netflow","sip":"10.0.0.9","dip":"192.168.1.12","dport":443,"protocol":"tcp","action":"syn","event_time":"2026-01-01T00:00:02Z"}
+{"wp_oml_name":"dns","sip":"10.0.0.9","dip":"8.8.8.8","qtype":"TXT","query":"cccccccccccccccccccccccccccccccccccc.exfil.example","query_len":54,"event_time":"2026-01-01T00:00:02Z"}
+{"wp_oml_name":"netflow","sip":"10.0.0.9","dip":"192.168.1.13","dport":3306,"protocol":"tcp","action":"syn","event_time":"2026-01-01T00:00:03Z"}
+{"wp_oml_name":"netflow","sip":"10.0.0.9","dip":"192.168.1.14","dport":5432,"protocol":"tcp","action":"syn","event_time":"2026-01-01T00:00:04Z"}

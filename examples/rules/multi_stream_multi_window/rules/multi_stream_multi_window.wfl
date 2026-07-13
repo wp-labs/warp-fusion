@@ -1,0 +1,65 @@
+use "network.wfs"
+
+// netflow stream -> conn_events window
+rule netflow_syn_scan {
+    events { c : conn_events && c.protocol == "tcp" && c.action == "syn" }
+    match<c.sip:5m> {
+        on event { c.dport | distinct | count >= 5; }
+    } -> score(75.0)
+    entity(ip, c.sip)
+    yield security_alerts (
+        sip = c.sip,
+        dip = c.dip,
+        alert_type = "netflow_syn_scan",
+        detail = "netflow stream routed to conn_events; distinct dports >= 5",
+        sample = "tcp_syn"
+    )
+
+    limits {
+        max_memory = "64MB";
+        max_instances = 10000;
+        on_exceed = throttle;
+    }
+}
+
+// dns stream -> dns_events window
+rule dns_tunnel_probe {
+    events { d : dns_events && d.qtype == "TXT" && d.query_len >= 40 }
+    match<d.sip:5m> {
+        on event { d | count >= 3; }
+    } -> score(80.0)
+    entity(ip, d.sip)
+    yield security_alerts (
+        sip = d.sip,
+        dip = d.dip,
+        alert_type = "dns_tunnel_probe",
+        detail = "dns stream routed to dns_events; long TXT queries >= 3",
+        sample = d.query
+    )
+
+    limits {
+        max_memory = "64MB";
+        max_instances = 10000;
+        on_exceed = throttle;
+    }
+}
+
+test scan_detected_from_netflow_stream for netflow_syn_scan {
+  input {
+    row(c, sip = "10.0.0.9", dip = "192.168.1.10", dport = "22", protocol = "tcp", action = "syn", event_time = "2026-01-01T00:00:00Z");
+    row(c, sip = "10.0.0.9", dip = "192.168.1.11", dport = "80", protocol = "tcp", action = "syn", event_time = "2026-01-01T00:00:01Z");
+    row(c, sip = "10.0.0.9", dip = "192.168.1.12", dport = "443", protocol = "tcp", action = "syn", event_time = "2026-01-01T00:00:02Z");
+    row(c, sip = "10.0.0.9", dip = "192.168.1.13", dport = "3306", protocol = "tcp", action = "syn", event_time = "2026-01-01T00:00:03Z");
+    row(c, sip = "10.0.0.9", dip = "192.168.1.14", dport = "5432", protocol = "tcp", action = "syn", event_time = "2026-01-01T00:00:04Z");
+  }
+  expect { hits == 1; }
+}
+
+test dns_detected_from_dns_stream for dns_tunnel_probe {
+  input {
+    row(d, sip = "10.0.0.9", dip = "8.8.8.8", qtype = "TXT", query = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.exfil.example", query_len = "54", event_time = "2026-01-01T00:00:00Z");
+    row(d, sip = "10.0.0.9", dip = "8.8.8.8", qtype = "TXT", query = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.exfil.example", query_len = "54", event_time = "2026-01-01T00:00:01Z");
+    row(d, sip = "10.0.0.9", dip = "8.8.8.8", qtype = "TXT", query = "cccccccccccccccccccccccccccccccccccc.exfil.example", query_len = "54", event_time = "2026-01-01T00:00:02Z");
+  }
+  expect { hits == 1; }
+}

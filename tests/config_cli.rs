@@ -24,7 +24,7 @@ work_root = "$HOME"
 [[sources]]
 type = "file"
 path = "${CASE_PATH}/data/base.ndjson"
-stream = "syslog"
+stream_tag = "syslog"
 format = "ndjson"
 
 [runtime]

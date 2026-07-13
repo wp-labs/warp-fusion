@@ -32,6 +32,16 @@ fn minimal_wfg(streams: Vec<StreamBlock>, injects: Vec<InjectBlock>) -> WfgFile 
 
 /// Helper: build a WindowSchema.
 fn make_schema(name: &str, fields: Vec<(&str, BaseType)>) -> WindowSchema {
+    make_schema_with_field_types(
+        name,
+        fields
+            .into_iter()
+            .map(|(name, base)| (name, FieldType::Base(base)))
+            .collect(),
+    )
+}
+
+fn make_schema_with_field_types(name: &str, fields: Vec<(&str, FieldType)>) -> WindowSchema {
     WindowSchema {
         name: name.into(),
         streams: vec![],
@@ -39,9 +49,9 @@ fn make_schema(name: &str, fields: Vec<(&str, BaseType)>) -> WindowSchema {
         over: Duration::from_secs(300),
         fields: fields
             .into_iter()
-            .map(|(n, bt)| FieldDef {
+            .map(|(n, field_type)| FieldDef {
                 name: n.into(),
-                field_type: FieldType::Base(bt),
+                field_type,
             })
             .collect(),
     }

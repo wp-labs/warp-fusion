@@ -1,9 +1,0 @@
-[[connectors]]
-allow_override = ["addr", "port", "framing", "protocol"]
-id = "tcp_sink"
-type = "tcp"
-
-[connectors.params]
-addr = "127.0.0.1"
-framing = "line"
-port = 9000

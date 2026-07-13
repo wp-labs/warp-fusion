@@ -176,11 +176,6 @@ pub(crate) const TOPO_SINKS_ERROR: TemplateFile = (
     "topology/sinks/infra.d/error.toml",
     include_str!("../../templates/topology/sinks/infra.d/error.toml"),
 );
-pub(crate) const TOPO_SINKS_CONN_FILE: TemplateFile = (
-    "topology/sinks/connectors/sink.d/file.toml",
-    include_str!("../../templates/topology/sinks/connectors/sink.d/file.toml"),
-);
-
 // ── topology / sources ─────────────────────────────────────────────────
 
 pub(crate) const TOPO_SOURCES_INGRESS: TemplateFile = (

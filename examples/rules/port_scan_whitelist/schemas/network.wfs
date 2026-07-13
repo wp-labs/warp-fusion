@@ -1,5 +1,5 @@
 window conn_events {
-    stream = "netflow"
+    stream_tag = "netflow"
     time = event_time
     over = 30m
     fields {

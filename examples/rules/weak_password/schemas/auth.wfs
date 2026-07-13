@@ -1,5 +1,5 @@
 window auth_events {
-    stream = "auth"
+    stream_tag = "auth"
     time = event_time
     over = 10m
     fields {
@@ -23,7 +23,7 @@ window auth_events {
 //
 // password_masked 用于告警展示，不暴露完整凭据，如 "1*****"
 window weak_password_db {
-    stream = "password_audit"
+    stream_tag = "password_audit"
     over = 0
     fields {
         hash_value: chars

@@ -133,6 +133,41 @@ fn test_sv7_enum_compatible_with_any_type() {
 }
 
 #[test]
+fn test_sv7_structured_fields_reject_scalar_overrides() {
+    let wfg = minimal_wfg(
+        vec![
+            stream_with_override(
+                "s1",
+                "W",
+                "context",
+                GenExpr::StringLit("not-object".into()),
+            ),
+            stream_with_override("s1", "W", "tags", GenExpr::StringLit("not-array".into())),
+        ],
+        vec![],
+    );
+    let schemas = vec![make_schema_with_field_types(
+        "W",
+        vec![
+            ("context", FieldType::Object),
+            ("tags", FieldType::ArrayAny),
+        ],
+    )];
+    let errors = validate_wfg(&wfg, &schemas, &[]);
+
+    assert!(
+        errors
+            .iter()
+            .any(|e| e.code == "SV7" && e.message.contains("context"))
+    );
+    assert!(
+        errors
+            .iter()
+            .any(|e| e.code == "SV7" && e.message.contains("tags"))
+    );
+}
+
+#[test]
 fn test_sv7_valid_combinations() {
     // String on Chars, Number on Float, ipv4 on Ip, range on Digit -- all valid
     let wfg = minimal_wfg(

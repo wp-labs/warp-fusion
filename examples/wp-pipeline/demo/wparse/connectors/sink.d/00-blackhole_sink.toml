@@ -1,7 +1,0 @@
-[[connectors]]
-allow_override = ["sleep_ms", "protocol"]
-id = "blackhole_sink"
-type = "blackhole"
-
-[connectors.params]
-sleep_ms = 0

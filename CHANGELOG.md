@@ -2,20 +2,62 @@
 
 All notable changes to wfusion will be documented in this file.
 
-## [0.1.26 Unreleased]
+## [0.1.28 Unreleased]
 
 ### 依赖与语言能力
 
-- **依赖**: `wf-engine` / `wf-config` / `wf-lang` / `wf-data` / `wf-runtime` 对齐 `wp-reactor` v0.1.28。
+- **依赖**: `wf-engine` / `wf-config` / `wf-lang` / `wf-data` / `wf-runtime` 对齐 `wp-reactor` v0.1.31。
 - **WFL helper**: `wfl` / `wfusion` 通过 `wp-reactor` 新增规则表达式 helper 支持：`now()`、`now_s()`、`now_ms()`、`now_us()`、`now_ns()`、`is_blank()`、`null_if_blank()`、`default_if_blank()`、`md5()`、`sha1()`、`sha256()`、`hex()`、`stable_id()`。
 - **时间语义**: `now_*` 在同一条输出记录内复用同一个内部时间戳，避免 `created_time` / `created_ns` 等字段在同一 alert 中出现漂移。
 - **稳定 ID**: `stable_id()` 使用带类型和长度的稳定编码参与 SHA-256，避免简单拼接输入导致的歧义。
 - **WFL 诊断**: `wfl` / `wfusion` 通过 `wp-reactor` 新增源码感知的 WFL 解析与语义编译诊断，发布失败时输出文件路径、诊断类别、规则/测试上下文、行列号和源码片段。
 - **Topology 诊断**: `wfusion` 启动/重载时的 intermediate topology cycle 错误现在会尽量定位到对应规则源码，便于排查跨规则 yield 依赖环。
+- **WFS / WFL 结构化输出**: `wfgen` 和 `wfusion` 适配 `object` / `array` / `array/T` 字段，结构化值在 Arrow IPC 输出中以 JSON 字符串承载。
+
+### Stream / Window 分发
+
+- **WFS**: 示例与文档统一使用 `window.stream_tag` 作为输入数据到 window 的分发键，替换旧 `stream` 表达。
+- **wparse 对接**: `warp-parse -> warp-fusion` 的非 Arrow framed 输出 carrier 对齐为 `wp_oml_name`，用于承载 OML `name` / `full_name`；不再使用旧 `wp_stream_tag`。`wp-reactor` v0.1.31 起该字段也是默认 `stream_tag_field`。
+- **Arrow framed**: `examples/wp-pipeline/streaming` 移除 wparse sink 中手写的固定 `tag = "nginx_access"`，改为依赖上游 OML name 自动写入 Arrow frame tag；wfusion source 未配置固定 `stream_tag` 时按 frame tag 路由。
+- **Sink 路由修复**: 修正 `examples/wp-pipeline` 中 `error_burst` sink 订阅不存在的 `error_burst_alerts` window，改为订阅 schema 中实际声明的 `error_alerts`。
+- **模板迁移**: `wfadm` 模板、docker 默认配置和配置测试统一改用 `stream_tag`，并移除旧的 `topology/sinks/connectors` 模板布局。
+
+### 示例与文档
+
+- **新增示例**: `examples/rules/single_stream_multi_window`，演示一个固定 `stream_tag = "netflow"` 同时投递到多个 window。
+- **新增示例**: `examples/rules/multi_stream_multi_window`，演示一个 source 中混合多个 `wp_oml_name`，通过 `stream_tag_field = "wp_oml_name"` 动态分发到多个 window。
+- **示例脚本**: 为 single-stream / multi-stream 示例增加 `run.sh`，并接入 `examples/rules/run_all.sh`。
+- **wp-pipeline demo**: `examples/wp-pipeline/demo` 对齐 `streaming` 的共享 `models/` 布局，batch 链路改为 `wpgen -> file -> wparse -> NDJSON(wp_oml_name) -> wfusion`，运行输出统一到示例根目录 `data/`。
+- **wp-pipeline demo**: 删除 demo 内重复的本地 models、connectors、Redis external 规则和 knowdb，避免示例加载旧配置或依赖外部 Redis。
+- **使用文档**: 新增 `docs/wparse-window-routing.md`，按配置步骤说明 `warp-parse` 输出如何进入 `warp-fusion` window。
+- **设计文档**: 新增 `docs/design/stream_tag_routing.md` 与 `docs/design/wparse_window_routing.md`，记录 logical stream tag、Arrow frame tag、`wp_oml_name`、`stream_tag_field` 的关系和排查清单。
+- **配置文档**: 更新 `docs/config/source.md`，补充固定 `stream_tag`、动态 `stream_tag_field`、Arrow framed frame tag 的分发优先级。
+- **配置文档**: 更新 `docs/config/sink.md`，记录 `wf_meta_disable = ["__wfu_*"]` 的配置位置、字段限制、与 `fields` 投影的执行顺序，以及通过 `DataType::Ignore` 跳过 sink 输出的机制。
+
+### wfgen
+
+- **结构化字段默认值**: `array` / `object` 字段默认生成 JSON array/object，typed array 继续生成数组值。
+- **Arrow IPC 输出**: `array` / `object` 字段映射为 UTF-8 输出，非字符串 JSON 值序列化为 JSON 字符串。
+- **校验**: 结构化字段拒绝标量 generator override，避免生成与 schema 不匹配的数据。
+
+### project remote
+
+- **版本解析**: `wf-project-remote` 支持请求版本带 `v` 前缀，例如 `v1.4.3` 可直接匹配 `v1.4.3` tag，同时保留 resolved tag。
 
 ### 发布元数据
 
-- **版本**: CLI crate 版本推进到 `0.1.26`，stable update manifest 指向 `v0.1.25` 发布包。
+- **版本**: CLI crate 版本推进到 `0.1.28`，stable update manifest 指向 `v0.1.27` 发布包，并归档 `v0.1.26` / `v0.1.27` manifest。
+
+### 验证
+
+- `examples/rules/multi_stream_multi_window/run.sh`
+- `examples/rules/single_stream_multi_window/run.sh`
+- `examples/wp-pipeline/demo/run.sh`
+- `examples/wp-pipeline/streaming/run.sh`
+- `cargo test -p wfgen`
+- `cargo test -p wf-project-remote`
+- `cargo test -p wf-runtime stream_tag_field`
+- `cargo test -p wf-config daemon_mode_accepts_arrow_framed_external_source_without_fixed_stream`
 
 ## [0.1.24] — 2026-07-09
 

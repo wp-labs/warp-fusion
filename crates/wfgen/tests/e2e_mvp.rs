@@ -89,7 +89,7 @@ work_root = "{}"
 [[sources]]
 type = "tcp"
 name = "ingress"
-stream = ""
+stream_tag = ""
 listen = "tcp://127.0.0.1:{}"
 addr = "127.0.0.1"
 port = "{}"

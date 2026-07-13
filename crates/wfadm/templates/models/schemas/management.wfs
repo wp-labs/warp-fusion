@@ -4,7 +4,7 @@
 // process_events: 进程创建事件（Sysmon EID 1 / EDR 进程审计）
 
 window ad_change_events {
-    stream = "ad_change_events"
+    stream_tag = "ad_change_events"
     time = event_time
     over = 30m
     fields {
@@ -18,7 +18,7 @@ window ad_change_events {
 }
 
 window process_events {
-    stream = "process_events"
+    stream_tag = "process_events"
     time = event_time
     over = 10m
     fields {

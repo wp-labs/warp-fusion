@@ -198,29 +198,53 @@ pub(super) fn resolve_tag_for_version(
     repo: &Repository,
     version: &str,
 ) -> Result<Option<ResolvedTag>, String> {
+    let requested = version.trim();
+    if requested.is_empty() {
+        return Ok(None);
+    }
+    let requested_normalized = requested.strip_prefix('v').unwrap_or(requested);
     let names = repo
         .tag_names(None)
         .map_err(|e| conf_err_source("list tags failed", e))?;
     for name in names.iter().filter_map(|s| s.ok().flatten()) {
+        if name == requested {
+            return resolve_tag(repo, name, tag_version_label(name));
+        }
+    }
+    for name in names.iter().filter_map(|s| s.ok().flatten()) {
         let Some((normalized, _)) = parse_tag_version(name) else {
             continue;
         };
-        if normalized != version {
+        if normalized != requested_normalized {
             continue;
         }
-        let obj = repo
-            .revparse_single(&format!("refs/tags/{}", name))
-            .map_err(|e| conf_err_source(format!("resolve tag {} failed", name), e))?;
-        let commit = obj
-            .peel_to_commit()
-            .map_err(|e| conf_err_source(format!("peel tag {} to commit failed", name), e))?;
-        return Ok(Some(ResolvedTag {
-            tag: name.to_string(),
-            version: normalized,
-            commit_id: commit.id(),
-        }));
+        return resolve_tag(repo, name, normalized);
     }
     Ok(None)
+}
+
+fn resolve_tag(
+    repo: &Repository,
+    tag: &str,
+    version: String,
+) -> Result<Option<ResolvedTag>, String> {
+    let obj = repo
+        .revparse_single(&format!("refs/tags/{}", tag))
+        .map_err(|e| conf_err_source(format!("resolve tag {} failed", tag), e))?;
+    let commit = obj
+        .peel_to_commit()
+        .map_err(|e| conf_err_source(format!("peel tag {} to commit failed", tag), e))?;
+    Ok(Some(ResolvedTag {
+        tag: tag.to_string(),
+        version,
+        commit_id: commit.id(),
+    }))
+}
+
+fn tag_version_label(tag: &str) -> String {
+    parse_tag_version(tag)
+        .map(|(normalized, _)| normalized)
+        .unwrap_or_else(|| tag.to_string())
 }
 
 fn parse_tag_version(tag: &str) -> Option<(String, Version)> {

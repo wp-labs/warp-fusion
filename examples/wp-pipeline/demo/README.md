@@ -1,75 +1,42 @@
-# Arrow Pipeline: wpgen → wparse → wfusion
+# wp-pipeline demo
 
-End-to-end example demonstrating the Arrow data pipeline across three WarpParse components.
+Batch end-to-end example for the shared `examples/wp-pipeline/models` rules:
 
-## Pipeline
-
-```
-[wpgen]                    [wparse]                      [wfusion]
-  │                           │                             │
-  │  Sample raw events        │  Parse text → Arrow          │  4 detection rules
-  │  NDJSON text              │  Field extraction            │  Arrow → Arrow
-  │                           │                             │
-  ▼                           ▼                             ▼
-conn_events.ndjson  ──read──▶ parsed.ndjson  ────read────▶ alerts/
-(~400KB text)                  (structured)                  ├── port_scan.arrow
-                                                            ├── ddos.arrow
-                                                            ├── brute_force.arrow
-                                                            └── data_exfil.arrow
+```text
+wpgen -> file -> wparse -> NDJSON -> wfusion -> alerts
 ```
 
-## Quick Start
+This demo uses the same model contract as `../streaming`:
+
+- `models/oml/example.oml` declares `name : nginx_access`.
+- wparse JSON output carries that value in `wp_oml_name`.
+- wfusion source reads `stream_tag_field = "wp_oml_name"`.
+- `models/schemas/network.wfs` routes it to `window conn_events { stream_tag = "nginx_access" }`.
+
+## Run
 
 ```bash
-# Set event count (default 10000)
-export LINE_CNT=10000
-
-# Run the full pipeline
-bash run.sh
+LINE_CNT=5000 ./run.sh
 ```
 
-## Directory Structure
+Use release binaries:
 
-```
-arrow_pipeline/
-├── run.sh                          # One-command pipeline
-├── conf/
-│   ├── wpgen.toml                  # wpgen data generation config
-│   └── wparse.toml                 # wparse engine config
-├── models/
-│   ├── oml/netflow.oml             # wparse data model
-│   └── schemas/network.wfs         # wfusion window schemas
-├── rules/
-│   ├── wpl/parse_netflow.wpl       # wparse parsing rules
-│   └── wfl/
-│       ├── 01_port_scan.wfl        # Port scan detection
-│       ├── 02_ddos.wfl             # DDoS detection
-│       ├── 03_brute_force.wfl      # Brute force detection
-│       └── 04_data_exfil.wfl       # Data exfiltration detection
-├── topology/
-│   ├── sources/                    # wparse data sources
-│   └── sinks/                      # wparse sink routing
-├── wfusion/
-│   ├── wfusion.toml                # wfusion engine config
-│   └── topology/                   # wfusion sources + sinks
-└── data/
-    ├── in_dat/                     # wpgen output (NDJSON)
-    ├── mid_dat/                    # wparse output
-    └── out_dat/alerts/             # wfusion output (Arrow IPC Stream)
+```bash
+LINE_CNT=5000 ./run.sh release
 ```
 
-## Detection Rules
+## Output
 
-| Rule | Window | Condition | Score |
-|------|--------|-----------|-------|
-| port_scan | sip:5m | ≥10 distinct ports | 80 |
-| ddos | dip:1m | ≥1MB + ≥50 sources | 90 |
-| brute_force | sip→dip:1m | ≥5 attempts to SSH/RDP | 85 |
-| data_exfil | sip→dip:10m | ≥5MB transferred | 75 |
+Generated files are written under this example's `data/` directory:
 
-## Arrow IPC Stream Format
+```text
+data/in_dat/gen.dat
+data/out_dat/parsed.ndjson
+data/alerts/scan.ndjson
+data/alerts/traffic.ndjson
+data/alerts/default.ndjson
+data/alerts/error.ndjson
+```
 
-wf fusion outputs each alert type as a separate Arrow IPC Stream file. Benefits:
-- Binary format, ~1/3 to 1/5 the size of equivalent JSON
-- Schema written once per file, not repeated per row
-- Columnar layout supports fast analytical queries
+`parsed.ndjson` is the handoff between wparse and wfusion. Each row should include
+`wp_oml_name = "nginx_access"` so wfusion can dispatch it to the matching window.

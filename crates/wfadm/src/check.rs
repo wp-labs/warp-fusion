@@ -1886,7 +1886,7 @@ rule no_close {
     fn valid_wfs_parses() {
         let dir = temp_dir();
         setup_models_dir(&dir);
-        let real_wfs = "window conn_events {\n    stream = \"conn_events\"\n    time = event_time\n    over = 30m\n    fields {\n        event_time: time\n        sip: ip\n        dip: ip\n    }\n}";
+        let real_wfs = "window conn_events {\n    stream_tag = \"conn_events\"\n    time = event_time\n    over = 30m\n    fields {\n        event_time: time\n        sip: ip\n        dip: ip\n    }\n}";
         std::fs::write(dir.join("models/schemas/test.wfs"), real_wfs).unwrap();
         let cell = check_schemas(&dir, &dir, &None);
         assert!(cell.ok, "valid WFS should parse: {:?}", cell.msg);
@@ -2082,7 +2082,7 @@ scenario with_use<seed=1> {
         std::fs::create_dir_all(&ext).unwrap();
         std::fs::write(
             ext.join("test.wfs"),
-            "window conn_events {\n    stream = \"conn_events\"\n    time = event_time\n    over = 30m\n    fields { event_time: time  sip: ip }\n}",
+            "window conn_events {\n    stream_tag = \"conn_events\"\n    time = event_time\n    over = 30m\n    fields { event_time: time  sip: ip }\n}",
         )
         .unwrap();
 

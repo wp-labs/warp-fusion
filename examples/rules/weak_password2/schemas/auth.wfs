@@ -1,6 +1,6 @@
 // 登录认证事件流
 window auth_events {
-    stream = "auth"
+    stream_tag = "auth"
     time = event_time
     over = 10m
     fields {

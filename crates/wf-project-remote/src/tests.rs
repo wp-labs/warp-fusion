@@ -41,6 +41,20 @@ fn sync_project_remote_updates_to_requested_version_and_persists_state() {
 }
 
 #[test]
+fn sync_project_remote_accepts_v_prefixed_requested_version() {
+    let fixture = create_remote_fixture();
+    let work_root = create_work_root(&fixture);
+    let conf = single_conf(fixture.repo_url(), "1.4.2");
+    create_empty_managed_dirs(work_root.path());
+
+    let result = sync_project_remote(work_root.path(), &conf, Some("v1.4.3")).expect("sync remote");
+
+    assert_eq!(result.requested_version.as_deref(), Some("v1.4.3"));
+    assert_eq!(result.current_version, "1.4.3");
+    assert_eq!(result.resolved_tag, "v1.4.3");
+}
+
+#[test]
 fn sync_project_remote_uses_init_version_when_state_file_is_missing() {
     let fixture = create_remote_fixture();
     let work_root = create_work_root(&fixture);

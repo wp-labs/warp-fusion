@@ -5,6 +5,8 @@
 | 端口扫描 + 白名单 | `port_scan_whitelist/` | 扫描检测 | distinct + count 阈值 + join anti 排除 |
 | SSH 暴力破解 | `ssh_brute_force/` | 暴力破解 | count 阈值 + 多目标聚合 |
 | SQL 注入探测 | `sqli_probe/` | Web 攻击 | URI 模式匹配 + count 阈值 |
+| 单 stream 多 window | `single_stream_multi_window/` | 路由演示 | 一个 stream 同时分发到 conn_events / dns_events |
+| 多 stream 多 window | `multi_stream_multi_window/` | 路由演示 | 一个 source 中的 netflow / dns `wp_oml_name` 分别进入两个 window |
 | 远控扩散（凭据窃取） | `rat_propagation/` | 攻击链 | 多步匹配 scan→login→xfer |
 | 远控扩散（漏洞利用） | `rat_propagation/` | 攻击链 | 多步匹配 scan→xfer |
 | DNS 隧道 | `dns_tunneling/` | 数据外泄 | 长域名 + TXT 查询统计 |
@@ -135,6 +137,55 @@ rule sqli_probe {
 - **分组键**: `sip`
 - **匹配**: 5 分钟内 ≥ 5 次注入请求
 
+### 6. 单 stream 多 window `single_stream_multi_window`
+
+演示 `window` 里的 `stream_tag = "netflow"` 如何作为数据分发键。示例只有一个 `file_src`，输出 `stream_tag = "netflow"`；schema 中 `conn_events` 和 `dns_events` 都绑定同一个 stream，因此同一份输入数据会同时进入两个 window。
+
+```
+window conn_events {
+    stream_tag = "netflow"
+    time = event_time
+    over = 10m
+    fields { sip: ip, dip: ip, dport: digit, protocol: chars, action: chars, event_time: time }
+}
+
+window dns_events {
+    stream_tag = "netflow"
+    time = event_time
+    over = 10m
+    fields { sip: ip, dip: ip, qtype: chars, query: chars, query_len: digit, event_time: time }
+}
+```
+
+- **输入**: `data/netflow_events.ndjson`
+- **分发**: 一个 `netflow` source 同时写入 `conn_events` 与 `dns_events`
+- **规则**: 端口扫描规则消费 `conn_events`；DNS 长 TXT 查询规则消费 `dns_events`
+- **验证**: 使用 `wfl replay`，输入行通过 `_stream = "netflow"` 触发分发
+
+### 7. 多 stream 多 window `multi_stream_multi_window`
+
+演示 batch 模式下一个 source 混合多个 `wp_oml_name`，并通过 `stream_tag_field = "wp_oml_name"` 分发到多个 window。`wp_oml_name = "netflow"` 进入 `conn_events`，`wp_oml_name = "dns"` 进入 `dns_events`，两个规则最终写入同一个 `security_alerts` 输出 window。
+
+```
+window conn_events {
+    stream_tag = "netflow"
+    time = event_time
+    over = 10m
+    fields { sip: ip, dip: ip, dport: digit, protocol: chars, action: chars, event_time: time }
+}
+
+window dns_events {
+    stream_tag = "dns"
+    time = event_time
+    over = 10m
+    fields { sip: ip, dip: ip, qtype: chars, query: chars, query_len: digit, event_time: time }
+}
+```
+
+- **输入**: `data/mixed_events.ndjson`
+- **分发**: `wp_oml_name = "netflow"` -> `conn_events`，`wp_oml_name = "dns"` -> `dns_events`
+- **验证**: `wfusion batch --config wfusion.toml --work-dir .`，期望 `data/out_dat/alerts.ndjson` 产生 2 条告警
+
 ---
 
 ## 通用 Schema
@@ -143,7 +194,7 @@ rule sqli_probe {
 
 ```wfs
 window auth_events {
-    stream = "auth"
+    stream_tag = "auth"
     time = event_time
     over = 24h
     fields {
@@ -156,7 +207,7 @@ window auth_events {
 }
 
 window dns_events {
-    stream = "dns"
+    stream_tag = "dns"
     time = event_time
     over = 24h
     fields {
@@ -166,7 +217,7 @@ window dns_events {
 }
 
 window http_events {
-    stream = "http"
+    stream_tag = "http"
     time = event_time
     over = 24h
     fields {

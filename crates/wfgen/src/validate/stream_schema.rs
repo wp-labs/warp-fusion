@@ -49,6 +49,16 @@ pub(super) fn validate_streams_with_schemas(
                     let base = match &field_def.field_type {
                         FieldType::Base(b) => b,
                         FieldType::Array(b) => b,
+                        FieldType::ArrayAny | FieldType::Object => {
+                            errors.push(ValidationError {
+                                code: "SV7",
+                                message: format!(
+                                    "stream '{}': field '{}' ({:?}) does not support scalar generator overrides",
+                                    stream.alias, ov.field_name, field_def.field_type
+                                ),
+                            });
+                            continue;
+                        }
                     };
                     if let Some(reason) = check_gen_expr_compat(&ov.gen_expr, base) {
                         errors.push(ValidationError {

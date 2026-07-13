@@ -1,5 +1,5 @@
 window auth_events {
-    stream = "auth"
+    stream_tag = "auth"
     time = event_time
     over = 5m
     fields {

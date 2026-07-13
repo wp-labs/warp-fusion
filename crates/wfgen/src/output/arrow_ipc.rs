@@ -167,6 +167,7 @@ pub fn events_to_typed_batches(
 fn field_type_to_arrow(ft: &FieldType) -> DataType {
     let base = match ft {
         FieldType::Base(b) => b,
+        FieldType::ArrayAny | FieldType::Object => return DataType::Utf8,
         FieldType::Array(b) => b,
     };
     match base {
@@ -190,6 +191,7 @@ impl ColumnBuilder {
     fn new(field_type: &FieldType, cap: usize) -> Self {
         let base = match field_type {
             FieldType::Base(b) => b,
+            FieldType::ArrayAny | FieldType::Object => return Self::Utf8(Vec::with_capacity(cap)),
             FieldType::Array(b) => b,
         };
         match base {
@@ -203,7 +205,10 @@ impl ColumnBuilder {
 
     fn push(&mut self, value: Option<&serde_json::Value>, fallback_time: Option<i64>) {
         match self {
-            Self::Utf8(col) => col.push(value.and_then(|v| v.as_str()).map(String::from)),
+            Self::Utf8(col) => col.push(value.map(|v| match v {
+                serde_json::Value::String(s) => s.clone(),
+                other => other.to_string(),
+            })),
             Self::Int64(col) => col.push(value.and_then(|v| v.as_i64())),
             Self::Float64(col) => col.push(value.and_then(|v| v.as_f64())),
             Self::Bool(col) => col.push(value.and_then(|v| v.as_bool())),

@@ -10,4 +10,5 @@ connect = "file_json_sink"
 name = "parsed_output"
 tags = ["sink:parsed"]
 [sink_group.sinks.params]
+base = "../data/out_dat"
 file = "parsed.ndjson"

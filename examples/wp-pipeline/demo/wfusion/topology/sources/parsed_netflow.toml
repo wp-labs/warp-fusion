@@ -1,6 +1,6 @@
 connect = "file_src"
 enable = true
 key = "parsed_nginx"
-stream = "nginx_access"
-path = "../../wparse/data/out_dat/parsed.ndjson"
+path = "../data/out_dat/parsed.ndjson"
 data_format = "ndjson"
+stream_tag_field = "wp_oml_name"

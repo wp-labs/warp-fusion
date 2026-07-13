@@ -60,7 +60,6 @@ use templates::{
     // test
     TEST_BATCH_CONFIG,
     // sinks
-    TOPO_SINKS_CONN_FILE,
     TOPO_SINKS_DEFAULT,
     TOPO_SINKS_DEFAULTS,
     TOPO_SINKS_DNS,
@@ -138,7 +137,6 @@ const ALL: &[TemplateFile] = &[
     TOPO_SINKS_SECURITY,
     TOPO_SINKS_DEFAULT,
     TOPO_SINKS_ERROR,
-    TOPO_SINKS_CONN_FILE,
     // sources
     TOPO_SOURCES_INGRESS,
     // scripts
@@ -197,7 +195,6 @@ const CONF_ONLY: &[TemplateFile] = &[
     TOPO_SINKS_SECURITY,
     TOPO_SINKS_DEFAULT,
     TOPO_SINKS_ERROR,
-    TOPO_SINKS_CONN_FILE,
     TOPO_SOURCES_INGRESS,
     SCRIPT_RUN,
     SCRIPT_SMOKE,
@@ -250,6 +247,18 @@ mod tests {
     fn templates_all_have_content() {
         for &(path, content) in templates_for(Scope::Normal) {
             assert!(!content.is_empty(), "template {path} is empty");
+        }
+    }
+
+    #[test]
+    fn templates_do_not_embed_connectors_under_sinks() {
+        for scope in [Scope::Normal, Scope::Rules, Scope::Conf] {
+            assert!(
+                !templates_for(scope)
+                    .iter()
+                    .any(|(p, _)| p.starts_with("topology/sinks/connectors/")),
+                "connectors are generated at project root, not under topology/sinks"
+            );
         }
     }
 }

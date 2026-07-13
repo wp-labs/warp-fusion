@@ -1,7 +1,0 @@
-[[connectors]]
-allow_override = ["endpoint"]
-id = "prometheus_sink"
-type = "prometheus"
-
-[connectors.params]
-endpoint = "0.0.0.0:9898"

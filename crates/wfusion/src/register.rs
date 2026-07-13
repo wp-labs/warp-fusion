@@ -16,6 +16,9 @@ pub fn register_connectors() {
     // syslog
     wp_core_connectors::sources::syslog::register_syslog_factory();
 
+    // syslog
+    wp_core_connectors::sources::syslog::register_syslog_factory();
+
     // Kafka
     register_source_factory(wp_connectors::kafka::KafkaSourceFactory);
     register_sink_factory(wp_connectors::kafka::KafkaSinkFactory);

@@ -12,7 +12,7 @@
 /// Called once during engine startup before bootstrapping sinks and sources.
 pub fn register_connectors() {
     use wp_core_connectors::registry::{register_sink_factory, register_source_factory};
-    
+
     // syslog
     wp_core_connectors::sources::syslog::register_syslog_factory();
 

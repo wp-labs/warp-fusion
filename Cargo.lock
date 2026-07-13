@@ -4606,7 +4606,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32497e9a4c7b38532efcdebeef879707aa9f794296a4f0244f6f69e9bc8574bd"
 dependencies = [
  "fastrand",
- "getrandom 0.4.3",
+ "getrandom 0.3.4",
  "once_cell",
  "rustix",
  "windows-sys 0.61.2",
@@ -5016,7 +5016,7 @@ checksum = "009994f150cc0cd50ff54917d5bc8bffe8cad10ca10d81c34da2ec421ae61782"
 [[package]]
 name = "tree-sitter-wfl"
 version = "0.0.1"
-source = "git+https://github.com/wp-labs/tree-sitter-wfl.git?branch=main#413002066fce33af8afc663c89143f2d2c73d6e4"
+source = "git+https://github.com/wp-labs/tree-sitter-wfl.git?branch=main#b6f3aed848dca72c1b437349f8ad98110b497ff5"
 dependencies = [
  "cc",
  "tree-sitter",

@@ -11,5 +11,5 @@
 | [`config/sink.md`](config/sink.md) | Sink 路由、connector 定义 |
 | [`config/metrics.md`](config/metrics.md) | 监控指标配置 |
 | [`config/logging.md`](config/logging.md) | 日志配置 |
-| [`admin_api.md`](admin_api.md) | Admin API 配置、状态查询、在线 reload / 发布 |
-| [`design/stream_tag_routing.md`](design/stream_tag_routing.md) | 上游 tag 到 stream/window 的分发契约 |
+| [`cli/admin_api.md`](cli/admin_api.md) | Admin API 配置、状态查询、在线 reload / 发布 |
+| [`../design/stream_tag_routing.md`](../design/stream_tag_routing.md) | 上游 tag 到 stream/window 的分发契约 |

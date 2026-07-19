@@ -212,5 +212,4 @@ OK: multi-stream dynamic routing produced 2 expected alerts
 6. 规则是否消费了对应 window。
 7. 同一个 stream tag 下输入字段结构是否满足所有订阅 window 的字段声明。
 
-更底层的机制说明见 [Wparse Output To Window Routing](design/wparse_window_routing.md)。
-
+更底层的机制说明见 [Wparse Output To Window Routing](../design/wparse_window_routing.md)。

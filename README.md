@@ -9,7 +9,7 @@
 变更记录见 [CHANGELOG.md](./CHANGELOG.md)。
 
 运行、配置和 Admin API 使用文档见 [docs](./docs/)，其中 Admin API
-状态查询、在线 reload 和发布流程见 [docs/admin_api.md](./docs/admin_api.md)。
+状态查询、在线 reload 和发布流程见 [docs/useage/cli/admin_api.md](./docs/useage/cli/admin_api.md)。
 
 核心运行时库来自 `https://github.com/wp-labs/wp-reactor.git` 的 `v0.1.3` tag，
 这里通过 git dependency 复用 `wf-engine`、`wf-config`、`wf-lang`、`wf-core`

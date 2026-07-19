@@ -24,7 +24,7 @@ data_format = "ndjson"
 
 `warp-parse -> warp-fusion` 输出数据如何进入 window 的完整链路见
 [Wparse 输出分发到 Window 使用指南](../wparse-window-routing.md)，底层机制见
-[Wparse Output To Window Routing](../design/wparse_window_routing.md)。
+[Wparse Output To Window Routing](../../design/wparse_window_routing.md)。
 
 推荐的分发优先级：
 

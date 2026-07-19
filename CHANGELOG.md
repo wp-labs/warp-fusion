@@ -51,10 +51,10 @@ All notable changes to wfusion will be documented in this file.
 - **示例脚本**: 为 single-stream / multi-stream 示例增加 `run.sh`，并接入 `examples/rules/run_all.sh`。
 - **wp-pipeline demo**: `examples/wp-pipeline/demo` 对齐 `streaming` 的共享 `models/` 布局，batch 链路改为 `wpgen -> file -> wparse -> NDJSON(wp_oml_name) -> wfusion`，运行输出统一到示例根目录 `data/`。
 - **wp-pipeline demo**: 删除 demo 内重复的本地 models、connectors、Redis external 规则和 knowdb，避免示例加载旧配置或依赖外部 Redis。
-- **使用文档**: 新增 `docs/wparse-window-routing.md`，按配置步骤说明 `warp-parse` 输出如何进入 `warp-fusion` window。
+- **使用文档**: 新增 `docs/useage/wparse-window-routing.md`，按配置步骤说明 `warp-parse` 输出如何进入 `warp-fusion` window。
 - **设计文档**: 新增 `docs/design/stream_tag_routing.md` 与 `docs/design/wparse_window_routing.md`，记录 logical stream tag、Arrow frame tag、`wp_oml_name`、`stream_tag_field` 的关系和排查清单。
-- **配置文档**: 更新 `docs/config/source.md`，补充固定 `stream_tag`、动态 `stream_tag_field`、Arrow framed frame tag 的分发优先级。
-- **配置文档**: 更新 `docs/config/sink.md`，记录 `wf_meta_disable = ["__wfu_*"]` 的配置位置、字段限制、与 `fields` 投影的执行顺序，以及通过 `DataType::Ignore` 跳过 sink 输出的机制。
+- **配置文档**: 更新 `docs/useage/config/source.md`，补充固定 `stream_tag`、动态 `stream_tag_field`、Arrow framed frame tag 的分发优先级。
+- **配置文档**: 更新 `docs/useage/config/sink.md`，记录 `wf_meta_disable = ["__wfu_*"]` 的配置位置、字段限制、与 `fields` 投影的执行顺序，以及通过 `DataType::Ignore` 跳过 sink 输出的机制。
 
 ### wfgen
 

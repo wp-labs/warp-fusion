@@ -37,7 +37,7 @@ file = "metrics.ndjson"
 
 ## 指标列表
 
-详见 `wp-reactor/docs/monitoring-design.md`。
+更多运行和排障场景见 [Admin API / CLI 文档](../cli/admin_api.md) 和 [运行时配置](runtime.md)。
 
 | 类别 | 指标（部分） |
 |------|-------------|

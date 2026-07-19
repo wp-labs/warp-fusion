@@ -24,6 +24,7 @@ All notable changes to wfusion will be documented in this file.
 - **Update 保留**: `update=true` 后如果项目已同步并通过校验，但 runtime reload 返回 `restart_required`，daemon 保留已同步项目内容和 project state，等待进程重启后生效。
 - **状态记录**: 后台 reload 的 `last_reload_result` 增加 `restart_required`，文档和测试同步更新 wait=true / wait=false 行为。
 - **wfadm self update**: 新增对齐 `wpadm self update` 的分层命令和参数，支持 `--channel`、`--updates-base-url`、`--updates-root`、`--json`、`--yes`、`--dry-run`、`--force`。更新源改为 manifest canonical target triple，修复 macOS arm64 `aarch64-macos` 短名导致的 404，并避免将 `wfusion` 写入 `wfadm` 路径；当远端版本低于当前版本时，文本输出会将 `Latest` 灰色显示。
+- **wfadm self update**: 默认远端 manifest URL 按 channel 选择分支，`alpha` 使用 `alpha/updates/alpha/manifest.json`，`beta` 使用 `beta/updates/beta/manifest.json`，避免 `--channel alpha` 错误读取 `main/updates/alpha/manifest.json`。
 
 ### 发布元数据
 

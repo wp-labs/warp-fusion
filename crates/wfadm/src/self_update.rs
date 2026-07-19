@@ -14,8 +14,7 @@ use std::path::{Path, PathBuf};
 use clap::{Args, Subcommand, ValueEnum};
 use serde::{Deserialize, Serialize};
 
-const DEFAULT_UPDATES_BASE_URL: &str =
-    "https://raw.githubusercontent.com/wp-labs/warp-fusion/main/updates";
+const DEFAULT_UPDATES_RAW_BASE_URL: &str = "https://raw.githubusercontent.com/wp-labs/warp-fusion";
 const UPDATES_BASE_URL_ENV: &str = "WFUSION_UPDATES_BASE_URL";
 const UPDATES_ROOT_ENV: &str = "WFUSION_UPDATES_ROOT";
 
@@ -51,7 +50,7 @@ pub struct SelfSourceArgs {
     #[arg(
         long = "updates-base-url",
         visible_alias = "updates基地址",
-        help = "远端 manifest 基础地址（默认 warp-fusion updates 根；最终拼成 {channel}/manifest.json）| Remote manifest base URL (defaults to warp-fusion updates root; resolved as {channel}/manifest.json)"
+        help = "远端 manifest 基础地址（默认按 channel 选择 warp-fusion 分支 updates 根；最终拼成 {channel}/manifest.json）| Remote manifest base URL (defaults to the warp-fusion channel branch updates root; resolved as {channel}/manifest.json)"
     )]
     pub updates_base_url: Option<String>,
 
@@ -118,6 +117,14 @@ impl UpdateChannel {
     fn as_str(self) -> &'static str {
         match self {
             Self::Stable => "stable",
+            Self::Beta => "beta",
+            Self::Alpha => "alpha",
+        }
+    }
+
+    fn default_branch(self) -> &'static str {
+        match self {
+            Self::Stable => "main",
             Self::Beta => "beta",
             Self::Alpha => "alpha",
         }
@@ -428,7 +435,7 @@ fn resolve_manifest_source(source: &SelfSourceArgs) -> ManifestSource {
         .updates_base_url
         .clone()
         .or_else(|| std::env::var(UPDATES_BASE_URL_ENV).ok())
-        .unwrap_or_else(|| DEFAULT_UPDATES_BASE_URL.to_string());
+        .unwrap_or_else(|| default_updates_base_url(source.channel));
 
     ManifestSource::Remote {
         url: format!(
@@ -437,6 +444,14 @@ fn resolve_manifest_source(source: &SelfSourceArgs) -> ManifestSource {
             source.channel.as_str()
         ),
     }
+}
+
+fn default_updates_base_url(channel: UpdateChannel) -> String {
+    format!(
+        "{}/{}/updates",
+        DEFAULT_UPDATES_RAW_BASE_URL,
+        channel.default_branch()
+    )
 }
 
 fn fetch_manifest(source: &ManifestSource) -> Result<UpdateManifest, String> {
@@ -627,7 +642,23 @@ mod tests {
         assert_eq!(
             manifest,
             ManifestSource::Remote {
-                url: format!("{DEFAULT_UPDATES_BASE_URL}/stable/manifest.json")
+                url: "https://raw.githubusercontent.com/wp-labs/warp-fusion/main/updates/stable/manifest.json".to_string()
+            }
+        );
+
+        let manifest = resolve_manifest_source(&source(UpdateChannel::Alpha));
+        assert_eq!(
+            manifest,
+            ManifestSource::Remote {
+                url: "https://raw.githubusercontent.com/wp-labs/warp-fusion/alpha/updates/alpha/manifest.json".to_string()
+            }
+        );
+
+        let manifest = resolve_manifest_source(&source(UpdateChannel::Beta));
+        assert_eq!(
+            manifest,
+            ManifestSource::Remote {
+                url: "https://raw.githubusercontent.com/wp-labs/warp-fusion/beta/updates/beta/manifest.json".to_string()
             }
         );
     }

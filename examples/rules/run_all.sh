@@ -144,6 +144,25 @@ run_batch_case() {
     passed=$((passed + 1))
 }
 
+run_script_case() {
+    local case_dir="$1"
+    local script="${2:-./run.sh}"
+
+    batch_total=$((batch_total + 1))
+    echo "==> $case_dir"
+    echo "  $script"
+    if ! (cd "$case_dir" && "$script" "$PROFILE"); then
+        echo "  FAIL: script case failed"
+        record_result "FAIL" "$case_dir $script" "script failed"
+        failed=$((failed + 1))
+        return
+    fi
+
+    echo "  OK: script case passed"
+    record_result "PASS" "$case_dir $script" "script passed"
+    passed=$((passed + 1))
+}
+
 echo "## Rule lint and inline tests"
 while IFS= read -r rule; do
     total=$((total + 1))
@@ -159,6 +178,7 @@ run_batch_case "./rat_propagation" "data/out_dat/alerts.ndjson" 0
 run_batch_case "./single_stream_multi_window" "data/out_dat/alerts.ndjson" 2
 run_batch_case "./sqli_probe" "data/out_dat/out/alerts.ndjson" 1
 run_batch_case "./ssh_brute_force" "data/out_dat/alerts.ndjson" 1
+run_script_case "./window_miss"
 run_batch_case "./weak_password" "data/out_dat/alerts.ndjson" 0
 if [ "${RUN_EXTERNAL:-0}" = "1" ]; then
     run_batch_case "./weak_password2" "data/out_dat/alerts.ndjson" 5

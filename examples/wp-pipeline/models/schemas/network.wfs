@@ -4,7 +4,7 @@ window conn_events {
     over = 30m
     fields { sip: ip  recv_time: time  digit: digit  chars: chars }
 }
-window scan_alerts { over = 0  fields { sip: ip  alert_type: chars  detail: chars  request_count: digit } }
+window scan_alerts { over = 0  fields { rule_name: chars  sip: ip  alert_type: chars  detail: chars  request_count: digit } }
 window error_alerts { over = 0  fields { sip: ip  alert_type: chars  error_count: digit  error_rate: digit } }
-window traffic_alerts { over = 0  fields { sip: ip  alert_type: chars  total_bytes: digit  request_count: digit } }
+window traffic_alerts { over = 0  fields { rule_name: chars  sip: ip  alert_type: chars  total_bytes: digit  request_count: digit } }
 window bot_alerts { over = 0  fields { sip: ip  alert_type: chars  detail: chars  request_count: digit } }

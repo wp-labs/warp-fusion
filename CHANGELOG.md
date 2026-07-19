@@ -13,6 +13,8 @@ All notable changes to wfusion will be documented in this file.
 
 - **配置文档**: 补充 `wf_meta_disable` wildmatch pattern 说明，明确仅允许 `__wfu_` 前缀的精确字段或 pattern。
 - **SSH brute force 示例**: 输出统计证据和事件/窗口时间边界，并在 sink 组中配置 `wf_meta_disable = ["__wfu_*"]`。
+- **Window miss 示例**: 新增 `examples/rules/window_miss`，覆盖动态 `wp_oml_name` 路由下的合法 stream、未知 stream schema 和缺失 stream tag 字段。
+- **Window miss monitor**: 为示例增加 `infra.d/monitor.toml` 与 runtime metrics 配置，`run.sh` 会验证 `window_miss_total` 中 `unknown_stream_schema` 和 `missing_stream_tag_field` 两类统计均为 1。
 
 ### Admin API / project remote
 

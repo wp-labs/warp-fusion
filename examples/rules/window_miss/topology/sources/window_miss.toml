@@ -1,0 +1,7 @@
+connect = "file_src"
+enable = true
+key = "window_miss_source"
+
+path = "data/window_miss_events.ndjson"
+data_format = "ndjson"
+stream_tag_field = "wp_oml_name"

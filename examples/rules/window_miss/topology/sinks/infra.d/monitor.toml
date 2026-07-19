@@ -1,0 +1,8 @@
+[sink_group]
+name = "monitor"
+
+[[sink_group.sinks]]
+connect = "file_json"
+
+[sink_group.sinks.params]
+file = "metrics.ndjson"

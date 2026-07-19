@@ -8,6 +8,7 @@ rule scan_detect {
     } -> score(70.0)
     entity(ip, e.sip)
     yield scan_alerts (
+        rule_name = @__wfu_rule_name,
         sip = e.sip,
         alert_type = "scanner",
         detail = ">=50 req in 5min",

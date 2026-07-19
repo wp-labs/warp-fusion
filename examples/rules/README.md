@@ -7,6 +7,7 @@
 | SQL 注入探测 | `sqli_probe/` | Web 攻击 | URI 模式匹配 + count 阈值 |
 | 单 stream 多 window | `single_stream_multi_window/` | 路由演示 | 一个 stream 同时分发到 conn_events / dns_events |
 | 多 stream 多 window | `multi_stream_multi_window/` | 路由演示 | 一个 source 中的 netflow / dns `wp_oml_name` 分别进入两个 window |
+| Window miss | `window_miss/` | 路由诊断 | unknown / missing `wp_oml_name` 进入内置 miss 诊断，合法 stream 继续处理 |
 | 远控扩散（凭据窃取） | `rat_propagation/` | 攻击链 | 多步匹配 scan→login→xfer |
 | 远控扩散（漏洞利用） | `rat_propagation/` | 攻击链 | 多步匹配 scan→xfer |
 | DNS 隧道 | `dns_tunneling/` | 数据外泄 | 长域名 + TXT 查询统计 |
@@ -185,6 +186,21 @@ window dns_events {
 - **输入**: `data/mixed_events.ndjson`
 - **分发**: `wp_oml_name = "netflow"` -> `conn_events`，`wp_oml_name = "dns"` -> `dns_events`
 - **验证**: `wfusion batch --config wfusion.toml --work-dir .`，期望 `data/out_dat/alerts.ndjson` 产生 2 条告警
+
+### 8. Window miss `window_miss`
+
+演示动态路由输入中的坏 stream tag 不应阻塞同批次合法事件。示例使用
+`stream_tag_field = "wp_oml_name"`，输入文件同时包含：
+
+- `wp_oml_name = "netflow"`：合法 stream，进入 `conn_events` 并产生 1 条告警。
+- `wp_oml_name = "unknown_stream"`：没有任何 window schema 订阅，记录为
+  `unknown_stream_schema`。
+- 缺失 `wp_oml_name`：记录为 `missing_stream_tag_field`。
+
+- **输入**: `data/window_miss_events.ndjson`
+- **分发**: 合法 `netflow` 进入业务 window；miss row 进入 runtime 诊断路径
+- **验证**: `./run.sh`，期望合法 stream 产生 1 条告警，并在
+  `data/out_dat/metrics.ndjson` 中检查到两条 `window_miss_total` monitor 统计
 
 ---
 

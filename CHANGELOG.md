@@ -2,12 +2,13 @@
 
 All notable changes to wfusion will be documented in this file.
 
-## [0.1.29 Unreleased]
+## [0.1.30 Unreleased]
 
 ### 依赖与语言能力
 
-- **依赖**: `wf-engine` / `wf-config` / `wf-lang` / `wf-data` / `wf-runtime` 对齐 `wp-reactor` v0.1.32。
+- **依赖**: `wf-engine` / `wf-config` / `wf-lang` / `wf-data` / `wf-runtime` 对齐 `wp-reactor` v0.1.33。
 - **Sink 元字段控制**: 通过 `wp-reactor` v0.1.32 支持 `wf_meta_disable` 的 wildmatch matcher，可使用 `__wfu_*`、`__wfu_rule_*` 等 pattern 禁用 wfusion 元字段输出。
+- **Window miss 诊断**: 通过 `wp-reactor` v0.1.33 支持内置 `__window_miss` 诊断窗口与 `window_miss_total` runtime metrics。
 
 ### 示例与文档
 
@@ -15,6 +16,7 @@ All notable changes to wfusion will be documented in this file.
 - **SSH brute force 示例**: 输出统计证据和事件/窗口时间边界，并在 sink 组中配置 `wf_meta_disable = ["__wfu_*"]`。
 - **Window miss 示例**: 新增 `examples/rules/window_miss`，覆盖动态 `wp_oml_name` 路由下的合法 stream、未知 stream schema 和缺失 stream tag 字段。
 - **Window miss monitor**: 为示例增加 `infra.d/monitor.toml` 与 runtime metrics 配置，`run.sh` 会验证 `window_miss_total` 中 `unknown_stream_schema` 和 `missing_stream_tag_field` 两类统计均为 1。
+- **wp-pipeline 示例**: `scan_alerts` / `traffic_alerts` 输出补充 `rule_name = @__wfu_rule_name`，便于下游按规则名区分告警。
 
 ### Admin API / project remote
 
@@ -24,7 +26,7 @@ All notable changes to wfusion will be documented in this file.
 
 ### 发布元数据
 
-- **版本**: CLI crate 版本推进到 `0.1.29`，stable update manifest 指向 `v0.1.28` 发布包，并归档 `v0.1.28` manifest。
+- **版本**: CLI crate 版本推进到 `0.1.30`，stable update manifest 指向 `v0.1.29` 发布包，并归档 `v0.1.29` manifest。
 
 ## [0.1.28] — 2026-07-13
 

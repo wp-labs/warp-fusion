@@ -36,6 +36,7 @@ wfusion run -c ./wfusion.toml
 warp-fusion/
 ├── wfusion.toml           # 主配置
 ├── rules/                 # .wfl 规则文件
+│   └── _global.wfl        # 可选：项目级 yield preset
 ├── schemas/               # .wfs schema 文件
 ├── sinks/                 # sink 配置
 │   ├── infra.d/           #   基础设施 sink（default/error/monitor）

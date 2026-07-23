@@ -14,6 +14,11 @@ End-to-end streaming detection with Kafka as message bus.
 conn_events.ndjson  ──read──▶  wp_nginx_logs  ──consume──▶  wp_alerts_*
 ```
 
+The shared rules under `../models/wfl` use `_global.wfl` as a project-level WFL
+prelude. It defines `yield preset base_alerts`, and each alert rule uses
+`yield <alert_window> : base_alerts (...)` so common output fields such as
+`rule_name = @__wfu_rule_name` are maintained once.
+
 ## Prerequisites
 
 - Docker & docker-compose

@@ -12,6 +12,9 @@ This demo uses the same model contract as `../streaming`:
 - wparse JSON output carries that value in `wp_oml_name`.
 - wfusion source reads `stream_tag_field = "wp_oml_name"`.
 - `models/schemas/network.wfs` routes it to `window conn_events { stream_tag = "nginx_access" }`.
+- `models/wfl/_global.wfl` defines shared `yield preset base_alerts`; alert rules use
+  `yield <alert_window> : base_alerts (...)` to keep common output fields such as
+  `rule_name = @__wfu_rule_name` in one place.
 
 ## Run
 

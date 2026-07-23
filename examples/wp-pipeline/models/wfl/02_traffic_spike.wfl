@@ -7,8 +7,7 @@ rule traffic_spike {
         and close { e | count >= 100; }
     } -> score(80.0)
     entity(ip, e.sip)
-    yield traffic_alerts (
-        rule_name = @__wfu_rule_name,
+    yield traffic_alerts : base_alerts (
         sip = e.sip,
         alert_type = "traffic_spike",
         total_bytes = 100,

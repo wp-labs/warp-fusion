@@ -7,8 +7,7 @@ rule scan_detect {
         and close { e | count >= 50; }
     } -> score(70.0)
     entity(ip, e.sip)
-    yield scan_alerts (
-        rule_name = @__wfu_rule_name,
+    yield scan_alerts : base_alerts (
         sip = e.sip,
         alert_type = "scanner",
         detail = ">=50 req in 5min",

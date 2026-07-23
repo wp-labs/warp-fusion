@@ -40,7 +40,7 @@ clap = { version = "4", features = ["derive"] }
 tokio = { version = "1", features = ["net", "time", "rt", "rt-multi-thread", "macros", "signal"] }
 rand = "=0.9"
 wp-arrow = "0.2"
-wp-connector-api = "0.10"
+wp-connector-api = "0.11"
 tracing = "0.1"
 toml = "1.0"
 ureq = { version = "3", features = ["gzip"] }

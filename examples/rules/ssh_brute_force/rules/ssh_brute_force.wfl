@@ -6,7 +6,7 @@ use "auth.wfs"
 //   1. event filter: SSH 服务 + 登录失败
 //   2. on event: 5 分钟内同一 sip 累计失败 >= 10 次时触发
 //   3. join anti: 排除已知漏扫器 IP
-//   4. yield: 输出统计证据和事件/窗口时间边界
+//   4. yield: 输出统计证据、相关 event_id 集合和事件/窗口时间边界
 //
 // 场景：
 //   - 攻击者对多台服务器尝试弱口令
@@ -33,6 +33,7 @@ rule ssh_brute_force {
         window_events = stat.count(window_event(e)),
         matched_events = stat.count(match_event(failures)),
         trigger_count = stat.value(trigger(failures)),
+        evidence_event_ids = collect_set(e.event_id),
         first_seen = @event_first_time,
         last_seen = @event_last_time,
         rule_window_start = @window_start_time,
@@ -55,25 +56,25 @@ rule ssh_brute_force {
 test brute_force_detected for ssh_brute_force {
   input {
     row(e, sip = "10.0.0.99", dip = "192.168.1.01", dport = "22", service = "ssh",
-        user = "root", result = "failed", event_time = "2026-01-01T00:00:00Z");
+        user = "root", result = "failed", event_id = "auth-001", event_time = "2026-01-01T00:00:00Z");
     row(e, sip = "10.0.0.99", dip = "192.168.1.02", dport = "22", service = "ssh",
-        user = "root", result = "failed", event_time = "2026-01-01T00:00:10Z");
+        user = "root", result = "failed", event_id = "auth-002", event_time = "2026-01-01T00:00:10Z");
     row(e, sip = "10.0.0.99", dip = "192.168.1.03", dport = "22", service = "ssh",
-        user = "admin", result = "failed", event_time = "2026-01-01T00:00:20Z");
+        user = "admin", result = "failed", event_id = "auth-003", event_time = "2026-01-01T00:00:20Z");
     row(e, sip = "10.0.0.99", dip = "192.168.1.04", dport = "22", service = "ssh",
-        user = "admin", result = "failed", event_time = "2026-01-01T00:00:30Z");
+        user = "admin", result = "failed", event_id = "auth-004", event_time = "2026-01-01T00:00:30Z");
     row(e, sip = "10.0.0.99", dip = "192.168.1.05", dport = "22", service = "ssh",
-        user = "root", result = "failed", event_time = "2026-01-01T00:00:40Z");
+        user = "root", result = "failed", event_id = "auth-005", event_time = "2026-01-01T00:00:40Z");
     row(e, sip = "10.0.0.99", dip = "192.168.1.06", dport = "22", service = "ssh",
-        user = "root", result = "failed", event_time = "2026-01-01T00:00:50Z");
+        user = "root", result = "failed", event_id = "auth-006", event_time = "2026-01-01T00:00:50Z");
     row(e, sip = "10.0.0.99", dip = "192.168.1.07", dport = "22", service = "ssh",
-        user = "ubuntu", result = "failed", event_time = "2026-01-01T00:01:00Z");
+        user = "ubuntu", result = "failed", event_id = "auth-007", event_time = "2026-01-01T00:01:00Z");
     row(e, sip = "10.0.0.99", dip = "192.168.1.08", dport = "22", service = "ssh",
-        user = "test", result = "failed", event_time = "2026-01-01T00:01:10Z");
+        user = "test", result = "failed", event_id = "auth-008", event_time = "2026-01-01T00:01:10Z");
     row(e, sip = "10.0.0.99", dip = "192.168.1.09", dport = "22", service = "ssh",
-        user = "test", result = "failed", event_time = "2026-01-01T00:01:20Z");
+        user = "test", result = "failed", event_id = "auth-009", event_time = "2026-01-01T00:01:20Z");
     row(e, sip = "10.0.0.99", dip = "192.168.1.10", dport = "22", service = "ssh",
-        user = "root", result = "failed", event_time = "2026-01-01T00:01:30Z");
+        user = "root", result = "failed", event_id = "auth-010", event_time = "2026-01-01T00:01:30Z");
   }
   expect {
     hits == 1;
@@ -85,11 +86,11 @@ test brute_force_detected for ssh_brute_force {
 test below_threshold for ssh_brute_force {
   input {
     row(e, sip = "10.0.0.50", dip = "192.168.1.01", dport = "22", service = "ssh",
-        user = "root", result = "failed", event_time = "2026-01-01T00:00:00Z");
+        user = "root", result = "failed", event_id = "auth-011", event_time = "2026-01-01T00:00:00Z");
     row(e, sip = "10.0.0.50", dip = "192.168.1.02", dport = "22", service = "ssh",
-        user = "root", result = "failed", event_time = "2026-01-01T00:00:10Z");
+        user = "root", result = "failed", event_id = "auth-012", event_time = "2026-01-01T00:00:10Z");
     row(e, sip = "10.0.0.50", dip = "192.168.1.02", dport = "22", service = "ssh",
-        user = "root", result = "success", event_time = "2026-01-01T00:00:15Z");
+        user = "root", result = "success", event_id = "auth-013", event_time = "2026-01-01T00:00:15Z");
   }
   expect { hits == 0; }
 }
@@ -98,9 +99,9 @@ test below_threshold for ssh_brute_force {
 test successful_login_ignored for ssh_brute_force {
   input {
     row(e, sip = "10.0.0.123", dip = "192.168.1.01", dport = "22", service = "ssh",
-        user = "root", result = "success", event_time = "2026-01-01T00:00:00Z");
+        user = "root", result = "success", event_id = "auth-014", event_time = "2026-01-01T00:00:00Z");
     row(e, sip = "10.0.0.123", dip = "192.168.1.02", dport = "22", service = "ssh",
-        user = "root", result = "success", event_time = "2026-01-01T00:00:10Z");
+        user = "root", result = "success", event_id = "auth-015", event_time = "2026-01-01T00:00:10Z");
   }
   expect { hits == 0; }
 }
@@ -109,17 +110,17 @@ test successful_login_ignored for ssh_brute_force {
 test isolated_by_sip for ssh_brute_force {
   input {
     row(e, sip = "10.0.0.1", dip = "192.168.1.01", dport = "22", service = "ssh",
-        user = "root", result = "failed", event_time = "2026-01-01T00:00:00Z");
+        user = "root", result = "failed", event_id = "auth-016", event_time = "2026-01-01T00:00:00Z");
     row(e, sip = "10.0.0.1", dip = "192.168.1.02", dport = "22", service = "ssh",
-        user = "root", result = "failed", event_time = "2026-01-01T00:00:10Z");
+        user = "root", result = "failed", event_id = "auth-017", event_time = "2026-01-01T00:00:10Z");
     row(e, sip = "10.0.0.2", dip = "192.168.1.03", dport = "22", service = "ssh",
-        user = "root", result = "failed", event_time = "2026-01-01T00:00:20Z");
+        user = "root", result = "failed", event_id = "auth-018", event_time = "2026-01-01T00:00:20Z");
     row(e, sip = "10.0.0.2", dip = "192.168.1.04", dport = "22", service = "ssh",
-        user = "root", result = "failed", event_time = "2026-01-01T00:00:30Z");
+        user = "root", result = "failed", event_id = "auth-019", event_time = "2026-01-01T00:00:30Z");
     row(e, sip = "10.0.0.3", dip = "192.168.1.05", dport = "22", service = "ssh",
-        user = "root", result = "failed", event_time = "2026-01-01T00:00:40Z");
+        user = "root", result = "failed", event_id = "auth-020", event_time = "2026-01-01T00:00:40Z");
     row(e, sip = "10.0.0.3", dip = "192.168.1.06", dport = "22", service = "ssh",
-        user = "root", result = "failed", event_time = "2026-01-01T00:00:50Z");
+        user = "root", result = "failed", event_id = "auth-021", event_time = "2026-01-01T00:00:50Z");
   }
   expect { hits == 0; }
 }

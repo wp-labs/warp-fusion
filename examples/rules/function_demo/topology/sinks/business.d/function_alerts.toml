@@ -1,0 +1,12 @@
+version = "1.0"
+
+[sink_group]
+name = "function_alerts_out"
+windows = ["function_alerts"]
+
+[[sink_group.sinks]]
+connect = "file_json"
+name = "alerts"
+
+[sink_group.sinks.params]
+file = "alerts.ndjson"

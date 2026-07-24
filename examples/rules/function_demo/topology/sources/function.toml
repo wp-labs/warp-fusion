@@ -1,0 +1,7 @@
+connect = "file_src"
+enable = true
+key = "seed_function"
+
+path = "data/function_events.ndjson"
+stream_tag = "function"
+data_format = "ndjson"

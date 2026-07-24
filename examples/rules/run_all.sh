@@ -171,15 +171,16 @@ done < <(find . -path './*/rules/*.wfl' -type f | sort)
 
 echo
 echo "## WFusion batch replay"
-run_batch_case "./close_demo" "data/out_dat/out/alerts.ndjson" 2
-run_batch_case "./multi_stream_multi_window" "data/out_dat/alerts.ndjson" 2
-run_batch_case "./port_scan_whitelist" "data/out_dat/alerts.ndjson" 1
-run_batch_case "./rat_propagation" "data/out_dat/alerts.ndjson" 0
-run_batch_case "./single_stream_multi_window" "data/out_dat/alerts.ndjson" 2
-run_batch_case "./sqli_probe" "data/out_dat/out/alerts.ndjson" 1
-run_batch_case "./ssh_brute_force" "data/out_dat/alerts.ndjson" 1
+run_script_case "./close_demo"
+run_script_case "./multi_stream_multi_window"
+run_script_case "./port_scan_whitelist"
+run_script_case "./rat_propagation"
+run_script_case "./single_stream_multi_window"
+run_script_case "./sqli_probe"
+run_script_case "./ssh_brute_force"
+run_script_case "./function_demo"
 run_script_case "./window_miss"
-run_batch_case "./weak_password" "data/out_dat/alerts.ndjson" 0
+run_script_case "./weak_password"
 if [ "${RUN_EXTERNAL:-0}" = "1" ]; then
     run_batch_case "./weak_password2" "data/out_dat/alerts.ndjson" 5
 else

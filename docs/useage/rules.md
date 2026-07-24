@@ -3,6 +3,34 @@
 `.wfl` 文件用于声明检测规则、规则输出以及规则内联测试。运行时通过
 `wfusion.toml` 的 `[runtime].rules` glob 加载规则文件。
 
+## 字符串 helper
+
+WFL 提供几个常用字符串 helper，适合在 `yield` 中生成稳定字段：
+
+```wfl
+hash8 = sha1_n(@__wfu_id, 8)
+joined = join(s.tenant_id, "function_demo", s.empty_part, s.target_host)
+joined_by = join_by("|", s.tenant_id, "function_demo", s.empty_part, s.target_host)
+```
+
+语义约定：
+
+- `sha1_n(text, length)` 返回 `sha1(text)` 的前 `length` 位小写 hex；`length` 必须是 `1..=40` 的整数。
+- `join(value, ...)` 按参数顺序直接拼接，不加分隔符。
+- `join_by(separator, value, ...)` 按参数顺序拼接，并在字段之间插入显式分隔符。
+- `join` / `join_by` 不 trim、不改大小写、不转义 `%`、不转义 `|`，空字符串按原样参与拼接，取不到的参数按空字符串片段处理。
+- `join` / `join_by` 参数支持标量值：`chars`、`digit`、`float`、`bool`、`time`、`ip`、`hex`。
+
+例如：
+
+```wfl
+join("tenant|A", "function_demo", "", "host%01")
+// tenant|Afunction_demohost%01
+
+join_by("|", "tenant|A", "function_demo", "", "host%01")
+// tenant|A|function_demo||host%01
+```
+
 ## 公共 yield preset
 
 当多条规则需要输出相同字段时，可以把公共输出逻辑放在规则目录下的

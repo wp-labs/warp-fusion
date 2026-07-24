@@ -2,21 +2,24 @@
 
 All notable changes to wfusion will be documented in this file.
 
-## [0.1.36 Unreleased]
+## [0.1.37 Unreleased]
 
 ### 依赖与语言能力
 
 - **依赖**: `wf-engine` / `wf-config` / `wf-lang` / `wf-data` / `wf-runtime` 对齐 `wp-reactor` v0.1.35。
 - **WFL 规则 prelude**: 通过 `wp-reactor` v0.1.35 支持在规则目录约定加载 `_global.wfl`，用于声明项目级 `yield preset`；`_global.wfl` 不作为普通规则编译，普通规则可通过 `yield <window> : <preset> (...)` 复用公共输出字段。
+- **WFL 字符串 helper**: 支持 `sha1_n(text, length)`、`join(value, ...)` 和 `join_by(separator, value, ...)`，用于在输出字段中生成短 hash、无分隔符直连字符串和显式分隔字符串；`join` / `join_by` 的取不到参数按空字符串片段处理。
 
 ### 示例与文档
 
 - **wp-pipeline 示例**: 在共享 `examples/wp-pipeline/models/wfl` 中新增 `_global.wfl`，将 `rule_name = @__wfu_rule_name` 提取为 `base_alerts` preset，`scan_alerts` / `traffic_alerts` 规则改为继承该 preset。
 - **WFL 文档**: 新增规则文档并更新 runtime 配置文档，说明 `_global.wfl` 的加载约定、只允许 `yield preset`、多 preset 合并顺序、显式字段覆盖规则，以及只有 `_global.wfl` 时返回 0 条规则的合法语义。
+- **函数示例**: 新增 `examples/rules/function_demo`，覆盖 `sha1_n(@__wfu_id, 8)`、包含空字符串 / `%` / `|` 的 `join(...)` 和 `join_by(...)` 真实 batch 输出。
+- **rules 示例脚本**: 为 `close_demo`、`function_demo`、`port_scan_whitelist`、`rat_propagation`、`sqli_probe`、`ssh_brute_force`、`weak_password` 补充 `run.sh`，统一执行 lint、inline test、batch replay 和输出校验；`examples/rules/run_all.sh` 改为调用各示例自己的 `run.sh`。
 
 ### 发布元数据
 
-- **版本**: `wfusion` / `wfgen` / `wfl` / `wfadm` 版本推进到 `0.1.36`。
+- **版本**: `wfusion` / `wfgen` / `wfl` / `wfadm` 版本推进到 `0.1.37`。
 
 ## [0.1.35-alpha] — 2026-07-22
 

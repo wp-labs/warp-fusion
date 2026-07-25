@@ -1,0 +1,28 @@
+use "auth_pipeline.wfs"
+
+rule two_window_pipeline_alert {
+    events {
+        e : auth_events
+            && e.result == "failed"
+    }
+    match<sip,dip:5m> {
+        on event { failures: e | count >= 3; }
+    }
+    |> match<sip:10m> {
+        on event { targets: _in.dip | distinct | count >= 2; }
+    } -> score(avg(_in.failures) + 40.0)
+    entity(ip, _in.sip)
+    yield security_alerts (
+        sip = _in.sip,
+        alert_type = "two_window_pipeline",
+        detail = "failed login bursts across multiple targets",
+        burst_count = stat.count(window_event(_in)),
+        target_count = stat.count(match_distinct(targets))
+    )
+
+    limits {
+        max_memory = "16MB";
+        max_instances = 1000;
+        on_exceed = throttle;
+    }
+}

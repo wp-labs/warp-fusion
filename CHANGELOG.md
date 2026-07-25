@@ -16,6 +16,7 @@ All notable changes to wfusion will be documented in this file.
 - **WFL 文档**: 新增规则文档并更新 runtime 配置文档，说明 `_global.wfl` 的加载约定、只允许 `yield preset`、多 preset 合并顺序、显式字段覆盖规则，以及只有 `_global.wfl` 时返回 0 条规则的合法语义。
 - **函数示例**: 新增 `examples/rules/function_demo`，覆盖 `sha1_n(@__wfu_id, 8)`、包含空字符串 / `%` / `|` 的 `join(...)` 和 `join_by(...)` 真实 batch 输出。
 - **rules 示例脚本**: 为 `close_demo`、`function_demo`、`port_scan_whitelist`、`rat_propagation`、`sqli_probe`、`ssh_brute_force`、`weak_password` 补充 `run.sh`，统一执行 lint、inline test、batch replay 和输出校验；`examples/rules/run_all.sh` 改为调用各示例自己的 `run.sh`。
+- **两窗口 Pipeline 示例**: 新增 `examples/rules/two_window_pipeline`，演示 `|>` 自动生成内部中间 window，再由下游 stage 消费并输出最终 `security_alerts`。
 
 ### 发布元数据
 

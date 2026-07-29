@@ -2,13 +2,16 @@
 
 All notable changes to wfusion will be documented in this file.
 
-## [0.1.37 Unreleased]
+## [0.1.38 Unreleased]
 
 ### 依赖与语言能力
 
-- **依赖**: `wf-engine` / `wf-config` / `wf-lang` / `wf-data` / `wf-runtime` 对齐 `wp-reactor` v0.1.35。
+- **依赖**: `wf-engine` / `wf-config` / `wf-lang` / `wf-data` / `wf-runtime` 对齐 `wp-reactor` v0.1.37。
 - **WFL 规则 prelude**: 通过 `wp-reactor` v0.1.35 支持在规则目录约定加载 `_global.wfl`，用于声明项目级 `yield preset`；`_global.wfl` 不作为普通规则编译，普通规则可通过 `yield <window> : <preset> (...)` 复用公共输出字段。
 - **WFL 字符串 helper**: 支持 `sha1_n(text, length)`、`join(value, ...)` 和 `join_by(separator, value, ...)`，用于在输出字段中生成短 hash、无分隔符直连字符串和显式分隔字符串；`join` / `join_by` 的取不到参数按空字符串片段处理。
+- **规则执行 DEBUG 诊断**: 通过 `wp-reactor` v0.1.37 增加规则执行漏斗日志，覆盖 batch start/summary、bind reject、Accumulate/Advance/Matched、`execute_match` / `execute_close` / `execute_each` 输出路径、timeout/flush scan、内部 pipeline window 写入/丢弃/错误，以及 alert sink dispatch/no-sink。
+- **状态机 progress 诊断**: DEBUG 日志补充 `scope_key`、`machine_id`、step/branch 信息、阈值比较、measure value 和实例数，便于定位规则匹配卡在哪个 step 或 threshold。
+- **日志性能控制**: DEBUG 详情日志按 batch/scan 限制前 20 条，后续只汇总 suppressed 计数；非 DEBUG 路径避免构造事件引用、scope key、progress 字符串和 debug-only counters，alias 执行顺序在 rule task 初始化时预计算。
 
 ### 示例与文档
 
@@ -20,7 +23,7 @@ All notable changes to wfusion will be documented in this file.
 
 ### 发布元数据
 
-- **版本**: `wfusion` / `wfgen` / `wfl` / `wfadm` 版本推进到 `0.1.37`。
+- **版本**: `wfusion` / `wfgen` / `wfl` / `wfadm` 版本推进到 `0.1.38`。
 
 ## [0.1.35-alpha] — 2026-07-22
 

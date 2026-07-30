@@ -2,6 +2,14 @@
 
 All notable changes to wfusion will be documented in this file.
 
+## [0.1.40 Unreleased]
+
+### 日志
+
+- **修复 #59**: `[logging] level` 现为日志等级的唯一权威，不再被 `RUST_LOG` 环境变量静默覆盖。原先 `init_tracing` 在 `RUST_LOG` 被设置（含空串）时整体改用 `EnvFilter::from_default_env()`、忽略配置文件的 `level`，导致 `level = "info"` 仍输出 DEBUG/TRACE。现恒定从 `[logging]`（`level` + `modules`）构造 `EnvFilter`，不再读取 `RUST_LOG`；需要对特定模块提级时改用官方途径 `[logging].modules`（如 `wf_runtime::receiver = "debug"`）。
+- **依赖**: `wf-engine` / `wf-config` / `wf-lang` / `wf-data` / `wf-runtime` 对齐 `wp-reactor` v0.1.39（含上述日志修复）。
+- **验证**: close_demo 配置 `level = "info"` + 注入 `RUST_LOG=debug` 跑 `wfusion batch`，DEBUG/TRACE 行为 0（修复前会泄漏），批处理正常产出告警。
+
 ## [0.1.39 Unreleased]
 
 ### wfgen CLI

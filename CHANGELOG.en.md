@@ -1,5 +1,13 @@
 # Changelog (English)
 
+## [0.1.40 Unreleased]
+
+### wfusion — logging level now authoritative (#59)
+
+- **Fixed #59**: `[logging] level` is now the single source of truth for the log level and is no longer silently overridden by the `RUST_LOG` env var. `init_tracing` previously switched to `EnvFilter::from_default_env()` (ignoring `[logging] level`) whenever `RUST_LOG` was set — even to an empty string — so `level = "info"` still emitted DEBUG/TRACE. It now always builds `EnvFilter` from `[logging]` (`level` + `modules`) and never reads `RUST_LOG`. For per-module overrides, use the supported `[logging].modules` (e.g. `wf_runtime::receiver = "debug"`).
+- **Dependency**: `wf-engine` / `wf-config` / `wf-lang` / `wf-data` / `wf-runtime` aligned to `wp-reactor` v0.1.39 (includes the logging fix).
+- **Verified**: running `wfusion batch` on close_demo with `level = "info"` and `RUST_LOG=debug` set yields 0 DEBUG / 0 TRACE lines (previously leaked); batch still produces the expected alerts.
+
 ## [0.1.39 Unreleased]
 
 ### wfgen — CLI: optional `--out`, `--no-oracle` renamed to `--no-wfl`

@@ -1,5 +1,14 @@
 # Changelog (English)
 
+## [0.1.39 Unreleased]
+
+### wfgen — CLI: optional `--out`, `--no-oracle` renamed to `--no-wfl`
+
+- **`--out` now optional**: `wfgen gen --out` is no longer required; it decouples from `--send` into four combinations: `--out` only (write files), `--send` only (stream over TCP, no disk), both, or neither (returns a clear usage error instead of a silent no-op).
+- **`--no-oracle` renamed to `--no-wfl`**: semantics widened from "skip oracle output only" to "skip the entire WFL pipeline" — no rule compilation, no `_global.wfl` / yield-preset evaluation, no oracle/expected output, and no compile-time warnings such as `unknown yield preset`. With `rule_plans` empty, generation falls back to baseline background events (**behavior change**: `--no-wfl` no longer produces inject-aware hit/near-miss cluster events). `--no-oracle` is retained as a backward-compatible alias with identical behavior.
+- **Oracle skip warning**: when the scenario requests oracle/expected output but only `--send` is given (no `--out`), prints `Warning: oracle/expected output requested but --out not set; skipping expected generation` instead of silently dropping it.
+- **Tests**: added CLI parse tests (`--send` without `--out`, `--no-wfl`, `--no-oracle` alias) and a `run` arg-validation unit test (returns `no output target` error when neither sink is given).
+
 ## [0.1.22] — 2026-07-07
 
 ### wfusion — admin API binding and TLS loading

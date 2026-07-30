@@ -2,6 +2,15 @@
 
 All notable changes to wfusion will be documented in this file.
 
+## [0.1.39 Unreleased]
+
+### wfgen CLI
+
+- **`--out` 改为可选**: `wfgen gen` 的 `--out` 不再强制必填，与 `--send` 解耦为四种组合：仅 `--out` 落盘、仅 `--send` 流式发送、两者并存、两者都缺则返回清晰的参数错误（不再静默 no-op）。
+- **`--no-oracle` 重命名为 `--no-wfl`**: 语义从「只关 oracle 输出」扩展为「跳过整个 WFL 管线」——不编译规则、不加载 `_global.wfl` / 不求值 `yield preset`、不生成 oracle/expected、不再输出 `unknown yield preset` 等编译期警告；`rule_plans` 为空使生成退回 baseline 背景事件（**行为变更**：`--no-wfl` 下不再产出 inject-aware 命中/近失聚类事件）。`--no-oracle` 保留为向后兼容别名，行为与 `--no-wfl` 等价。
+- **oracle 跳过提示**: 当场景请求了 oracle/expected 输出但仅用 `--send` 而未给 `--out` 时，打印 `Warning: oracle/expected output requested but --out not set; skipping expected generation`，避免静默丢弃期望输出。
+- **测试**: 新增 CLI 解析测试（`--send` 不带 `--out`、`--no-wfl`、`--no-oracle` 别名）与 `run` 参数校验单测（两者都未指定时返回 `no output target` 错误）。
+
 ## [0.1.38 Unreleased]
 
 ### 依赖与语言能力

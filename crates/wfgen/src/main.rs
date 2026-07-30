@@ -28,9 +28,10 @@ enum Commands {
         #[arg(long, default_value = "jsonl")]
         format: String,
 
-        /// Output directory
+        /// Output directory. Optional when --send is used; at least one of
+        /// --out / --send must be given.
         #[arg(long)]
-        out: PathBuf,
+        out: Option<PathBuf>,
 
         /// Additional .wfs schema files (beyond those in `use` declarations)
         #[arg(long)]
@@ -40,9 +41,13 @@ enum Commands {
         #[arg(long)]
         wfl: Vec<PathBuf>,
 
-        /// Disable oracle generation even if the .wfg has an oracle block
-        #[arg(long)]
-        no_oracle: bool,
+        /// Skip the WFL pipeline entirely: no rule compilation, no
+        /// `_global.wfl` / yield-preset evaluation, and no oracle/expected
+        /// output. Generation falls back to baseline background events (no
+        /// inject-aware events). `--no-oracle` is accepted as a deprecated
+        /// alias for backward compatibility.
+        #[arg(long, alias = "no-oracle")]
+        no_wfl: bool,
 
         /// Send generated events to wfusion over TCP + Arrow IPC
         #[arg(long)]
@@ -181,10 +186,10 @@ async fn run_cli() -> WfgenResult<()> {
             out,
             ws,
             wfl,
-            no_oracle,
+            no_wfl,
             send,
             addr,
-        } => wfgen::cmd_gen::run(scenario, format, out, ws, wfl, no_oracle, send, addr).await,
+        } => wfgen::cmd_gen::run(scenario, format, out, ws, wfl, no_wfl, send, addr).await,
         Commands::Lint { scenario, ws, wfl } => wfgen::cmd_lint::run(scenario, ws, wfl),
         Commands::Verify {
             expected,
@@ -241,5 +246,41 @@ mod tests {
         };
         assert_eq!(err.kind(), ErrorKind::DisplayVersion);
         assert!(err.to_string().contains(env!("CARGO_PKG_VERSION")));
+    }
+
+    #[test]
+    fn gen_out_optional_when_send_given() {
+        // --send without --out must parse (out is now optional).
+        let cli = Cli::try_parse_from(["wfgen", "gen", "--scenario", "x.wfg", "--send"]);
+        assert!(cli.is_ok(), "expected parse success, got: {:?}", cli.err());
+    }
+
+    #[test]
+    fn gen_no_wfl_flag_parses() {
+        let cli = Cli::try_parse_from([
+            "wfgen",
+            "gen",
+            "--scenario",
+            "x.wfg",
+            "--out",
+            "out",
+            "--no-wfl",
+        ]);
+        assert!(cli.is_ok(), "expected parse success, got: {:?}", cli.err());
+    }
+
+    #[test]
+    fn gen_no_oracle_alias_still_accepted() {
+        // Deprecated alias --no-oracle must still parse and behave as --no-wfl.
+        let cli = Cli::try_parse_from([
+            "wfgen",
+            "gen",
+            "--scenario",
+            "x.wfg",
+            "--out",
+            "out",
+            "--no-oracle",
+        ]);
+        assert!(cli.is_ok(), "expected parse success, got: {:?}", cli.err());
     }
 }

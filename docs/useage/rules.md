@@ -72,3 +72,55 @@ rule scan_detect {
 - 如果规则目录下只有 `_global.wfl`，运行时会得到 0 条规则；这是合法状态。
 
 适合放入 `_global.wfl` 的内容包括统一的 `rule_name`、告警版本、租户标识、默认时间字段或其他每条告警都要带的字段。
+
+### 参数化 yield preset 设计草案
+
+> 状态：设计草案，当前版本尚未实现。
+
+当公共输出字段需要由规则调用方传入少量差异化值时，可以扩展 `yield preset`
+支持尖括号参数列表：
+
+```wfl
+yield preset base_alerts <
+    severity,
+    source = "wfusion"
+> (
+    rule_name = @__wfu_rule_name,
+    severity = $severity,
+    source = $source
+)
+```
+
+普通规则引用 preset 时在 preset 名后传入实参：
+
+```wfl
+rule ssh_brute_force {
+    from e in auth_events
+    match {
+        close { e | count >= 5; }
+    } -> score(90.0)
+    entity(ip, e.sip)
+    yield security_alerts : base_alerts<"high"> (
+        entity_id = e.sip,
+        alert_type = "ssh_brute_force"
+    )
+}
+```
+
+语义约定：
+
+- `yield preset name <...> (...)` 中，`<...>` 是可选参数列表，`(...)` 仍是 preset body。
+- 没有默认值的参数必填；带默认值的参数可省略。
+- 参数默认值是普通 WFL 表达式，例如 `"wfusion"`、`@__wfu_rule_name` 或字段引用。
+- preset body 内通过 `$param_name` 引用参数值，参数只在当前 preset body 内有效。
+- preset 引用使用相同的尖括号语法：`yield out : base_alerts<"high", "wfusion"> (...)`。
+- 实参按位置绑定到参数；省略尾部带默认值参数时使用默认表达式。
+- 展开参数后再执行现有字段合并规则：后引用的 preset 覆盖先引用的 preset，普通 `yield (...)` 的显式字段最后覆盖 preset 字段。
+- 参数名应避免与 WFL 字段名混淆；参数引用必须带 `$` 前缀。
+
+建议的错误诊断：
+
+- 缺少必填参数：`yield preset base_alerts missing required argument severity`。
+- 实参数量过多：`yield preset base_alerts expects 1..2 arguments, got 3`。
+- preset body 引用了未声明参数：`unknown yield preset parameter $severity`。
+- 参数默认值或实参展开后类型不匹配目标 `yield` 字段时，沿用现有 yield 类型检查错误。

@@ -1,6 +1,6 @@
 [package]
 name = "wfl"
-version = "0.1.38" #@gxl:set(version)
+version = "0.1.39" #@gxl:set(version)
 edition.workspace = true
 license.workspace = true
 

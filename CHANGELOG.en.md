@@ -2,6 +2,13 @@
 
 ## [0.1.40 Unreleased]
 
+### wfgen — split `--no-oracle` and `--no-wfl` (#58 follow-up)
+
+- In 0.1.39 `--no-oracle` was an alias of `--no-wfl`, which made `--no-oracle` skip injection `use()` fixed values too (empty `rule_plans` → `has_inject = false`), so generated fields were all random. They are now distinct, orthogonal flags:
+  - `--no-wfl`: skip the entire WFL pipeline (no compilation, no injection, no oracle); baseline background events.
+  - `--no-oracle`: still compiles WFL (keeps injection `use()` fixed values), only skips oracle/expected output.
+  - Verified: `brute_force.wfg` with `--no-oracle` yields 60000 events including 48000 with `action=failed/success` fixed values; with `--no-wfl` it yields 0 fixed values (all random). Use `--no-oracle` for inject-aware events without oracle files; use `--no-wfl` for plain baseline events.
+
 ### wfusion — logging level now authoritative (#59)
 
 - **Fixed #59**: `[logging] level` is now the single source of truth for the log level and is no longer silently overridden by the `RUST_LOG` env var. `init_tracing` previously switched to `EnvFilter::from_default_env()` (ignoring `[logging] level`) whenever `RUST_LOG` was set — even to an empty string — so `level = "info"` still emitted DEBUG/TRACE. It now always builds `EnvFilter` from `[logging]` (`level` + `modules`) and never reads `RUST_LOG`. For per-module overrides, use the supported `[logging].modules` (e.g. `wf_runtime::receiver = "debug"`).

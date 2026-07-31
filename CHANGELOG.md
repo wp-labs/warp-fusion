@@ -4,6 +4,13 @@ All notable changes to wfusion will be documented in this file.
 
 ## [0.1.40 Unreleased]
 
+### wfgen CLI
+
+- **`--no-oracle` 与 `--no-wfl` 拆分为两个独立 flag（#58 反馈）**: 0.1.39 把 `--no-oracle` 作为 `--no-wfl` 的别名，导致 `--no-oracle` 连 injection `use()` 固定值一起跳过（`rule_plans` 为空 → `has_inject = false`），生成的字段全是随机值。现拆分为正交语义：
+  - `--no-wfl`：跳过整个 WFL 管线（不编译、无 injection、无 oracle），退回 baseline 背景事件；
+  - `--no-oracle`：**仍编译 WFL**（保留 injection `use()` 固定值），只跳过 oracle/expected 输出。
+  - 验证：`brute_force.wfg` 用 `--no-oracle` 生成 60000 事件含 48000 条 `action=failed/success` 固定值；用 `--no-wfl` 则 0 条固定值（全随机）。需要 inject-aware 事件但不要 oracle 文件时用 `--no-oracle`，真正只要 baseline 事件时用 `--no-wfl`。
+
 ### 日志
 
 - **修复 #59**: `[logging] level` 现为日志等级的唯一权威，不再被 `RUST_LOG` 环境变量静默覆盖。原先 `init_tracing` 在 `RUST_LOG` 被设置（含空串）时整体改用 `EnvFilter::from_default_env()`、忽略配置文件的 `level`，导致 `level = "info"` 仍输出 DEBUG/TRACE。现恒定从 `[logging]`（`level` + `modules`）构造 `EnvFilter`，不再读取 `RUST_LOG`；需要对特定模块提级时改用官方途径 `[logging].modules`（如 `wf_runtime::receiver = "debug"`）。

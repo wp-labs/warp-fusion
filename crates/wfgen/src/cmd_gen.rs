@@ -27,6 +27,7 @@ pub async fn run(
     ws: Vec<PathBuf>,
     wfl: Vec<PathBuf>,
     no_wfl: bool,
+    no_oracle: bool,
     send: bool,
     addr: String,
 ) -> WfgenResult<()> {
@@ -90,12 +91,15 @@ pub async fn run(
         .as_ref()
         .and_then(|s| s.expect.as_ref())
         .is_some();
-    let expected_requested = (wfg.scenario.oracle.is_some() || expect_requested) && !no_wfl;
+    // `--no-oracle` skips oracle/expected output but still compiles WFL (so
+    // injection `use()` fixed values are applied). `--no-wfl` skips
+    // compilation entirely, which also disables oracle (rule_plans empty).
+    let expected_requested = (wfg.scenario.oracle.is_some() || expect_requested) && !no_oracle;
 
-    // Compile WFL rules. With --no-wfl the entire WFL pipeline is skipped:
-    // no compilation, no `_global.wfl` / yield-preset evaluation, no oracle
-    // generation. `rule_plans` stays empty, so inject-aware generation falls
-    // back to the baseline and expected/oracle output is disabled.
+    // Compile WFL rules. Skipped entirely by --no-wfl: no compilation, no
+    // `_global.wfl` / yield-preset evaluation, no injection-aware generation,
+    // no oracle. `--no-oracle` does NOT skip this — it needs rule_plans for
+    // injection. `rule_plans` stays empty only under --no-wfl.
     let mut rule_plans = Vec::new();
     if !no_wfl {
         let mut compile_errors = Vec::new();
@@ -114,7 +118,7 @@ pub async fn run(
                 return error::fail(
                     WfgenReason::Validation,
                     "WFL compilation failed while expected output is enabled; \
-                     fix the WFL errors or use --no-wfl",
+                     fix the WFL errors or use --no-oracle to skip expected output",
                 );
             } else {
                 for e in &compile_errors {
@@ -129,10 +133,10 @@ pub async fn run(
 
     // Expected alert generation (on CLEAN events, before faults).
     let expected_enabled = expected_requested && !rule_plans.is_empty();
-    // Oracle/expected output was requested (and WFL compiled) but there is
-    // nowhere to write it (--send only, no --out). Warn rather than silently
-    // drop it.
-    if expected_requested && out.is_none() {
+    // Oracle/expected output was requested, not opted out (--no-oracle) and
+    // not disabled by --no-wfl, but there is nowhere to write it (--send only,
+    // no --out). Warn rather than silently drop it.
+    if expected_requested && !no_wfl && out.is_none() {
         eprintln!(
             "Warning: oracle/expected output requested but --out not set; \
              skipping expected generation"
@@ -287,6 +291,7 @@ mod tests {
             Vec::new(), // ws
             Vec::new(), // wfl
             false,      // no_wfl
+            false,      // no_oracle
             false,      // send
             "127.0.0.1:1".to_string(),
         )

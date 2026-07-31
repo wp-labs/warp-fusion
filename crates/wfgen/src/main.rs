@@ -42,12 +42,21 @@ enum Commands {
         wfl: Vec<PathBuf>,
 
         /// Skip the WFL pipeline entirely: no rule compilation, no
-        /// `_global.wfl` / yield-preset evaluation, and no oracle/expected
-        /// output. Generation falls back to baseline background events (no
-        /// inject-aware events). `--no-oracle` is accepted as a deprecated
-        /// alias for backward compatibility.
-        #[arg(long, alias = "no-oracle")]
+        /// `_global.wfl` / yield-preset evaluation, no injection-aware
+        /// event generation, and no oracle/expected output. Generation
+        /// falls back to baseline background events. Use this when you
+        /// want plain background events and none of the WFL-derived
+        /// behaviour (including injection `use()` fixed values).
+        #[arg(long)]
         no_wfl: bool,
+
+        /// Skip oracle/expected output generation, but still compile WFL so
+        /// injection-aware events (including `use()` fixed values) are
+        /// generated. Use this when you want inject-aware events without the
+        /// expected-alert oracle files (e.g. streaming test data). Implies no
+        /// oracle sidecar files (`.except.jsonl` / `.except.meta.jsonl`).
+        #[arg(long)]
+        no_oracle: bool,
 
         /// Send generated events to wfusion over TCP + Arrow IPC
         #[arg(long)]
@@ -187,9 +196,15 @@ async fn run_cli() -> WfgenResult<()> {
             ws,
             wfl,
             no_wfl,
+            no_oracle,
             send,
             addr,
-        } => wfgen::cmd_gen::run(scenario, format, out, ws, wfl, no_wfl, send, addr).await,
+        } => {
+            wfgen::cmd_gen::run(
+                scenario, format, out, ws, wfl, no_wfl, no_oracle, send, addr,
+            )
+            .await
+        }
         Commands::Lint { scenario, ws, wfl } => wfgen::cmd_lint::run(scenario, ws, wfl),
         Commands::Verify {
             expected,
@@ -270,8 +285,9 @@ mod tests {
     }
 
     #[test]
-    fn gen_no_oracle_alias_still_accepted() {
-        // Deprecated alias --no-oracle must still parse and behave as --no-wfl.
+    fn gen_no_oracle_flag_parses() {
+        // --no-oracle is a distinct flag (compile WFL, skip oracle); must parse
+        // independently of --no-wfl.
         let cli = Cli::try_parse_from([
             "wfgen",
             "gen",
@@ -279,6 +295,21 @@ mod tests {
             "x.wfg",
             "--out",
             "out",
+            "--no-oracle",
+        ]);
+        assert!(cli.is_ok(), "expected parse success, got: {:?}", cli.err());
+    }
+
+    #[test]
+    fn gen_no_wfl_and_no_oracle_both_parse() {
+        let cli = Cli::try_parse_from([
+            "wfgen",
+            "gen",
+            "--scenario",
+            "x.wfg",
+            "--out",
+            "out",
+            "--no-wfl",
             "--no-oracle",
         ]);
         assert!(cli.is_ok(), "expected parse success, got: {:?}", cli.err());

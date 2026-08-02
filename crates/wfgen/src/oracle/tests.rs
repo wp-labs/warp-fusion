@@ -1,7 +1,9 @@
 use std::time::Duration;
 
 use chrono::Utc;
-use wf_lang::ast::{CloseMode, CmpOp, Expr, FieldRef, FieldSelector, Measure, Transform};
+use wf_lang::ast::{
+    CloseMode, CmpOp, Expr, FieldRef, FieldSelector, MatchMode, Measure, Transform,
+};
 use wf_lang::plan::{
     AggPlan, BindPlan, BranchPlan, ConvChainPlan, ConvOpPlan, ConvPlan, EntityPlan, MatchPlan,
     RulePlan, ScorePlan, SortKeyPlan, StepPlan, WindowSpec, YieldPlan,
@@ -38,6 +40,8 @@ fn make_simple_rule_plan() -> RulePlan {
             }],
             close_steps: vec![],
             close_mode: CloseMode::Or,
+            match_mode: MatchMode::Seq,
+            seq: None,
             tracked_bind_aliases: std::collections::HashSet::new(),
             tracked_bind_fields: std::collections::HashMap::new(),
             tracked_plain_fields: std::collections::HashSet::new(),
@@ -332,6 +336,8 @@ fn multi_alias_same_window_both_receive_events() {
             ],
             close_steps: vec![],
             close_mode: CloseMode::Or,
+            match_mode: MatchMode::Seq,
+            seq: None,
             tracked_bind_aliases: std::collections::HashSet::new(),
             tracked_bind_fields: std::collections::HashMap::new(),
             tracked_plain_fields: std::collections::HashSet::new(),
@@ -491,6 +497,8 @@ fn conv_top_filters_non_qualifying() {
                 }],
             }],
             close_mode: CloseMode::And,
+            match_mode: MatchMode::Seq,
+            seq: None,
             tracked_bind_aliases: std::collections::HashSet::new(),
             tracked_bind_fields: std::collections::HashMap::new(),
             tracked_plain_fields: std::collections::HashSet::new(),

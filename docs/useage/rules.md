@@ -124,3 +124,55 @@ rule ssh_brute_force {
 - 实参数量过多：`yield preset base_alerts expects 1..2 arguments, got 3`。
 - preset body 引用了未声明参数：`unknown yield preset parameter $severity`。
 - 参数默认值或实参展开后类型不匹配目标 `yield` 字段时，沿用现有 yield 类型检查错误。
+
+## on event seq / on event any —— 序列与共现
+
+`on event` 的 `seq` / `any` 修饰符声明步骤的**排序模式**。默认（裸 `on event`）即 `seq`，
+向后兼容。
+
+### `on event seq` — 有序序列（攻击链）
+
+表达"先 A 后 B、B 在 A 后 X 内"。运行时顺序语义（step i+1 只在 step i 完成后评估）由引擎
+保证；`seq` 在此基础上补充步间时间约束（`within`）、否定步（`not`）和严格相邻（`consec`）。
+
+```wfl
+match<sip,dip:30m> {
+    on event seq {
+        has scan;                    // 存在性步骤：scan 事件至少一次
+        has login within 10m;        // login 必须在 scan 完成后的 10m 内
+        has xfer;                    // 总跨度由 match 窗口时长（30m）约束
+        not has failed within 5m;    // 否定步：scan 后 5m 内不得出现失败登录
+    }
+} -> score(95.0)
+```
+
+- **存在性步骤**：`has <alias>`，等价 `count >= 1`，首个匹配事件到达即完成。
+- **聚合步骤**：复用 pipe 语法，如 `spray.user | distinct | count >= 5`，聚合条件首次满足时完成。
+- **`within <dur>`**：本步完成时刻 − 上一步完成时刻 ≤ `dur`（首个步骤相对 match 窗口起点）。
+- **`not has <alias> within <dur>`**：否定步，自上一完成步骤起 `dur` 内不得出现匹配事件。
+- **`consec`**：严格相邻修饰符（默认允许步骤间夹带无关事件）。
+- **`skip = to_next`**：重叠匹配（L3，暂未实现）。
+
+### `on event any` — 无序共现
+
+所有步骤**并行评估**，全部满足即触发，**顺序无关**：
+
+```wfl
+match<sip,dip:30m> {
+    on event any {
+        scan | count >= 1;
+        login | count >= 1;
+        xfer | count >= 1;
+    }
+} -> score(80.0)
+```
+
+`any` 模式下 `login → scan → xfer` 的乱序序列也触发（弱相关性检测）。`any` 步骤不支持
+`within` / `not` / `consec` / `skip`（它们依赖顺序，编译期拒绝）。
+
+### 语义约定（seq）
+
+- 步骤按书写顺序完成：login 先于 scan 到达会被 step 0 消费，不保留给 step 1。
+- `within` 超限 / 否定违反 → 本次匹配作废并重置。
+- 部分匹配（未完成的链）TTL = match 窗口时长，由 evictor 清理。
+- 设计与决策点见 [wfl_seq_design.md](../design/wfl_seq_design.md)。

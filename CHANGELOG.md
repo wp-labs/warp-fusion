@@ -4,6 +4,38 @@ All notable changes to wfusion will be documented in this file.
 
 ## [0.1.40 Unreleased]
 
+### on event seq / on event any —— 有序序列与无序共现（WFL）
+
+- **新增 `on event seq { ... }` 有序 match 主体与 `on event any { ... }` 无序共现**：攻击链检测的有序事件链。引擎已保证步骤顺序
+  （`current_step`），`seq` 模式在此基础上新增：
+  - `has <alias>` 存在性步骤（隐式 `count >= 1`）；
+  - 聚合步骤复用现有 pipe（`spray.user | distinct | count >= 5`）；
+  - `within <dur>` 步间时间 gap；
+  - `not has <alias> within <dur>` 否定步；
+  - `consec` 严格相邻修饰符；`skip = past_last | to_next`（`to_next` 延后到 L3）。
+- **依赖**：seq 语法/解析/编译/运行时（within/not/consec）实现在 wp-reactor
+  （wf-lang/wf-engine）；tree-sitter-wfl grammar 扩展（`on_event_mode_block` / `seq_rule_step`）。
+- **工具链**：`wfl rule lint` / `explain` 渲染 seq 步骤；checker 增加 seq 的
+  别名 / within / not 检查。
+- **示例**：`rat_propagation`、`password_spraying` 改写为 `on event seq`；内联契约测试
+  （含乱序 0 命中用例）经引擎验证通过。
+- **跨仓库注意**：运行时改动在 wp-reactor，warp-fusion 需升级依赖才能使用 `on event seq`。
+
+### 依赖与引擎修复（wp-reactor v0.1.41）
+
+- **空闲实例自动过期**：wp-reactor 周期 timeout 扫描按墙钟时间推进有效水位
+  （`watermark + 距上次处理事件的墙钟时间`），输入完全静默时实例也按窗口 TTL 过期释放，
+  符合窗口的时间语义（此前事件时间 watermark 冻结，实例残留直到新事件到来）。
+- **绑定匹配性能**：`event_matches_alias` 用预计算 map（>24 binds）+ 线性快路径（≤24 binds），
+  消除 rule executor 的 O(binds) 每事件缩放。
+- **clippy 门禁**：`cargo clippy --all-targets --all-features -- -D warnings` 通过。
+
+### 示例（wf-examples）
+
+- **新增 `memory_stability` case**：长时间运行内存稳定性验证（daemon + TCP 实时输入 + 指标监控）。
+  验证：burst 后实例/内存增长 → 输入停止后窗口 TTL 到期自动释放（`rule.instances` 归零）→
+  多周期 RSS 无泄漏。支持 `--demo`（逻辑释放）/ `--leak`（RSS 泄漏检测）/ `--smoke` 模式。
+
 ### wfgen CLI
 
 - **`--no-oracle` 与 `--no-wfl` 拆分为两个独立 flag（#58 反馈）**: 0.1.39 把 `--no-oracle` 作为 `--no-wfl` 的别名，导致 `--no-oracle` 连 injection `use()` 固定值一起跳过（`rule_plans` 为空 → `has_inject = false`），生成的字段全是随机值。现拆分为正交语义：

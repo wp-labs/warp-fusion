@@ -9,11 +9,10 @@ use "network.wfs"
 //   login : auth_events 中成功登录
 //   xfer  : conn_events 中大量数据传输（bytes_out >= 10000）
 //
-// 多步匹配：
-//   step 1: scan 事件触发
-//   step 2: login 事件触发（必须在 scan 之后）
-//   step 3: xfer 事件触发（必须在 login 之后）
-//   close: 至少攻击 3 个以上不同目标才告警
+// 多步匹配（chain 显式顺序 + 步间约束）：
+//   step 1: has scan — 低字节探测连接
+//   step 2: has login within 10m — 成功登录，必须在 scan 后 10m 内
+//   step 3: has xfer — 大量数据传输，总跨度 ≤ 30m
 
 rule rat_propagation {
     events {
@@ -22,10 +21,10 @@ rule rat_propagation {
         xfer  : conn_events && bytes_out >= 10000
     }
     match<sip,dip:30m> {
-        on event {
-            scan | count >= 1;
-            login | count >= 1;
-            xfer | count >= 1;
+        on event seq {
+            has scan;
+            has login within 10m;
+            has xfer;
         }
     } -> score(95.0)
     entity(ip, scan.sip)
@@ -106,4 +105,14 @@ test single_target_full_chain for rat_propagation {
     row(xfer, sip = "10.0.0.77", dip = "192.168.1.10", dport = "22", bytes_out = "50000", event_time = "2026-01-01T00:02:00Z");
   }
   expect { hits == 1; }
+}
+
+// 乱序：login 先于 scan 到达（同一 pair）— 不告警（引擎顺序语义，login 被 step 0 消费）
+test out_of_order_login for rat_propagation {
+  input {
+    row(login, sip = "10.0.0.88", dip = "192.168.1.10", result = "success", event_time = "2026-01-01T00:00:00Z");
+    row(scan, sip = "10.0.0.88", dip = "192.168.1.10", dport = "22", bytes_out = "100", event_time = "2026-01-01T00:01:00Z");
+    row(xfer, sip = "10.0.0.88", dip = "192.168.1.10", bytes_out = "50000", event_time = "2026-01-01T00:02:00Z");
+  }
+  expect { hits == 0; }
 }

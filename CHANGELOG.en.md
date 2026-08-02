@@ -2,6 +2,29 @@
 
 ## [0.1.40 Unreleased]
 
+### on event seq / on event any — ordered sequence & unordered co-occurrence (WFL)
+
+- **New `on event seq { ... }` ordered match body and `on event any { ... }` unordered co-occurrence**: ordered event chains for attack-chain detection. The engine already enforces step ordering (`current_step`); the `seq` mode adds:
+  - `has <alias>` existential steps (implicit `count >= 1`).
+  - Aggregate steps via the existing pipe (`spray.user | distinct | count >= 5`).
+  - `within <dur>` step-to-step time gaps.
+  - `not has <alias> within <dur>` negation steps.
+  - `consec` strict adjacency modifier; `skip = past_last | to_next` (`to_next` deferred to L3).
+- **Dependencies**: seq grammar/parse/compile/runtime (within/not/consec) implemented in wp-reactor (wf-lang/wf-engine); tree-sitter-wfl grammar extended (`on_event_mode_block` / `seq_rule_step`).
+- **Tooling**: `wfl rule lint` / `explain` render seq steps; checker adds seq alias / within / not checks.
+- **Examples**: `rat_propagation` and `password_spraying` rewritten with `on event seq`; inline contract tests (incl. an out-of-order 0-hit case) verified through the engine.
+- **Cross-repo note**: runtime changes live in `wp-reactor`; warp-fusion must bump the dependency to use `on event seq`.
+
+### Dependency & engine fixes (wp-reactor v0.1.41)
+
+- **Idle instance expiry**: the periodic timeout scan now advances the effective watermark by the wall-clock time elapsed since the last event was processed (`watermark + idle wall time`), so instances expire per their window TTL even with zero input, conforming to the window's time-based semantics (previously the event-time watermark froze and instances lingered until a new event advanced it).
+- **Bind-matching performance**: `event_matches_alias` uses a precomputed alias→filter map (>24 binds) with a linear fast path (≤24 binds), eliminating the O(binds) per-event scaling in the rule executor.
+- **Clippy gate**: `cargo clippy --all-targets --all-features -- -D warnings` passes (collapsible_if, needless_lifetimes, map_or→is_some_and).
+
+### Examples (wf-examples)
+
+- **New `memory_stability` case**: long-running memory-stability verification (daemon + live TCP input + metrics monitor). Verifies instances/memory grow under a burst, auto-release after the window TTL when input stops (`rule.instances` drops to 0), and no RSS growth across repeated burst/idle cycles. Supports `--demo` (logical release), `--leak` (RSS leak check), and `--smoke` modes.
+
 ### wfgen — split `--no-oracle` and `--no-wfl` (#58 follow-up)
 
 - In 0.1.39 `--no-oracle` was an alias of `--no-wfl`, which made `--no-oracle` skip injection `use()` fixed values too (empty `rule_plans` → `has_inject = false`), so generated fields were all random. They are now distinct, orthogonal flags:

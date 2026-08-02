@@ -5,7 +5,9 @@ mod inject;
 
 use std::time::Duration;
 
-use wf_lang::ast::{BinOp, CloseMode, CmpOp, Expr, FieldRef, FieldSelector, Measure, Transform};
+use wf_lang::ast::{
+    BinOp, CloseMode, CmpOp, Expr, FieldRef, FieldSelector, MatchMode, Measure, Transform,
+};
 use wf_lang::plan::{
     AggPlan, BindPlan, BranchPlan, EntityPlan, MatchPlan, RulePlan, ScorePlan, StepPlan,
     WindowSpec, YieldPlan,
@@ -86,6 +88,8 @@ fn make_brute_force_plan() -> RulePlan {
             }],
             close_steps: vec![],
             close_mode: CloseMode::Or,
+            match_mode: MatchMode::Seq,
+            seq: None,
             tracked_bind_aliases: std::collections::HashSet::new(),
             tracked_bind_fields: std::collections::HashMap::new(),
             tracked_plain_fields: std::collections::HashSet::new(),
@@ -143,6 +147,8 @@ fn make_auth_fail_plan() -> RulePlan {
             }],
             close_steps: vec![],
             close_mode: CloseMode::Or,
+            match_mode: MatchMode::Seq,
+            seq: None,
             tracked_bind_aliases: std::collections::HashSet::new(),
             tracked_bind_fields: std::collections::HashMap::new(),
             tracked_plain_fields: std::collections::HashSet::new(),
@@ -221,6 +227,8 @@ fn make_bool_chain_plan() -> RulePlan {
             ],
             close_steps: vec![],
             close_mode: CloseMode::Or,
+            match_mode: MatchMode::Seq,
+            seq: None,
             tracked_bind_aliases: std::collections::HashSet::new(),
             tracked_bind_fields: std::collections::HashMap::new(),
             tracked_plain_fields: std::collections::HashSet::new(),
@@ -286,6 +294,8 @@ fn make_distinct_close_plan() -> RulePlan {
                 }],
             }],
             close_mode: CloseMode::And,
+            match_mode: MatchMode::Seq,
+            seq: None,
             tracked_bind_aliases: std::collections::HashSet::new(),
             tracked_bind_fields: std::collections::HashMap::new(),
             tracked_plain_fields: std::collections::HashSet::new(),
@@ -369,6 +379,8 @@ fn make_chain_attack_plan() -> RulePlan {
             ],
             close_steps: vec![],
             close_mode: CloseMode::Or,
+            match_mode: MatchMode::Seq,
+            seq: None,
             tracked_bind_aliases: std::collections::HashSet::new(),
             tracked_bind_fields: std::collections::HashMap::new(),
             tracked_plain_fields: std::collections::HashSet::new(),

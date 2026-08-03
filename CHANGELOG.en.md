@@ -32,6 +32,10 @@
   - `--no-oracle`: still compiles WFL (keeps injection `use()` fixed values), only skips oracle/expected output.
   - Verified: `brute_force.wfg` with `--no-oracle` yields 60000 events including 48000 with `action=failed/success` fixed values; with `--no-wfl` it yields 0 fixed values (all random). Use `--no-oracle` for inject-aware events without oracle files; use `--no-wfl` for plain baseline events.
 
+### wfgen — `_global.wfl` yield preset preload (#58 follow-up)
+
+- wfgen now auto-discovers the `_global.wfl` prelude next to each rule file and merges its `yield preset` declarations into the rule AST before WFL compilation, matching wf-runtime's project prelude convention. Previously a rule referencing a preset defined in `_global.wfl` failed with `unknown yield preset`. Validation matches the runtime: `_global.wfl` may only declare `yield preset` (use/pattern/rule/test declarations are rejected), preset names must be unique, and a rule file may not redefine a preset already provided by the prelude. Both the `use`-declaration path and the CLI `--wfl` path are covered.
+
 ### wfusion — logging level now authoritative (#59)
 
 - **Fixed #59**: `[logging] level` is now the single source of truth for the log level and is no longer silently overridden by the `RUST_LOG` env var. `init_tracing` previously switched to `EnvFilter::from_default_env()` (ignoring `[logging] level`) whenever `RUST_LOG` was set — even to an empty string — so `level = "info"` still emitted DEBUG/TRACE. It now always builds `EnvFilter` from `[logging]` (`level` + `modules`) and never reads `RUST_LOG`. For per-module overrides, use the supported `[logging].modules` (e.g. `wf_runtime::receiver = "debug"`).

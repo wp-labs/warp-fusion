@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use orion_error::conversion::SourceErr;
 
 use crate::error::{WfgenReason, WfgenResult, WfgenStructExt};
+use crate::prelude;
 
 pub fn load_ws_files(paths: &[PathBuf]) -> WfgenResult<Vec<wf_lang::WindowSchema>> {
     let mut schemas = Vec::new();
@@ -24,7 +25,21 @@ pub fn load_wfl_files(paths: &[PathBuf]) -> WfgenResult<Vec<wf_lang::ast::WflFil
             WfgenReason::Io,
             format!("reading .wfl file: {}", path.display()),
         )?;
-        let parsed = wf_lang::parse_wfl(&content).wfgen()?;
+        let mut parsed = wf_lang::parse_wfl(&content).wfgen()?;
+        // Merge `_global.wfl` yield presets next to the rule file, matching
+        // wf-runtime's project prelude convention. Skip when the file being
+        // loaded is the prelude itself.
+        if let Some(prelude_path) = prelude::prelude_path_for(path)
+            && !prelude::is_prelude_file(path, &prelude_path)
+        {
+            let prelude_source = std::fs::read_to_string(&prelude_path).source_err(
+                WfgenReason::Io,
+                format!("reading rule prelude: {}", prelude_path.display()),
+            )?;
+            let prelude = prelude::parse_rule_prelude(&prelude_source, &prelude_path)?;
+            prelude::validate_rule_prelude_conflicts(&parsed, path, &prelude)?;
+            prelude::apply_rule_prelude(&mut parsed, &prelude);
+        }
         files.push(parsed);
     }
     Ok(files)

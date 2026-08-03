@@ -8,6 +8,7 @@ use wf_config::ConfigVarContext;
 use wf_config::load_wfl_with_context;
 
 use crate::error::{self, WfgenReason, WfgenResult, WfgenStructExt};
+use crate::prelude;
 use crate::wfg_ast::WfgFile;
 use crate::wfg_parser::parse_wfg;
 
@@ -85,7 +86,17 @@ pub fn load_from_uses(
             }
             "wfl" => {
                 let source = load_wfl_with_context(&resolved, &wfl_ctx, Some(base_dir)).wfgen()?;
-                let parsed = wf_lang::parse_wfl(&source).wfgen()?;
+                let mut parsed = wf_lang::parse_wfl(&source).wfgen()?;
+                // Merge `_global.wfl` yield presets next to the rule file, matching
+                // wf-runtime's project prelude convention. Skip when the file
+                // being loaded is the prelude itself.
+                if let Some(prelude_path) = prelude::prelude_path_for(&resolved)
+                    && !prelude::is_prelude_file(&resolved, &prelude_path)
+                {
+                    let prelude = prelude::load_rule_prelude(&prelude_path, &wfl_ctx, base_dir)?;
+                    prelude::validate_rule_prelude_conflicts(&parsed, &resolved, &prelude)?;
+                    prelude::apply_rule_prelude(&mut parsed, &prelude);
+                }
                 wfl_files.push(parsed);
             }
             other => {

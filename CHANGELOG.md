@@ -2,7 +2,7 @@
 
 All notable changes to wfusion will be documented in this file.
 
-## [0.1.40 Unreleased]
+## [0.1.43 Unreleased]
 
 ### on event seq / on event any —— 有序序列与无序共现（WFL）
 

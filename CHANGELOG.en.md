@@ -1,6 +1,6 @@
 # Changelog (English)
 
-## [0.1.40 Unreleased]
+## [0.1.43 Unreleased]
 
 ### on event seq / on event any — ordered sequence & unordered co-occurrence (WFL)
 

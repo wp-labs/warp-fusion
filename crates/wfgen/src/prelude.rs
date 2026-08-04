@@ -13,8 +13,8 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-use wf_config::load_wfl_with_context;
 use wf_config::ConfigVarContext;
+use wf_config::load_wfl_with_context;
 
 use wf_lang::ast::{WflFile, YieldPresetDecl};
 
@@ -225,7 +225,8 @@ mod tests {
     fn rule_redefining_prelude_preset_is_conflict() {
         let prelude = parse_rule_prelude(PRELUDE_SRC, Path::new("_global.wfl")).unwrap();
         let rule = parse_wfl(&format!("{PRELUDE_SRC}\n{RULE_SRC}"));
-        let err = validate_rule_prelude_conflicts(&rule, Path::new("rule.wfl"), &prelude).unwrap_err();
+        let err =
+            validate_rule_prelude_conflicts(&rule, Path::new("rule.wfl"), &prelude).unwrap_err();
         assert!(err.to_string().contains("already exists in prelude"));
     }
 }

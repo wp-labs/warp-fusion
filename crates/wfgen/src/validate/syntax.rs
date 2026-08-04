@@ -10,6 +10,7 @@ pub(super) fn validate_syntax(
     wfg: &WfgFile,
     schemas: &[WindowSchema],
     all_rules: &[&RuleDecl],
+    skip_wfl: bool,
 ) -> Vec<ValidationError> {
     let mut errors = Vec::new();
     let Some(syntax) = &wfg.syntax else {
@@ -165,7 +166,11 @@ pub(super) fn validate_syntax(
         })
         .unwrap_or_default();
 
-    if let Some(inj) = &syntax.injection {
+    // Rule-presence checks (VN13/VN14) are skipped when the WFL pipeline is
+    // opted out (--no-wfl / --no-oracle): there are no rules to reference.
+    if !skip_wfl
+        && let Some(inj) = &syntax.injection
+    {
         for case in &inj.cases {
             if let Some(target_rule) = case.target_rule.as_deref() {
                 if !all_rules.iter().any(|rule| rule.name == target_rule) {
@@ -192,7 +197,7 @@ pub(super) fn validate_syntax(
 
     if let Some(expect) = &syntax.expect {
         for check in &expect.checks {
-            if !all_rules.iter().any(|r| r.name == check.rule) {
+            if !skip_wfl && !all_rules.iter().any(|r| r.name == check.rule) {
                 errors.push(ValidationError {
                     code: "VN7",
                     message: format!("expect: rule '{}' not found in WFL files", check.rule),

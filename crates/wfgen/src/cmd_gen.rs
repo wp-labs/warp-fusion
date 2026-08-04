@@ -66,11 +66,18 @@ pub async fn run(
         .filter(|s| !s.is_empty())
         .unwrap_or_else(|| wfg.scenario.name.clone());
 
-    let (mut schemas, mut wfl_files) = load_from_uses(&wfg, &scenario, &HashMap::new())?;
-    schemas.extend(load_ws_files(&ws)?);
-    wfl_files.extend(load_wfl_files(&wfl)?);
+    // `--no-wfl` and `--no-oracle` both skip the entire WFL pipeline: no rule
+    // loading, no `_global.wfl` / yield-preset evaluation, no compilation, no
+    // oracle / expected output. Generation falls back to baseline events.
+    let skip_wfl = no_wfl || no_oracle;
 
-    let errors = validate_wfg(&wfg, &schemas, &wfl_files);
+    let (mut schemas, mut wfl_files) = load_from_uses(&wfg, &scenario, &HashMap::new(), skip_wfl)?;
+    schemas.extend(load_ws_files(&ws)?);
+    if !skip_wfl {
+        wfl_files.extend(load_wfl_files(&wfl)?);
+    }
+
+    let errors = validate_wfg(&wfg, &schemas, &wfl_files, skip_wfl);
     if !errors.is_empty() {
         eprintln!("Validation errors:");
         for e in &errors {
@@ -91,17 +98,17 @@ pub async fn run(
         .as_ref()
         .and_then(|s| s.expect.as_ref())
         .is_some();
-    // `--no-oracle` skips oracle/expected output but still compiles WFL (so
-    // injection `use()` fixed values are applied). `--no-wfl` skips
-    // compilation entirely, which also disables oracle (rule_plans empty).
-    let expected_requested = (wfg.scenario.oracle.is_some() || expect_requested) && !no_oracle;
+    // `--no-oracle` (like `--no-wfl`) skips the entire WFL pipeline, so oracle
+    // / expected output is disabled too. `expected_requested` stays false and
+    // `rule_plans` stays empty.
+    let expected_requested = (wfg.scenario.oracle.is_some() || expect_requested) && !skip_wfl;
 
-    // Compile WFL rules. Skipped entirely by --no-wfl: no compilation, no
-    // `_global.wfl` / yield-preset evaluation, no injection-aware generation,
-    // no oracle. `--no-oracle` does NOT skip this — it needs rule_plans for
-    // injection. `rule_plans` stays empty only under --no-wfl.
+    // Compile WFL rules. Skipped entirely by `--no-wfl` and `--no-oracle`: no
+    // compilation, no `_global.wfl` / yield-preset evaluation, no injection-aware
+    // generation, no oracle. `rule_plans` stays empty, so generation falls back
+    // to baseline background events.
     let mut rule_plans = Vec::new();
-    if !no_wfl {
+    if !skip_wfl {
         let mut compile_errors = Vec::new();
         for wfl_file in &wfl_files {
             match wf_lang::compile_wfl(wfl_file, &schemas) {
@@ -118,7 +125,7 @@ pub async fn run(
                 return error::fail(
                     WfgenReason::Validation,
                     "WFL compilation failed while expected output is enabled; \
-                     fix the WFL errors or use --no-oracle to skip expected output",
+                     fix the WFL errors or use --no-oracle / --no-wfl to skip expected output",
                 );
             } else {
                 for e in &compile_errors {
@@ -133,10 +140,10 @@ pub async fn run(
 
     // Expected alert generation (on CLEAN events, before faults).
     let expected_enabled = expected_requested && !rule_plans.is_empty();
-    // Oracle/expected output was requested, not opted out (--no-oracle) and
-    // not disabled by --no-wfl, but there is nowhere to write it (--send only,
-    // no --out). Warn rather than silently drop it.
-    if expected_requested && !no_wfl && out.is_none() {
+    // Oracle/expected output was requested, not opted out (--no-wfl /
+    // --no-oracle) but there is nowhere to write it (--send only, no --out).
+    // Warn rather than silently drop it.
+    if expected_requested && out.is_none() {
         eprintln!(
             "Warning: oracle/expected output requested but --out not set; \
              skipping expected generation"

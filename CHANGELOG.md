@@ -38,10 +38,7 @@ All notable changes to wfusion will be documented in this file.
 
 ### wfgen CLI
 
-- **`--no-oracle` 与 `--no-wfl` 拆分为两个独立 flag（#58 反馈）**: 0.1.39 把 `--no-oracle` 作为 `--no-wfl` 的别名，导致 `--no-oracle` 连 injection `use()` 固定值一起跳过（`rule_plans` 为空 → `has_inject = false`），生成的字段全是随机值。现拆分为正交语义：
-  - `--no-wfl`：跳过整个 WFL 管线（不编译、无 injection、无 oracle），退回 baseline 背景事件；
-  - `--no-oracle`：**仍编译 WFL**（保留 injection `use()` 固定值），只跳过 oracle/expected 输出。
-  - 验证：`brute_force.wfg` 用 `--no-oracle` 生成 60000 事件含 48000 条 `action=failed/success` 固定值；用 `--no-wfl` 则 0 条固定值（全随机）。需要 inject-aware 事件但不要 oracle 文件时用 `--no-oracle`，真正只要 baseline 事件时用 `--no-wfl`。
+- **`--no-oracle` 与 `--no-wfl` 等价，跳过整个 WFL 管线（#58）**: 0.1.39 曾尝试把 `--no-oracle` 拆成"只关 oracle、保留 injection"的独立语义，后续按 #58 调整为与 `--no-wfl` 等价：`--no-oracle` 不再编译 WFL，不加载/编译规则（不加载 `_global.wfl`、不求值 yield preset、不输出 `unknown yield preset` 等编译警告），只生成 baseline 场景事件，且不产出 oracle/expected 侧车文件（`.except.jsonl` / `.except.meta.jsonl`）。注意：因此 `--no-oracle` 下 injection `use()` 固定值也不会生效（退回纯背景随机事件）；需要 inject-aware 事件时用完整管线生成。`--send` 省略 `--out` 的四组合已可用（0.1.39 实现）。用法示例：`wfgen gen --scenario <s.wfg> --send --addr 127.0.0.1:9800 --no-oracle`。
 
 - **`_global.wfl` yield preset 预加载（#58 反馈）**: wfgen 编译 WFL 前现在会自动发现并加载规则文件同目录下的 `_global.wfl`，把其中的 `yield preset` 合并进每个规则文件后再编译——与 wfusion 运行时的 project prelude 约定一致。此前规则引用 `_global.wfl` 中定义的 preset 会直接报 `unknown yield preset`。同时校验：`_global.wfl` 只允许 `yield preset` 声明（出现 use/pattern/rule/test 时报错）、preset 名不得重复、规则文件不得重定义 prelude 中已有的 preset。`use` 声明与 CLI `--wfl` 两条加载路径均已接入。
 

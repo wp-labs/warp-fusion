@@ -44,7 +44,7 @@ scenario brute_force_detect<seed=42> {
         ],
     )];
     let wfl = make_wfl("brute_force_then_scan", vec![("fail", "auth_events")]);
-    let errors = validate_wfg(&wfg, &schemas, &[wfl]);
+    let errors = validate_wfg(&wfg, &schemas, &[wfl], false);
     assert!(
         !errors.iter().any(|e| e.code.starts_with("VN")),
         "unexpected VN errors: {:?}",
@@ -66,7 +66,7 @@ scenario s<seed=1> {
 "#;
     let wfg = parse_wfg(input).unwrap();
     let schemas = vec![make_schema("auth_events", vec![])];
-    let errors = validate_wfg(&wfg, &schemas, &[]);
+    let errors = validate_wfg(&wfg, &schemas, &[], false);
     assert!(
         errors.iter().any(|e| e.code == "VN6"),
         "errors: {:?}",
@@ -87,7 +87,7 @@ scenario s<seed=1> {
 "#;
     let wfg = parse_wfg(input).unwrap();
     let schemas = vec![make_schema("auth_events", vec![])];
-    let errors = validate_wfg(&wfg, &schemas, &[]);
+    let errors = validate_wfg(&wfg, &schemas, &[], false);
     assert!(
         errors.iter().any(|e| e.code == "VN7"),
         "errors: {:?}",
@@ -105,7 +105,7 @@ scenario s<seed=1> {
 "#;
     let wfg = parse_wfg(input).unwrap();
     let schemas = vec![make_schema("auth_events", vec![])];
-    let errors = validate_wfg(&wfg, &schemas, &[]);
+    let errors = validate_wfg(&wfg, &schemas, &[], false);
     assert!(
         errors.iter().any(|e| e.code == "VN3"),
         "errors: {:?}",
@@ -130,7 +130,7 @@ scenario s<seed=1> {
 "#;
     let wfg = parse_wfg(input).unwrap();
     let schemas = vec![make_schema("auth_events", vec![])];
-    let errors = validate_wfg(&wfg, &schemas, &[]);
+    let errors = validate_wfg(&wfg, &schemas, &[], false);
     assert!(
         errors.iter().any(|e| e.code == "VN9"),
         "errors: {:?}",
@@ -158,7 +158,7 @@ scenario s<seed=1> {
         "auth_events",
         vec![("user", BaseType::Chars), ("login", BaseType::Chars)],
     )];
-    let errors = validate_wfg(&wfg, &schemas, &[]);
+    let errors = validate_wfg(&wfg, &schemas, &[], false);
     assert!(
         errors.iter().any(|e| e.code == "VN15"),
         "errors: {:?}",
@@ -191,7 +191,7 @@ scenario s<seed=1> {
             ("action", BaseType::Chars),
         ],
     )];
-    let errors = validate_wfg(&wfg, &schemas, &[]);
+    let errors = validate_wfg(&wfg, &schemas, &[], false);
     assert!(
         errors.iter().any(|e| e.code == "VN16"),
         "errors: {:?}",
@@ -220,7 +220,7 @@ scenario s<seed=1> {
         "auth_events",
         vec![("user", BaseType::Chars), ("login", BaseType::Chars)],
     )];
-    let errors = validate_wfg(&wfg, &schemas, &[]);
+    let errors = validate_wfg(&wfg, &schemas, &[], false);
     assert!(
         errors.iter().any(|e| e.code == "VN16"),
         "errors: {:?}",
@@ -258,7 +258,7 @@ scenario s<seed=1> {
             ("action", BaseType::Chars),
         ],
     )];
-    let errors = validate_wfg(&wfg, &schemas, &[]);
+    let errors = validate_wfg(&wfg, &schemas, &[], false);
     assert!(
         errors
             .iter()
@@ -289,7 +289,7 @@ scenario s<seed=1> {
         "auth_events",
         vec![("user", BaseType::Chars), ("login", BaseType::Chars)],
     )];
-    let errors = validate_wfg(&wfg, &schemas, &[]);
+    let errors = validate_wfg(&wfg, &schemas, &[], false);
     assert!(
         errors
             .iter()
@@ -325,7 +325,7 @@ scenario s<seed=1> {
             vec![("user", BaseType::Chars), ("login", BaseType::Chars)],
         ),
     ];
-    let errors = validate_wfg(&wfg, &schemas, &[]);
+    let errors = validate_wfg(&wfg, &schemas, &[], false);
     assert!(
         errors.iter().any(|e| e.code == "VN10"),
         "errors: {:?}",
@@ -350,7 +350,7 @@ scenario s<seed=1> {
 "#;
     let wfg = parse_wfg(input).unwrap();
     let schemas = vec![make_schema("auth_events", vec![("login", BaseType::Chars)])];
-    let errors = validate_wfg(&wfg, &schemas, &[]);
+    let errors = validate_wfg(&wfg, &schemas, &[], false);
     assert!(
         errors.iter().any(|e| e.code == "VN11"),
         "errors: {:?}",
@@ -378,7 +378,7 @@ scenario s<seed=1> {
         "auth_events",
         vec![("user", BaseType::Chars), ("login", BaseType::Chars)],
     )];
-    let errors = validate_wfg(&wfg, &schemas, &[]);
+    let errors = validate_wfg(&wfg, &schemas, &[], false);
     assert!(
         errors.iter().any(|e| e.code == "VN12"),
         "errors: {:?}",
@@ -412,7 +412,7 @@ scenario s<seed=1> {
     )];
     let wfl_a = make_wfl("rule_a", vec![("a", "auth_events")]);
     let wfl_b = make_wfl("rule_b", vec![("b", "auth_events")]);
-    let errors = validate_wfg(&wfg, &schemas, &[wfl_a, wfl_b]);
+    let errors = validate_wfg(&wfg, &schemas, &[wfl_a, wfl_b], false);
     assert!(
         errors.iter().any(|e| e.code == "VN13"),
         "errors: {:?}",
@@ -440,7 +440,7 @@ scenario s<seed=1> {
         "auth_events",
         vec![("login", BaseType::Chars), ("sip", BaseType::Ip)],
     )];
-    let errors = validate_wfg(&wfg, &schemas, &[]);
+    let errors = validate_wfg(&wfg, &schemas, &[], false);
     assert!(
         errors.iter().any(|e| e.code == "VN13"),
         "errors: {:?}",
@@ -479,7 +479,7 @@ scenario s<seed=1> {
     )];
     let wfl_a = make_wfl("rule_a", vec![("a", "auth_events")]);
     let wfl_b = make_wfl("rule_b", vec![("b", "auth_events")]);
-    let errors = validate_wfg(&wfg, &schemas, &[wfl_a, wfl_b]);
+    let errors = validate_wfg(&wfg, &schemas, &[wfl_a, wfl_b], false);
     assert!(
         !errors.iter().any(|e| e.code == "VN13" || e.code == "VN14"),
         "errors: {:?}",
@@ -507,10 +507,39 @@ scenario s<seed=1> {
         "auth_events",
         vec![("login", BaseType::Chars), ("sip", BaseType::Ip)],
     )];
-    let errors = validate_wfg(&wfg, &schemas, &[]);
+    let errors = validate_wfg(&wfg, &schemas, &[], false);
     assert!(
         errors.iter().any(|e| e.code == "VN14"),
         "errors: {:?}",
         errors
+    );
+}
+
+#[test]
+fn test_vn7_expect_rule_not_found_skipped_when_skip_wfl() {
+    let input = r#"
+#[duration=10m]
+scenario s<seed=1> {
+    traffic { stream auth_events gen 100/s }
+    expect {
+        hit(missing_rule) >= 95%
+    }
+}
+"#;
+    let wfg = parse_wfg(input).unwrap();
+    let schemas = vec![make_schema("auth_events", vec![])];
+
+    let errs_normal = validate_wfg(&wfg, &schemas, &[], false);
+    assert!(
+        errs_normal.iter().any(|e| e.code == "VN7"),
+        "VN7 must be reported when the WFL pipeline is active: {:?}",
+        errs_normal
+    );
+
+    let errs_skipped = validate_wfg(&wfg, &schemas, &[], true);
+    assert!(
+        !errs_skipped.iter().any(|e| e.code == "VN7"),
+        "VN7 must be skipped under skip_wfl: {:?}",
+        errs_skipped
     );
 }

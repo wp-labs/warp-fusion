@@ -173,7 +173,7 @@ fn load_scenarios(
 
         // Load schemas referenced by the scenario's `use` declarations
         let (mut scenario_schemas, _) =
-            load_from_uses(&wfg, &path, &std::collections::HashMap::new())?;
+            load_from_uses(&wfg, &path, &std::collections::HashMap::new(), false)?;
         // Merge with global schemas (avoid duplicates by name)
         for s in global_schemas {
             if !scenario_schemas.iter().any(|x| x.name == s.name) {

@@ -23,7 +23,7 @@ pub async fn run(
     )?;
     let wfg = parse_wfg(&wfg_content)?;
 
-    let (mut schemas, _) = load_from_uses(&wfg, &scenario, &HashMap::new())?;
+    let (mut schemas, _) = load_from_uses(&wfg, &scenario, &HashMap::new(), false)?;
     schemas.extend(load_ws_files(&ws)?);
 
     let events = read_events_jsonl(&input)?;

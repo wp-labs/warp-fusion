@@ -104,7 +104,7 @@ async fn e2e_datagen_brute_force() {
 
     // ---- Validate scenario ----
     let validation_errors =
-        wfgen::validate::validate_wfg(&loaded.wfg, &loaded.schemas, &loaded.wfl_files);
+        wfgen::validate::validate_wfg(&loaded.wfg, &loaded.schemas, &loaded.wfl_files, false);
     assert!(
         validation_errors.is_empty(),
         "scenario validation failed: {:?}",

@@ -9,7 +9,7 @@ fn test_sc2_stream_alias_not_in_any_rule() {
     let wfg = minimal_wfg(vec![stream("s_missing", "LoginWindow")], vec![]);
     let schemas = vec![make_schema("LoginWindow", vec![])];
     let wfl = make_wfl("my_rule", vec![("e", "LoginWindow")]);
-    let errors = validate_wfg(&wfg, &schemas, &[wfl]);
+    let errors = validate_wfg(&wfg, &schemas, &[wfl], false);
     assert!(
         errors
             .iter()
@@ -25,7 +25,7 @@ fn test_sc2a_stream_alias_window_mismatch() {
         make_schema("LoginWindow", vec![]),
     ];
     let wfl = make_wfl("my_rule", vec![("e", "LoginWindow")]);
-    let errors = validate_wfg(&wfg, &schemas, &[wfl]);
+    let errors = validate_wfg(&wfg, &schemas, &[wfl], false);
     assert!(
         errors
             .iter()

@@ -26,7 +26,7 @@ pub async fn run(
     )?;
     let wfg = parse_wfg(&wfg_content)?;
 
-    let (mut schemas, mut wfl_files) = load_from_uses(&wfg, &scenario, &HashMap::new())?;
+    let (mut schemas, mut wfl_files) = load_from_uses(&wfg, &scenario, &HashMap::new(), false)?;
     schemas.extend(load_ws_files(&ws)?);
     wfl_files.extend(load_wfl_files(&wfl)?);
 

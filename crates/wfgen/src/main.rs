@@ -41,20 +41,18 @@ enum Commands {
         #[arg(long)]
         wfl: Vec<PathBuf>,
 
-        /// Skip the WFL pipeline entirely: no rule compilation, no
-        /// `_global.wfl` / yield-preset evaluation, no injection-aware
-        /// event generation, and no oracle/expected output. Generation
-        /// falls back to baseline background events. Use this when you
-        /// want plain background events and none of the WFL-derived
-        /// behaviour (including injection `use()` fixed values).
+        /// Skip the WFL pipeline entirely: no rule loading, no
+        /// `_global.wfl` / yield-preset evaluation, no compilation, no
+        /// injection-aware event generation, and no oracle/expected output.
+        /// Generation falls back to baseline background events. Equivalent to
+        /// `--no-oracle`.
         #[arg(long)]
         no_wfl: bool,
 
-        /// Skip oracle/expected output generation, but still compile WFL so
-        /// injection-aware events (including `use()` fixed values) are
-        /// generated. Use this when you want inject-aware events without the
-        /// expected-alert oracle files (e.g. streaming test data). Implies no
-        /// oracle sidecar files (`.except.jsonl` / `.except.meta.jsonl`).
+        /// Skip the WFL pipeline and oracle/expected output: only scenario
+        /// events are generated. No WFL compilation, no `_global.wfl` /
+        /// yield-preset evaluation, and no oracle sidecar files
+        /// (`.except.jsonl` / `.except.meta.jsonl`). Equivalent to `--no-wfl`.
         #[arg(long)]
         no_oracle: bool,
 
@@ -286,8 +284,8 @@ mod tests {
 
     #[test]
     fn gen_no_oracle_flag_parses() {
-        // --no-oracle is a distinct flag (compile WFL, skip oracle); must parse
-        // independently of --no-wfl.
+        // --no-oracle is a distinct flag (skip the WFL pipeline and oracle);
+        // must parse independently of --no-wfl.
         let cli = Cli::try_parse_from([
             "wfgen",
             "gen",

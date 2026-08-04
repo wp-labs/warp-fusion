@@ -17,11 +17,11 @@ pub fn run(scenario: PathBuf, ws: Vec<PathBuf>, wfl: Vec<PathBuf>) -> WfgenResul
     )?;
     let wfg = parse_wfg(&wfg_content)?;
 
-    let (mut schemas, mut wfl_files) = load_from_uses(&wfg, &scenario, &HashMap::new())?;
+    let (mut schemas, mut wfl_files) = load_from_uses(&wfg, &scenario, &HashMap::new(), false)?;
     schemas.extend(load_ws_files(&ws)?);
     wfl_files.extend(load_wfl_files(&wfl)?);
 
-    let errors = validate_wfg(&wfg, &schemas, &wfl_files);
+    let errors = validate_wfg(&wfg, &schemas, &wfl_files, false);
     if errors.is_empty() {
         println!("OK");
     } else {

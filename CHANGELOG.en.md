@@ -25,12 +25,9 @@
 
 - **New `memory_stability` case**: long-running memory-stability verification (daemon + live TCP input + metrics monitor). Verifies instances/memory grow under a burst, auto-release after the window TTL when input stops (`rule.instances` drops to 0), and no RSS growth across repeated burst/idle cycles. Supports `--demo` (logical release), `--leak` (RSS leak check), and `--smoke` modes.
 
-### wfgen — split `--no-oracle` and `--no-wfl` (#58 follow-up)
+### wfgen — `--no-oracle` and `--no-wfl` are equivalent, skipping the whole WFL pipeline (#58)
 
-- In 0.1.39 `--no-oracle` was an alias of `--no-wfl`, which made `--no-oracle` skip injection `use()` fixed values too (empty `rule_plans` → `has_inject = false`), so generated fields were all random. They are now distinct, orthogonal flags:
-  - `--no-wfl`: skip the entire WFL pipeline (no compilation, no injection, no oracle); baseline background events.
-  - `--no-oracle`: still compiles WFL (keeps injection `use()` fixed values), only skips oracle/expected output.
-  - Verified: `brute_force.wfg` with `--no-oracle` yields 60000 events including 48000 with `action=failed/success` fixed values; with `--no-wfl` it yields 0 fixed values (all random). Use `--no-oracle` for inject-aware events without oracle files; use `--no-wfl` for plain baseline events.
+- 0.1.39 first attempted to split `--no-oracle` into an "only skip oracle, keep injection" semantics; that split was subsequently reverted per #58, so `--no-oracle` is again equivalent to `--no-wfl`: no rule loading/compilation (no `_global.wfl` loading, no yield-preset evaluation, no `unknown yield preset` compile warnings), only baseline scenario events, and no oracle/expected sidecar files (`.except.jsonl` / `.except.meta.jsonl`). Note that injection `use()` fixed values therefore do not apply under `--no-oracle` (generation falls back to pure baseline random events); use the full pipeline when inject-aware events are needed. The `--send`-without-`--out` four-way combination (0.1.39) remains available. Example: `wfgen gen --scenario <s.wfg> --send --addr 127.0.0.1:9800 --no-oracle`.
 
 ### wfgen — `_global.wfl` yield preset preload (#58 follow-up)
 

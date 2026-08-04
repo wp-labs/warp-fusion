@@ -33,7 +33,7 @@ fn test_sv8_time_tolerance_must_be_duration() {
         }],
     };
     let wfg = wfg_with_oracle(oracle);
-    let errors = validate_wfg(&wfg, &[], &[]);
+    let errors = validate_wfg(&wfg, &[], &[], false);
     assert!(
         errors
             .iter()
@@ -52,7 +52,7 @@ fn test_sv8_score_tolerance_must_be_nonneg_number() {
         }],
     };
     let wfg = wfg_with_oracle(oracle);
-    let errors = validate_wfg(&wfg, &[], &[]);
+    let errors = validate_wfg(&wfg, &[], &[], false);
     assert!(
         errors
             .iter()
@@ -71,7 +71,7 @@ fn test_sv8_score_tolerance_string_rejected() {
         }],
     };
     let wfg = wfg_with_oracle(oracle);
-    let errors = validate_wfg(&wfg, &[], &[]);
+    let errors = validate_wfg(&wfg, &[], &[], false);
     assert!(
         errors.iter().any(|e| e.code == "SV8"),
         "errors: {:?}",
@@ -94,7 +94,7 @@ fn test_sv8_valid_oracle_params() {
         ],
     };
     let wfg = wfg_with_oracle(oracle);
-    let errors = validate_wfg(&wfg, &[], &[]);
+    let errors = validate_wfg(&wfg, &[], &[], false);
     assert!(
         !errors.iter().any(|e| e.code == "SV8"),
         "should pass: {:?}",

@@ -29,8 +29,14 @@ fn skip_wfl_loads_schemas_but_no_rules() {
 
     let (schemas, wfl_files) =
         load_from_uses(&wfg, &wfg_path, &HashMap::new(), true).expect("load with skip_wfl");
-    assert!(!schemas.is_empty(), "schemas must still load under skip_wfl");
-    assert!(wfl_files.is_empty(), "WFL files must not load under skip_wfl");
+    assert!(
+        !schemas.is_empty(),
+        "schemas must still load under skip_wfl"
+    );
+    assert!(
+        wfl_files.is_empty(),
+        "WFL files must not load under skip_wfl"
+    );
 }
 
 #[test]
@@ -90,7 +96,9 @@ async fn no_oracle_run_writes_events_without_sidecars() {
         .map(|e| e.expect("entry").file_name().to_string_lossy().into_owned())
         .collect();
     assert!(
-        files.iter().any(|f| f.ends_with(".jsonl") && !f.contains(".except.")),
+        files
+            .iter()
+            .any(|f| f.ends_with(".jsonl") && !f.contains(".except.")),
         "events file written: {files:?}"
     );
     assert!(
@@ -129,7 +137,9 @@ async fn no_wfl_run_writes_events_without_sidecars() {
         .map(|e| e.expect("entry").file_name().to_string_lossy().into_owned())
         .collect();
     assert!(
-        files.iter().any(|f| f.ends_with(".jsonl") && !f.contains(".except.")),
+        files
+            .iter()
+            .any(|f| f.ends_with(".jsonl") && !f.contains(".except.")),
         "events file written: {files:?}"
     );
     assert!(
@@ -182,11 +192,11 @@ async fn no_oracle_run_skips_cli_wfl_files() {
         manifest().join(WFG_REL),
         "jsonl".to_string(),
         Some(out.clone()),
-        Vec::new(),        // ws
-        vec![wfl_file],    // wfl — must be skipped
-        false,             // no_wfl
-        true,              // no_oracle
-        false,             // send
+        Vec::new(),     // ws
+        vec![wfl_file], // wfl — must be skipped
+        false,          // no_wfl
+        true,           // no_oracle
+        false,          // send
         "127.0.0.1:1".to_string(),
     )
     .await;

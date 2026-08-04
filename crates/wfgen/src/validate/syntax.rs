@@ -168,9 +168,7 @@ pub(super) fn validate_syntax(
 
     // Rule-presence checks (VN13/VN14) are skipped when the WFL pipeline is
     // opted out (--no-wfl / --no-oracle): there are no rules to reference.
-    if !skip_wfl
-        && let Some(inj) = &syntax.injection
-    {
+    if !skip_wfl && let Some(inj) = &syntax.injection {
         for case in &inj.cases {
             if let Some(target_rule) = case.target_rule.as_deref() {
                 if !all_rules.iter().any(|rule| rule.name == target_rule) {

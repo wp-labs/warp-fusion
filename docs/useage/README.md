@@ -6,6 +6,7 @@
 
 | 文档 | 内容 |
 |------|------|
+| [intro.md](./intro.md) | 面向市场的产品介绍（定位、核心能力、与 Flink / 检测 DSL 对比） |
 | [getting-started.md](./getting-started.md) | 快速开始、示例项目结构、文档索引 |
 | [configuration.md](./configuration.md) | `wfusion.toml`、source / sink / runtime 配置入口 |
 | [schema.md](./schema.md) | `.wfs` window 和字段类型 |

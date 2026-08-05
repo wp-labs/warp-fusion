@@ -41,18 +41,17 @@ enum Commands {
         #[arg(long)]
         wfl: Vec<PathBuf>,
 
-        /// Skip the WFL pipeline entirely: no rule loading, no
-        /// `_global.wfl` / yield-preset evaluation, no compilation, no
-        /// injection-aware event generation, and no oracle/expected output.
-        /// Generation falls back to baseline background events. Equivalent to
-        /// `--no-oracle`.
+        /// Skip the entire WFL pipeline: no rule loading, no `_global.wfl` /
+        /// yield-preset evaluation, no compilation, no injection-aware event
+        /// generation, and no oracle/expected output. Generation falls back to
+        /// baseline background events.
         #[arg(long)]
         no_wfl: bool,
 
-        /// Skip the WFL pipeline and oracle/expected output: only scenario
-        /// events are generated. No WFL compilation, no `_global.wfl` /
-        /// yield-preset evaluation, and no oracle sidecar files
-        /// (`.except.jsonl` / `.except.meta.jsonl`). Equivalent to `--no-wfl`.
+        /// Skip oracle/expected output only: WFL is still compiled, so
+        /// injection `use()` fixed values apply and generated events are
+        /// inject-aware; no `.except.jsonl` / `.except.meta.jsonl` sidecars
+        /// are written. Use `--no-wfl` to also drop rule compilation.
         #[arg(long)]
         no_oracle: bool,
 

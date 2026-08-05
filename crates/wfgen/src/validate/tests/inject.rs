@@ -75,7 +75,7 @@ fn test_sc6_sc2a_valid_stream_window_matches_rule() {
 fn test_sc5_inject_rule_not_found_skipped_when_skip_wfl() {
     // A legacy scenario with an injection block referencing a rule that is not
     // loaded: SC5 must be reported normally, but suppressed under skip_wfl
-    // (--no-oracle / --no-wfl), where the whole WFL pipeline is opted out.
+    // (--no-wfl), where the whole WFL pipeline is opted out.
     let wfg = minimal_wfg(
         vec![stream("s1", "LoginWindow")],
         vec![inject("my_rule", vec!["s1"])],

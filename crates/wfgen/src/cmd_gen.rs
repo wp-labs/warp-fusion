@@ -66,10 +66,12 @@ pub async fn run(
         .filter(|s| !s.is_empty())
         .unwrap_or_else(|| wfg.scenario.name.clone());
 
-    // `--no-wfl` and `--no-oracle` both skip the entire WFL pipeline: no rule
-    // loading, no `_global.wfl` / yield-preset evaluation, no compilation, no
+    // `--no-wfl` skips the entire WFL pipeline: no rule loading, no
+    // `_global.wfl` / yield-preset evaluation, no compilation, no injection, no
     // oracle / expected output. Generation falls back to baseline events.
-    let skip_wfl = no_wfl || no_oracle;
+    // `--no-oracle` keeps the pipeline (injection fixed values still apply) and
+    // only skips oracle / expected output.
+    let skip_wfl = no_wfl;
 
     let (mut schemas, mut wfl_files) = load_from_uses(&wfg, &scenario, &HashMap::new(), skip_wfl)?;
     schemas.extend(load_ws_files(&ws)?);
@@ -98,15 +100,17 @@ pub async fn run(
         .as_ref()
         .and_then(|s| s.expect.as_ref())
         .is_some();
-    // `--no-oracle` (like `--no-wfl`) skips the entire WFL pipeline, so oracle
-    // / expected output is disabled too. `expected_requested` stays false and
-    // `rule_plans` stays empty.
-    let expected_requested = (wfg.scenario.oracle.is_some() || expect_requested) && !skip_wfl;
+    // `--no-oracle` disables oracle / expected output but keeps the WFL pipeline
+    // (so injection fixed values still apply). `--no-wfl` skips everything, so
+    // in either case `expected_requested` stays false (and `rule_plans` stays
+    // empty under `--no-wfl`).
+    let expected_requested =
+        (wfg.scenario.oracle.is_some() || expect_requested) && !skip_wfl && !no_oracle;
 
-    // Compile WFL rules. Skipped entirely by `--no-wfl` and `--no-oracle`: no
-    // compilation, no `_global.wfl` / yield-preset evaluation, no injection-aware
-    // generation, no oracle. `rule_plans` stays empty, so generation falls back
-    // to baseline background events.
+    // Compile WFL rules. Skipped entirely by `--no-wfl`; `--no-oracle` still
+    // compiles so injection-aware generation works, and only oracle/expected
+    // output is suppressed. `rule_plans` stays empty only under `--no-wfl`,
+    // which falls back to baseline background events.
     let mut rule_plans = Vec::new();
     if !skip_wfl {
         let mut compile_errors = Vec::new();

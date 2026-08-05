@@ -1,150 +1,167 @@
 # Changelog (English)
 
-## [0.1.43 Unreleased]
+This file records user-facing changes to `wfusion` / `wfl` / `wfgen` / `wfadm`.
+Internal implementation details, dependency alignment, and test counts are not covered here.
 
-### on event seq / on event any — ordered sequence & unordered co-occurrence (WFL)
-
-- **New `on event seq { ... }` ordered match body and `on event any { ... }` unordered co-occurrence**: ordered event chains for attack-chain detection. The engine already enforces step ordering (`current_step`); the `seq` mode adds:
-  - `has <alias>` existential steps (implicit `count >= 1`).
-  - Aggregate steps via the existing pipe (`spray.user | distinct | count >= 5`).
-  - `within <dur>` step-to-step time gaps.
-  - `not has <alias> within <dur>` negation steps.
-  - `consec` strict adjacency modifier; `skip = past_last | to_next` (`to_next` deferred to L3).
-- **Dependencies**: seq grammar/parse/compile/runtime (within/not/consec) implemented in wp-reactor (wf-lang/wf-engine); tree-sitter-wfl grammar extended (`on_event_mode_block` / `seq_rule_step`).
-- **Tooling**: `wfl rule lint` / `explain` render seq steps; checker adds seq alias / within / not checks.
-- **Examples**: `rat_propagation` and `password_spraying` rewritten with `on event seq`; inline contract tests (incl. an out-of-order 0-hit case) verified through the engine.
-- **Cross-repo note**: runtime changes live in `wp-reactor`; warp-fusion must bump the dependency to use `on event seq`.
-
-### Dependency & engine fixes (wp-reactor v0.1.41)
-
-- **Idle instance expiry**: the periodic timeout scan now advances the effective watermark by the wall-clock time elapsed since the last event was processed (`watermark + idle wall time`), so instances expire per their window TTL even with zero input, conforming to the window's time-based semantics (previously the event-time watermark froze and instances lingered until a new event advanced it).
-- **Bind-matching performance**: `event_matches_alias` uses a precomputed alias→filter map (>24 binds) with a linear fast path (≤24 binds), eliminating the O(binds) per-event scaling in the rule executor.
-- **Clippy gate**: `cargo clippy --all-targets --all-features -- -D warnings` passes (collapsible_if, needless_lifetimes, map_or→is_some_and).
-
-### Examples (wf-examples)
-
-- **New `memory_stability` case**: long-running memory-stability verification (daemon + live TCP input + metrics monitor). Verifies instances/memory grow under a burst, auto-release after the window TTL when input stops (`rule.instances` drops to 0), and no RSS growth across repeated burst/idle cycles. Supports `--demo` (logical release), `--leak` (RSS leak check), and `--smoke` modes.
-
-### wfgen — `--no-oracle` and `--no-wfl` are equivalent, skipping the whole WFL pipeline (#58)
-
-- 0.1.39 first attempted to split `--no-oracle` into an "only skip oracle, keep injection" semantics; that split was subsequently reverted per #58, so `--no-oracle` is again equivalent to `--no-wfl`: no rule loading/compilation (no `_global.wfl` loading, no yield-preset evaluation, no `unknown yield preset` compile warnings), only baseline scenario events, and no oracle/expected sidecar files (`.except.jsonl` / `.except.meta.jsonl`). Note that injection `use()` fixed values therefore do not apply under `--no-oracle` (generation falls back to pure baseline random events); use the full pipeline when inject-aware events are needed. The `--send`-without-`--out` four-way combination (0.1.39) remains available. Example: `wfgen gen --scenario <s.wfg> --send --addr 127.0.0.1:9800 --no-oracle`.
-
-### wfgen — `_global.wfl` yield preset preload (#58 follow-up)
-
-- wfgen now auto-discovers the `_global.wfl` prelude next to each rule file and merges its `yield preset` declarations into the rule AST before WFL compilation, matching wf-runtime's project prelude convention. Previously a rule referencing a preset defined in `_global.wfl` failed with `unknown yield preset`. Validation matches the runtime: `_global.wfl` may only declare `yield preset` (use/pattern/rule/test declarations are rejected), preset names must be unique, and a rule file may not redefine a preset already provided by the prelude. Both the `use`-declaration path and the CLI `--wfl` path are covered.
-
-### wfusion — logging level now authoritative (#59)
-
-- **Fixed #59**: `[logging] level` is now the single source of truth for the log level and is no longer silently overridden by the `RUST_LOG` env var. `init_tracing` previously switched to `EnvFilter::from_default_env()` (ignoring `[logging] level`) whenever `RUST_LOG` was set — even to an empty string — so `level = "info"` still emitted DEBUG/TRACE. It now always builds `EnvFilter` from `[logging]` (`level` + `modules`) and never reads `RUST_LOG`. For per-module overrides, use the supported `[logging].modules` (e.g. `wf_runtime::receiver = "debug"`).
-- **Dependency**: `wf-engine` / `wf-config` / `wf-lang` / `wf-data` / `wf-runtime` aligned to `wp-reactor` v0.1.39 (includes the logging fix).
-- **Verified**: running `wfusion batch` on close_demo with `level = "info"` and `RUST_LOG=debug` set yields 0 DEBUG / 0 TRACE lines (previously leaked); batch still produces the expected alerts.
-
-## [0.1.39 Unreleased]
-
-### wfgen — CLI: optional `--out`, `--no-oracle` renamed to `--no-wfl`
-
-- **`--out` now optional**: `wfgen gen --out` is no longer required; it decouples from `--send` into four combinations: `--out` only (write files), `--send` only (stream over TCP, no disk), both, or neither (returns a clear usage error instead of a silent no-op).
-- **`--no-oracle` renamed to `--no-wfl`**: semantics widened from "skip oracle output only" to "skip the entire WFL pipeline" — no rule compilation, no `_global.wfl` / yield-preset evaluation, no oracle/expected output, and no compile-time warnings such as `unknown yield preset`. With `rule_plans` empty, generation falls back to baseline background events (**behavior change**: `--no-wfl` no longer produces inject-aware hit/near-miss cluster events). `--no-oracle` is retained as a backward-compatible alias with identical behavior.
-- **Oracle skip warning**: when the scenario requests oracle/expected output but only `--send` is given (no `--out`), prints `Warning: oracle/expected output requested but --out not set; skipping expected generation` instead of silently dropping it.
-- **Tests**: added CLI parse tests (`--send` without `--out`, `--no-wfl`, `--no-oracle` alias) and a `run` arg-validation unit test (returns `no output target` error when neither sink is given).
-
-## [0.1.22] — 2026-07-07
-
-### wfusion — admin API binding and TLS loading
-
-- **Fixed**: allow `admin_api.bind = "0.0.0.0:..."` with `admin_api.tls.enabled = false`; non-loopback admin listeners no longer require TLS.
-- **Fixed**: initialize the rustls ring `CryptoProvider` from the production TLS loading path, avoiding TLS startup panics when the provider was not installed elsewhere.
-- **Tests**: added coverage for non-loopback admin API startup with TLS disabled and kept HTTPS coverage for non-loopback binds.
+## [0.1.44 Unreleased]
 
 ### wfgen
 
-- **Added**: top-level `wfgen --version` output.
-- **Tests**: added a regression test for the clap version flag.
+- `--no-wfl` skips the entire WFL pipeline (no rule load/compile, no injection) and generates pure baseline random events.
+- `--no-oracle` still compiles WFL (keeping injection `use()` fixed values) and only skips oracle/expected output (no `.except.*` sidecars).
+- `yield preset` declared in a rule-directory `_global.wfl` is auto-merged, so `yield <target> : <preset>` reuses common output fields.
 
-## [Unreleased] — 2026-07-06
+### wfusion
 
-### wfusion — path base changed from config-file-relative to working-dir-relative
+- `[metrics] console_output = false` disables the periodic console stats log.
 
-- **Break**: Default `runtime_base_dir` changed from `config_path.parent()` (the `conf/` dir containing the config file) to `current_dir()` (process working directory). `wfadm check` updated accordingly.
-- Impact: all relative paths in `wfusion.toml` (`sources_dir` / `sinks` / `schemas` / `rules`) must remove one `..` level.
-  - Before: `"../topology/sources"` → After: `"topology/sources"`
-  - Before: `"../../../models/schemas/"` → After: `"../../models/schemas/"`
-- `base` paths in `business.d/*.toml` also remove one `..` level (`"../../data/alerts"` → `"../data/alerts"`).
-- Unifies path resolution with wparse (both now working-dir-relative), eliminating inconsistent `..` counts within the same project.
-- `--work-dir` CLI flag behavior unchanged (explicit override takes priority).
+## [0.1.43]
 
-### Example pipelines — fixed
+- Version bump; aligned to `wp-reactor` v0.1.42 (includes its internal engine fixes).
 
-- **streaming**: Added missing `protocol = "arrow"` in `parsed_netflow.toml` to fix Arrow IPC decode errors.
-- **streaming**: Added `[models].wpl` in `wpgen.toml` to share models directory with `wparse.toml`.
-- **streaming / kafka**: Changed `wpgen sample` output port to integer (avoids connector param type mismatch), replaced fixed `sleep` with `wait_port` readiness probes in `run.sh`.
-- **kafka**: Changed wfusion source `data_format` from `arrow_framed` to `ndjson` to match wparse kafka sink's JSON output.
-- **kafka**: Removed `demo.toml` (debug sink whose `oml = ["*"]` matched first in OML routing, preventing kafka sink from receiving records).
+## [0.1.42]
 
-## [Unreleased] — 2026-06-22
+- Version bump (alpha); aligned to `wp-reactor` internal fixes; no new user-facing features.
 
-### Dependencies — Centralized & Upgraded
+## [0.1.41]
 
-- **arrow** 54 → 59 (IPC encoding compatibility)
-- **wp-arrow** 0.1 → 0.2 (arrow 59 support)
-- **wp-core-connectors** 0.5.5 → 0.5.6
-- **toml** 0.9 → 1.0
-- **wf-connector-api** 0.1 → 0.2
-- **sha2** 0.10 → 0.11
-- **rand** pinned to `=0.9.0` (prevents 0.10 upgrade breaking `random_range` API)
+### Language (WFL)
 
-### Workspace — Dependency Centralization
+- `on event seq { ... }` ordered sequences and `on event any { ... }` unordered co-occurrence: attack-chain detection with per-step `within` gaps, `not has ... within` negation steps, and `consec` strict adjacency (`skip = to_next` deferred to L3).
 
-All crate-level dependency versions moved to `[workspace.dependencies]`:
+### wfusion
 
-| Dependency | Crates |
-|-----------|--------|
-| `serde_json`, `chrono`, `clap`, `tokio`, `rand` | wfgen, wfl, wfusion |
-| `wp-arrow`, `wp-connector-api`, `tracing` | wfgen, wfusion |
+- Rule instances auto-expire by their window TTL when input is idle, instead of lingering.
 
-This ensures a single source of truth for version management and prevents
-drift between crates.
+## [0.1.40]
 
-### wfgen — Deterministic Scenario Timestamps
+### wfusion
 
-- Default scenario start time changed from `Utc::now()` to fixed
-  `"2026-01-01T00:00:00Z"`. Fixes non-deterministic test failures
-  (`test_fault_deterministic`) and ensures reproducible data generation.
+- `[logging] level` is the single source of truth for the log level and is no longer overridden by `RUST_LOG`; use `[logging].modules` for per-module overrides.
 
-### wfgen — Chunked TCP Send in Stream Mode
+## [0.1.39]
 
-- Stream command splits generated events into 1000-row chunks before
-  sending via `TcpArrowSink`. Prevents wfusion's TCP source (64KB
-  batch cap) from choking on single giant frames.
+### wfgen
 
-### Tests — e2e Tests Self-Contained
+- `--out` is now optional and decoupled from `--send` (four combinations; a clear usage error when neither is given).
+- `--no-oracle` renamed to `--no-wfl` (skips the whole WFL pipeline); `--no-oracle` retained as a backward-compatible alias.
 
-- Copied schemas, rules, sinks, and connectors from `wp-reactor/examples/`
-  into `crates/wfgen/examples/`. e2e tests no longer require `wp-reactor`
-  to be checked out alongside `warp-fusion`. CI can now build and test
-  with only the `warp-fusion` repository.
-- Updated all `.wfg` scenario files to use local relative paths
-  (`../schemas/`, `../rules/`).
+## [0.1.38 Unreleased]
 
-### Docs — AI Agent Skills Guide
+### Language (WFL)
 
-- Added `skills/test-pipeline-guide.md`: an AI-agent-oriented
-  troubleshooting guide covering the wf-rules test pipeline
-  (wfgen → wfusion → alerts). Documents common failure modes,
-  diagnostic techniques, and quick verification commands.
+- Project `_global.wfl` rule prelude: declare shared `yield preset`, reuse via `yield <target> : <preset>`.
+- String helpers: `sha1_n(text, n)`, `join(...)`, `join_by(sep, ...)`.
+- DEBUG funnel logs and state-machine progress diagnostics for rules (locate which step a rule is stuck on).
 
----
+### wfusion
+
+- Stream windows accept `object` / `array` / `array/T` input fields; `merge()` for shallow object enrichment.
+
+## [0.1.35-alpha] — 2026-07-22
+
+### Language (WFL)
+
+- `object { ... }` / `array [ ... ]` structured literals and `merge()`; structured input fields on stream windows.
+
+### wfadm
+
+- `wfadm self update` (incl. `self check`), installing the warp-fusion suite.
+
+## [0.1.34-alpha] — 2026-07-20
+
+### wfadm
+
+- `self update` installs the full warp-fusion binaries; manifest channel selection fix.
+
+## [0.1.32-alpha] — 2026-07-20
+
+### wfadm
+
+- `self update` picks the remote manifest URL by channel (`alpha` / `beta`), avoiding reading another branch's manifest.
+
+## [0.1.31-alpha] — 2026-07-19
+
+### wfadm
+
+- `self update` aligned with `wpadm`: new `--channel` / `--updates-base-url` / `--updates-root` / `--json` / `--yes` / `--dry-run` / `--force`; update source uses the manifest canonical target triple, fixing macOS arm64 short-name 404s.
+
+## [0.1.30-alpha] — 2026-07-19
+
+### wfusion
+
+- Built-in `__window_miss` diagnostic window: unknown stream schema / missing stream-tag field observable via the monitor sink.
+
+## [0.1.29-alpha] — 2026-07-14
+
+### wfusion
+
+- Sink groups support `wf_meta_disable` with wildmatch patterns (`__wfu_*`, etc.) to suppress metadata fields.
+- Admin API reload semantics: requires-restart changes return `restart_required` instead of a 409 failure.
+
+## [0.1.28] — 2026-07-13
+
+### Language (WFL)
+
+- Helpers: `now()` / `now_s()` / `now_ms()` / `now_us()` / `now_ns()`, `is_blank()` / `null_if_blank()` / `default_if_blank()`, `md5()` / `sha1()` / `sha256()` / `hex()` / `stable_id()`.
+- Source-aware WFL parse/compile diagnostics (file, line/column, source snippet on error).
+
+### wfusion
+
+- `.wfs` uses `window.stream_tag` as the distribution key (replacing the old `stream`); upstream carrier unified to `wp_oml_name`.
+
+## [0.1.24] — 2026-07-09
+
+### wfusion — Admin API publish protocol aligned with wparse (Break)
+
+- `POST /admin/v1/reloads/model` params now `wait` / `update` / `version` / `group` / `timeout_ms` / `reason`; old `full` / `update_remote` semantics removed.
+- Non-loopback `admin_api.bind` must enable TLS; `admin_api.auth.mode` accepts only `bearer_token`.
+
+## [0.1.23] — 2026-07-08
+
+### wfusion / wfadm
+
+- daemon supports `update=true` remote update (git fetch + version resolution + managed-dir sync) followed by hot reload, with automatic rollback on failure.
+- `wfadm conf update` delegates to the remote-update API.
+
+## [0.1.22] — 2026-07-07
+
+### wfusion / wfgen
+
+- Fixed: non-loopback admin API can start with TLS disabled.
+- `wfgen --version`.
+
+## [0.1.21] — 2026-07-06
+
+### wfusion — path base change (Break)
+
+- Relative paths are now resolved against the **working directory**, not the config file's directory. Relative paths in `wfusion.toml` (`schemas` / `rules` / `sinks` / `sources_dir`, etc.) must drop one `..` level; `business.d/*.toml` `base` paths likewise. An explicit `--work-dir` takes priority.
+
+## [0.1.17] — 2026-07-01
+
+### wfusion
+
+- Online hot reload via the admin API: `POST /admin/v1/reloads/model` (L1 rule swap / L2 add window / L3 partial rebuild / L4 restart).
+- **Break**: `wfusion config` subcommand removed (moved to `wfadm config`).
+
+### wfadm
+
+- `conf update` (remote rule-source sync), `init --repo` (project bootstrap from a remote template).
+
+## [0.1.16] — 2026-06-28
+
+### wfusion
+
+- **Break**: `wfusion run` split into `wfusion daemon` / `wfusion batch`; `mode` is set by the CLI, not the config.
+- **Break**: `wfusion rule` removed (duplicated `wfl`).
+- Admin API HTTP server (`GET /admin/v1/runtime/status`).
+
+### wfadm
+
+- `check` (deep WFL/WFS/WFG validation), `conf diff`, `engine status` / `engine reload`, `self-update`.
 
 ## [0.1.11] — 2026-06-21
 
-### wfgen — Use wp-core-connectors TcpArrowSink for TCP Send
+### wfgen
 
-- **Dependencies**: Added `wp-core-connectors`, `wp-connector-api`, `tokio`
-- **Refactor**: `tcp_send.rs` rewritten from raw `TcpStream` + manual Arrow IPC
-  encoding → `TcpArrowSink::connect()` + `encode_batch_payload_with_tag()` +
-  `send_payload()`
-  - Arrow IPC encoding via `encode_ipc_frame` (compatible with `wp_arrow::ipc::encode_ipc`)
-  - Framing: RFC6587 octet-counted (`<len> <payload>`), matching wfusion `tcp_src` `framing = "len"`
-  - Transport: `NetWriter` with backpressure
-- **Async**: `cmd_stream`, `cmd_send`, `cmd_bench`, `cmd_gen` all converted to `async fn`
-- **Dependency**: `wp-core-connectors` 0.5.2 → 0.5.5 (exposes `encode_batch_payload_with_tag` as public API)
+- Send data via `wp-core-connectors` TcpArrowSink (RFC6587 framing, matching wfusion `tcp_src`).

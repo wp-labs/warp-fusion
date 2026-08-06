@@ -3,7 +3,15 @@
 This file records user-facing changes to `wfusion` / `wfl` / `wfgen` / `wfadm`.
 Internal implementation details, dependency alignment, and test counts are not covered here.
 
-## [0.1.44 Unreleased]
+## [0.1.45 Unreleased]
+
+### Language (WFL)
+
+- `on event<accu>` within-window accumulation: after the threshold is met, the window's count and evidence keep accumulating without reset, and each subsequent qualifying event re-fires with the running cumulative values and full evidence, until the window expires (aligned with `wp-reactor` v0.4.0).
+
+### Examples
+
+- The `ssh_brute_force` example now uses `on event<accu>`: after brute force is detected (count >= 10), every subsequent failed login re-fires with the running cumulative count and the accumulating evidence.
 
 ### wfgen
 
@@ -46,7 +54,7 @@ Internal implementation details, dependency alignment, and test counts are not c
 - `--out` is now optional and decoupled from `--send` (four combinations; a clear usage error when neither is given).
 - `--no-oracle` renamed to `--no-wfl` (skips the whole WFL pipeline); `--no-oracle` retained as a backward-compatible alias.
 
-## [0.1.38 Unreleased]
+## [0.1.38]
 
 ### Language (WFL)
 

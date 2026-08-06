@@ -1,0 +1,7 @@
+[sink_group]
+name = "miss"
+batch_size = 1
+[[sink_group.sinks]]
+connect = "file_json_sink"
+[sink_group.sinks.params]
+file = "miss.ndjson"

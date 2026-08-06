@@ -15,7 +15,7 @@
 | 样本数据 | `models/wpl/sample.dat`（IPv4） | `models/wpl/sample.dat`（**手写 IPv6** nginx CLF 日志） |
 | wparse `wpl` | 共享 `../../models/wpl` | 本地 `../models/wpl`（IPv6） |
 | wpgen `wpl` | 共享 | 本地（IPv6 样本逐行发送） |
-| wfusion 规则/schema | 共享 `../../models/schemas` + `../../models/wfl` | 相同（地址无关） |
+| wfusion 规则/schema/windows | 共享 `../../models/*` | **本地** `../models/{wfl,schemas,windows.toml}`（`scan_detect` / `traffic_spike` 规则自包含） |
 
 > 注：`wpgen sample` 的 `ip` 生成器只产 IPv4，因此 IPv6 样本直接写在 `models/wpl/sample.dat`，
 > 由 `wpgen sample` 逐行读取发送（同 `wparse/wp-examples/core/ipv6_examples` 的做法）。

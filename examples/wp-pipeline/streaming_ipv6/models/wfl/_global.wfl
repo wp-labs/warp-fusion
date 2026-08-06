@@ -1,0 +1,3 @@
+yield preset base_alerts (
+    rule_name = @__wfu_rule_name
+)

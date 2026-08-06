@@ -20,8 +20,9 @@ rule ssh_brute_force {
             && e.result == "failed"
     }
     match<sip:5m> {
-        // `on event<accu>` — 检测到爆破后（count >= 10）计数器不清零：
-        // 后续每次失败登录都触发一次，输出运行累计 count 与全部证据，直到窗口过期。
+        // `on event<accu>` — 窗口内累积（不清零）：达到 count >= 10 后，窗口里
+        // 的计数与证据全部保留、持续累积；后续每次失败登录都触发一次，输出运行
+        // 累计 count 与累积的全部证据（collect_set 逐条递增），直到窗口过期才重启。
         on event<accu> { failures: e | count >= 10; }
     } -> score(70.0)
     join scanner_whitelist anti on e.sip == scanner_whitelist.sip

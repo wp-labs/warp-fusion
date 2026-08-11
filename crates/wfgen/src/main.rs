@@ -138,6 +138,45 @@ enum Commands {
         #[arg(long)]
         rate_ms: Option<u64>,
     },
+    /// Pre-encode JSONL events into Arrow frames for raw byte replay
+    DumpFrames {
+        /// Path to the .wfg scenario file (used to load schemas)
+        #[arg(long)]
+        scenario: PathBuf,
+
+        /// Path to generated events JSONL file, or `-` to read stdin
+        #[arg(long)]
+        input: PathBuf,
+
+        /// Runtime TCP address used only to borrow the framed encoder
+        #[arg(long, default_value = "127.0.0.1:9800")]
+        addr: String,
+
+        /// Additional .wfs schema files (beyond those in `use` declarations)
+        #[arg(long)]
+        ws: Vec<PathBuf>,
+
+        /// Path to write the encoded frame bytes to
+        #[arg(long)]
+        output: PathBuf,
+
+        /// Accumulate this many events per Arrow batch (default: one-shot,
+        /// matching `send` without --chunk). Bounds per-batch memory for huge
+        /// event counts.
+        #[arg(long)]
+        chunk: Option<usize>,
+    },
+    /// Replay pre-encoded Arrow frame bytes over one TCP connection (no JSON
+    /// parsing / Arrow encoding on the hot path)
+    SendArrow {
+        /// Path to the frames file produced by `wfgen dump-frames`
+        #[arg(long)]
+        input: PathBuf,
+
+        /// Runtime TCP address, e.g. 127.0.0.1:9800
+        #[arg(long, default_value = "127.0.0.1:9800")]
+        addr: String,
+    },
     /// Measure generation throughput (optional TCP send to wfusion)
     Bench {
         /// Path to the .wfg scenario file
@@ -245,6 +284,19 @@ async fn run_cli() -> WfgenResult<()> {
             chunk,
             rate_ms,
         } => wfgen::cmd_send::run(scenario, input, addr, ws, chunk, rate_ms).await,
+        Commands::DumpFrames {
+            scenario,
+            input,
+            addr,
+            ws,
+            output,
+            chunk,
+        } => {
+            wfgen::cmd_frames::dump_frames(scenario, input, addr, ws, output, chunk).await
+        }
+        Commands::SendArrow { input, addr } => {
+            wfgen::cmd_frames::send_arrow(input, addr).await
+        }
         Commands::Bench {
             scenario,
             ws,

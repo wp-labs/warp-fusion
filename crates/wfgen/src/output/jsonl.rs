@@ -106,50 +106,60 @@ pub fn read_events_jsonl(path: &Path) -> WfgenResult<Vec<GenEvent>> {
 
     for line in reader.lines() {
         let line = line.source_err(WfgenReason::Io, format!("reading {}", path.display()))?;
-        if line.trim().is_empty() {
-            continue;
+        if let Some(ev) = parse_gen_event_line(&line, path)? {
+            events.push(ev);
         }
-
-        let obj: serde_json::Map<String, serde_json::Value> = serde_json::from_str(&line)
-            .source_err(
-                WfgenReason::Serialization,
-                format!("parsing {}", path.display()),
-            )?;
-
-        let stream_name = obj
-            .get("_stream")
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .to_string();
-        let window_name = obj
-            .get("_window")
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .to_string();
-        let timestamp: DateTime<Utc> = obj
-            .get("_timestamp")
-            .and_then(|v| v.as_str())
-            .unwrap_or("1970-01-01T00:00:00Z")
-            .parse()
-            .unwrap_or_default();
-
-        // Remaining fields (exclude metadata)
-        let mut fields = serde_json::Map::new();
-        for (k, v) in &obj {
-            if !k.starts_with('_') {
-                fields.insert(k.clone(), v.clone());
-            }
-        }
-
-        events.push(GenEvent {
-            stream_name,
-            window_name,
-            timestamp,
-            fields,
-        });
     }
 
     Ok(events)
+}
+
+/// Parse a single JSONL line into a `GenEvent` (blank lines -> `None`).
+///
+/// Expects `_stream`, `_window`, `_timestamp` metadata fields plus the event
+/// payload fields. Shared by `read_events_jsonl` and the streaming `send` path.
+pub fn parse_gen_event_line(line: &str, source: &Path) -> WfgenResult<Option<GenEvent>> {
+    if line.trim().is_empty() {
+        return Ok(None);
+    }
+
+    let obj: serde_json::Map<String, serde_json::Value> =
+        serde_json::from_str(line).source_err(
+            WfgenReason::Serialization,
+            format!("parsing {}", source.display()),
+        )?;
+
+    let stream_name = obj
+        .get("_stream")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    let window_name = obj
+        .get("_window")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    let timestamp: DateTime<Utc> = obj
+        .get("_timestamp")
+        .and_then(|v| v.as_str())
+        .unwrap_or("1970-01-01T00:00:00Z")
+        .parse()
+        .unwrap_or_default();
+
+    // Remaining fields (exclude metadata)
+    let mut fields = serde_json::Map::new();
+    for (k, v) in &obj {
+        if !k.starts_with('_') {
+            fields.insert(k.clone(), v.clone());
+        }
+    }
+
+    Ok(Some(GenEvent {
+        stream_name,
+        window_name,
+        timestamp,
+        fields,
+    }))
 }
 
 /// Read actual alerts from a JSONL file.

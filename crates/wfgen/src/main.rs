@@ -108,7 +108,7 @@ enum Commands {
         #[arg(long)]
         scenario: PathBuf,
 
-        /// Path to generated events JSONL file (from `wfgen gen`)
+        /// Path to generated events JSONL file, or `-` to read stdin
         #[arg(long)]
         input: PathBuf,
 
@@ -119,6 +119,15 @@ enum Commands {
         /// Additional .wfs schema files (beyond those in `use` declarations)
         #[arg(long)]
         ws: Vec<PathBuf>,
+
+        /// Stream in batches of this many events over one persistent
+        /// connection. Omit to read the whole input and send once.
+        #[arg(long)]
+        chunk: Option<usize>,
+
+        /// Sleep this many ms between streamed batches (pacing; needs --chunk)
+        #[arg(long)]
+        rate_ms: Option<u64>,
     },
     /// Measure generation throughput (optional TCP send to wfusion)
     Bench {
@@ -223,7 +232,9 @@ async fn run_cli() -> WfgenResult<()> {
             input,
             addr,
             ws,
-        } => wfgen::cmd_send::run(scenario, input, addr, ws).await,
+            chunk,
+            rate_ms,
+        } => wfgen::cmd_send::run(scenario, input, addr, ws, chunk, rate_ms).await,
         Commands::Bench {
             scenario,
             ws,

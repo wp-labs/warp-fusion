@@ -63,6 +63,15 @@ enum Commands {
         #[arg(long, default_value = "127.0.0.1:9800")]
         addr: String,
     },
+    /// Generate deterministic NEXMark events (Person/Auction/Bid) as JSONL
+    GenNexmark {
+        /// Number of events to generate
+        count: i64,
+
+        /// RNG seed for deterministic output
+        #[arg(long, default_value_t = 1)]
+        seed: u64,
+    },
     /// Lint (validate) a .wfg scenario file
     Lint {
         /// Path to the .wfg scenario file
@@ -211,6 +220,7 @@ async fn run_cli() -> WfgenResult<()> {
             )
             .await
         }
+        Commands::GenNexmark { count, seed } => wfgen::cmd_gen_nexmark::run(count, seed),
         Commands::Lint { scenario, ws, wfl } => wfgen::cmd_lint::run(scenario, ws, wfl),
         Commands::Verify {
             expected,

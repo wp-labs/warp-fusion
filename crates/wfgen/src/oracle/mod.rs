@@ -6,7 +6,8 @@ use std::time::Duration;
 
 use chrono::{DateTime, Utc};
 use wf_engine::match_engine::{
-    CepStateMachine, CloseOutput, CloseReason, Event, RuleExecutor, StepResult, Value,
+    CepStateMachine, CloseOutput, CloseReason, EngineHashMap, Event, RuleExecutor, StepResult,
+    Value,
 };
 use wf_lang::plan::{ConvPlan, RulePlan};
 
@@ -182,7 +183,7 @@ fn build_window_alias_map(plan: &RulePlan) -> HashMap<String, Vec<String>> {
 
 /// Convert a GenEvent to a wf_core Event.
 fn gen_event_to_core(event: &GenEvent) -> Event {
-    let mut fields = HashMap::new();
+    let mut fields: EngineHashMap<_, Value> = EngineHashMap::default();
     for (k, v) in &event.fields {
         if let Some(core_v) = json_to_core_value(v) {
             fields.insert(k.clone().into(), core_v);

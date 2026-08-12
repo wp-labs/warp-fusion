@@ -5457,6 +5457,7 @@ dependencies = [
  "async-trait",
  "chrono",
  "derive_more",
+ "foldhash 0.1.5",
  "hex",
  "log",
  "md-5",

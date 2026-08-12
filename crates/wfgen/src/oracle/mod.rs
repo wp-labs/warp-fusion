@@ -185,7 +185,7 @@ fn gen_event_to_core(event: &GenEvent) -> Event {
     let mut fields = HashMap::new();
     for (k, v) in &event.fields {
         if let Some(core_v) = json_to_core_value(v) {
-            fields.insert(k.clone(), core_v);
+            fields.insert(k.clone().into(), core_v);
         }
     }
     Event { fields }
@@ -193,7 +193,7 @@ fn gen_event_to_core(event: &GenEvent) -> Event {
 
 fn json_to_core_value(v: &serde_json::Value) -> Option<Value> {
     match v {
-        serde_json::Value::String(s) => Some(Value::Str(s.clone())),
+        serde_json::Value::String(s) => Some(Value::Str(s.clone().into())),
         serde_json::Value::Number(n) => n.as_f64().map(Value::Number),
         serde_json::Value::Bool(b) => Some(Value::Bool(*b)),
         _ => None,

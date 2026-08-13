@@ -97,11 +97,28 @@ pub fn write_arrow_ipc(events: &[GenEvent], output_path: &Path) -> WfgenResult<(
     Ok(())
 }
 
-/// Group GenEvents by window, build typed Arrow RecordBatches keyed by stream name.
+/// Upper bound on the encoded size of a single Arrow frame sent to the runtime.
 ///
-/// Each window group produces one `(stream_name, RecordBatch)` pair. Column types
-/// are derived from the [`WindowSchema`] field definitions, matching the runtime's
-/// expected schema exactly.
+/// A frame is appended to a window as *one* batch, and window memory eviction
+/// operates on whole batches — a single oversized frame that exceeds the
+/// window's `max_window_bytes` is dropped entirely (wp-labs/wp-reactor#18/#20).
+/// Keeping frames at a small fraction of the window cap (default 256MB) avoids
+/// that, and keeps the ordered commit worker from ever holding one giant
+/// RecordBatch. Overcounting the per-event estimate only splits a frame a
+/// little earlier — the safe direction.
+const MAX_FRAME_BYTES: usize = 8 * 1024 * 1024; // 8 MiB
+
+/// Secondary per-frame row cap: protects builder memory even when the byte
+/// estimate is tiny (e.g. mostly-null or narrow rows).
+const MAX_FRAME_ROWS: usize = 100_000;
+
+/// Group GenEvents by window, build typed Arrow RecordBatches keyed by stream
+/// name, splitting each window's events into multiple frames once a frame
+/// exceeds [`MAX_FRAME_BYTES`] or [`MAX_FRAME_ROWS`].
+///
+/// Column types are derived from the [`WindowSchema`] field definitions,
+/// matching the runtime's expected schema exactly. Frame splitting preserves
+/// event order and never drops events.
 pub fn events_to_typed_batches(
     events: &[GenEvent],
     schemas: &[WindowSchema],
@@ -125,7 +142,6 @@ pub fn events_to_typed_batches(
                 format!("schema not found for window '{window_name}'"),
             )
         })?;
-
         let stream_name = schema.streams.first().ok_or_else(|| {
             error::error(
                 WfgenReason::Validation,
@@ -133,34 +149,93 @@ pub fn events_to_typed_batches(
             )
         })?;
 
-        let arrow_fields: Vec<Field> = schema
-            .fields
-            .iter()
-            .map(|f| Field::new(&f.name, field_type_to_arrow(&f.field_type), true))
-            .collect();
-        let arrow_schema = Arc::new(Schema::new(arrow_fields));
-
-        let mut builders: Vec<ColumnBuilder> = schema
-            .fields
-            .iter()
-            .map(|f| ColumnBuilder::new(&f.field_type, group_events.len()))
-            .collect();
+        let mut frame: Vec<&GenEvent> = Vec::new();
+        let mut frame_bytes = 0usize;
         for event in group_events {
-            let fallback_ts = event.timestamp.timestamp_nanos_opt();
-            for (field_def, builder) in schema.fields.iter().zip(builders.iter_mut()) {
-                builder.push(event.fields.get(field_def.name.as_str()), fallback_ts);
+            let est = event_frame_bytes(event, schema);
+            if !frame.is_empty()
+                && (frame_bytes + est > MAX_FRAME_BYTES || frame.len() + 1 > MAX_FRAME_ROWS)
+            {
+                build_frame(&mut batches, stream_name, schema, &frame)?;
+                frame.clear();
+                frame_bytes = 0;
             }
+            frame.push(event);
+            frame_bytes += est;
         }
-        let columns: Vec<ArrayRef> = builders.into_iter().map(ColumnBuilder::finish).collect();
-
-        let batch = RecordBatch::try_new(arrow_schema, columns).source_raw_err(
-            WfgenReason::Serialization,
-            "building typed Arrow record batch",
-        )?;
-        batches.push((stream_name.clone(), batch));
+        if !frame.is_empty() {
+            build_frame(&mut batches, stream_name, schema, &frame)?;
+        }
     }
 
     Ok(batches)
+}
+
+/// Build one typed Arrow RecordBatch from a frame of events and push it.
+fn build_frame(
+    batches: &mut Vec<(String, RecordBatch)>,
+    stream_name: &str,
+    schema: &WindowSchema,
+    frame_events: &[&GenEvent],
+) -> WfgenResult<()> {
+    let arrow_fields: Vec<Field> = schema
+        .fields
+        .iter()
+        .map(|f| Field::new(&f.name, field_type_to_arrow(&f.field_type), true))
+        .collect();
+    let arrow_schema = Arc::new(Schema::new(arrow_fields));
+
+    let mut builders: Vec<ColumnBuilder> = schema
+        .fields
+        .iter()
+        .map(|f| ColumnBuilder::new(&f.field_type, frame_events.len()))
+        .collect();
+    for event in frame_events {
+        let fallback_ts = event.timestamp.timestamp_nanos_opt();
+        for (field_def, builder) in schema.fields.iter().zip(builders.iter_mut()) {
+            builder.push(event.fields.get(field_def.name.as_str()), fallback_ts);
+        }
+    }
+    let columns: Vec<ArrayRef> = builders.into_iter().map(ColumnBuilder::finish).collect();
+
+    let batch = RecordBatch::try_new(arrow_schema, columns).source_raw_err(
+        WfgenReason::Serialization,
+        "building typed Arrow record batch",
+    )?;
+    batches.push((stream_name.to_string(), batch));
+    Ok(())
+}
+
+/// Conservative byte estimate of one event within a frame.
+///
+/// The runtime's window accounting charges *both* the Arrow content and the
+/// parsed-event `HashMap` footprint (`content_bytes + events_bytes`). Object and
+/// array fields decode into nested maps/vecs ~2-4× the JSON string, so they are
+/// weighted accordingly; every other field is `4B offset + payload`, which
+/// overcounts fixed-width primitives. Overestimating only splits frames a little
+/// earlier — the safe direction.
+fn event_frame_bytes(event: &GenEvent, schema: &WindowSchema) -> usize {
+    let mut bytes = 16usize; // per-event row overhead
+    for field in &schema.fields {
+        let Some(value) = event.fields.get(field.name.as_str()) else {
+            continue;
+        };
+        let blowup = match field.field_type {
+            FieldType::Object | FieldType::ArrayAny | FieldType::Array(_) => 3,
+            _ => 1,
+        };
+        bytes += 4 + json_value_len(value) * blowup;
+    }
+    bytes
+}
+
+/// Approximate serialized length of a JSON value (strings as-is, everything
+/// else JSON-encoded — matching what the UTF-8 columns actually store).
+fn json_value_len(v: &serde_json::Value) -> usize {
+    match v {
+        serde_json::Value::String(s) => s.len(),
+        other => other.to_string().len(),
+    }
 }
 
 /// Convert a wf-lang [`FieldType`] to the corresponding Arrow [`DataType`].
@@ -236,6 +311,109 @@ impl ColumnBuilder {
             Self::Float64(col) => Arc::new(Float64Array::from(col)),
             Self::Bool(col) => Arc::new(BooleanArray::from(col)),
             Self::TimeNanos(col) => Arc::new(TimestampNanosecondArray::from(col)),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::Utc;
+    use serde_json::json;
+    use std::time::Duration;
+    use wf_lang::{BaseType, FieldDef, FieldType, WindowSchema};
+
+    fn schema() -> WindowSchema {
+        WindowSchema {
+            name: "conn_events".into(),
+            streams: vec!["conn_events".into()],
+            time_field: Some("event_time".into()),
+            over: Duration::from_secs(120),
+            fields: vec![
+                FieldDef {
+                    name: "sip".into(),
+                    field_type: FieldType::Base(BaseType::Ip),
+                },
+                FieldDef {
+                    name: "event_time".into(),
+                    field_type: FieldType::Base(BaseType::Time),
+                },
+                FieldDef {
+                    name: "conn_info".into(),
+                    field_type: FieldType::Object,
+                },
+            ],
+        }
+    }
+
+    fn event(i: usize, conn_info: Option<&serde_json::Value>) -> GenEvent {
+        let mut fields = serde_json::Map::new();
+        fields.insert("sip".into(), json!("10.0.0.1"));
+        fields.insert("event_time".into(), json!("2026-08-13T00:00:00Z"));
+        if let Some(v) = conn_info {
+            fields.insert("conn_info".into(), v.clone());
+        }
+        GenEvent {
+            stream_name: "conn_events".into(),
+            window_name: "conn_events".into(),
+            timestamp: Utc::now(),
+            fields,
+        }
+    }
+
+    /// Object-heavy events must split into multiple byte-bounded frames instead
+    /// of one giant frame per window (which would exceed a window's
+    /// `max_window_bytes` and be dropped whole — wp-labs/wp-reactor#20).
+    #[test]
+    fn object_heavy_events_split_into_byte_bounded_frames() {
+        let big = json!({"data": "x".repeat(2000)}); // ~2KB object field per row
+        let events: Vec<GenEvent> = (0..10_000).map(|i| event(i, Some(&big))).collect();
+        let per_event = event_frame_bytes(&events[0], &schema());
+
+        let batches = events_to_typed_batches(&events, &[schema()]).unwrap();
+
+        assert!(
+            batches.len() >= 2,
+            "10k × ~2KB events must split into multiple frames ({}), not one giant frame",
+            batches.len()
+        );
+        let total_rows: usize = batches.iter().map(|(_, b)| b.num_rows()).sum();
+        assert_eq!(total_rows, events.len(), "no event may be dropped or duplicated");
+        for (_, b) in &batches {
+            assert!(
+                b.num_rows() * per_event <= MAX_FRAME_BYTES,
+                "frame of {} rows × {per_event}B must stay under the byte cap",
+                b.num_rows()
+            );
+            assert!(b.num_rows() <= MAX_FRAME_ROWS);
+        }
+    }
+
+    /// Narrow (mostly-null) events must still split at the row cap so a single
+    /// RecordBatch never pins the commit worker with one huge vector.
+    #[test]
+    fn narrow_events_split_at_row_cap() {
+        // ~52B/event → 100k rows ≈ 5.2MB < MAX_FRAME_BYTES, so the row cap is
+        // the binding constraint.
+        let events: Vec<GenEvent> = (0..(MAX_FRAME_ROWS + MAX_FRAME_ROWS / 2))
+            .map(|i| event(i, None))
+            .collect();
+
+        let batches = events_to_typed_batches(&events, &[schema()]).unwrap();
+
+        assert!(
+            batches.len() >= 2,
+            "150k narrow events must split at the row cap ({} frames)",
+            batches.len()
+        );
+        let total_rows: usize = batches.iter().map(|(_, b)| b.num_rows()).sum();
+        assert_eq!(total_rows, events.len());
+        for (_, b) in &batches {
+            assert!(
+                b.num_rows() <= MAX_FRAME_ROWS,
+                "frame must not exceed the row cap ({} rows)",
+                b.num_rows()
+            );
         }
     }
 }

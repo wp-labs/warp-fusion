@@ -15,6 +15,14 @@ use cli_config::{ConfigLoadArgs, run_engine_command};
 use error::CliResult;
 use wf_config::FusionMode;
 
+// Thread-local-free, cross-thread scalable allocator: the engine runs many
+// concurrent workers (parse pools, sharded rule tasks, sink writers) whose
+// hot paths allocate small objects at high frequency. The system allocator's
+// per-zone locks serialize those threads (verified by sample: __ulock_wait2
+// under _malloc_zone_realloc on the on-each emit path with 6 rule shards).
+#[global_allocator]
+static GLOBAL_ALLOCATOR: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
 // -- Top-level CLI -----------------------------------------------------------
 
 #[derive(Parser)]

@@ -29,6 +29,11 @@ uuid = { version = "1", features = ["v4"] }
 rustls = { version = "0.23", features = ["ring"] }
 tokio-rustls = "0.26"
 tokio-util = { version = "0.7", default-features = false, features = ["rt"] }
+# High-concurrency small-object allocator. The system allocator (macOS
+# libmalloc) serializes cross-thread alloc/free on per-zone unfair locks —
+# with sharded rule workers doing ~M allocs/s each, that lock dominated the
+# on-each hot path (sample showed __ulock_wait2 under _malloc_zone_realloc).
+mimalloc = "0.1"
 
 [dev-dependencies]
 tempfile = "3"

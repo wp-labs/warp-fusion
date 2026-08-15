@@ -2273,6 +2273,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b6d2cec3eae94f9f509c767b45932f1ada8350c4bdb85af2fcab4a3c14807981"
 
 [[package]]
+name = "libmimalloc-sys"
+version = "0.1.49"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6a45a52f43e1c16f667ccfe4dd8c85b7f7c204fd5e3bf46c5b0db9a5c3c0b8e9"
+dependencies = [
+ "cc",
+]
+
+[[package]]
 name = "libredox"
 version = "0.1.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2439,6 +2448,15 @@ name = "memchr"
 version = "2.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf8baf1c55e62ffcace7a9f06f4bd9cd3f0c4beb022d3b367256b91b87513d98"
+
+[[package]]
+name = "mimalloc"
+version = "0.1.52"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2d4139bb28d14ad1facf21d5eb8825051b326e172d216b39f6d31df53cc97862"
+dependencies = [
+ "libmimalloc-sys",
+]
 
 [[package]]
 name = "mime"
@@ -5519,6 +5537,7 @@ dependencies = [
  "orion-error",
  "orion-variate",
  "serde_json",
+ "smol_str",
  "thiserror 2.0.20",
  "tokio",
  "tokio-util",
@@ -5612,6 +5631,7 @@ dependencies = [
  "http-body-util",
  "hyper",
  "hyper-util",
+ "mimalloc",
  "moju-derive",
  "orion-error",
  "reqwest 0.12.28",
@@ -6076,9 +6096,7 @@ dependencies = [
 
 [[package]]
 name = "wp-core-connectors"
-version = "0.8.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a5765dbc0909f4a31c3dce682cd8c22ab68ffd818000949e72d773fab2d22dd2"
+version = "0.8.3"
 dependencies = [
  "anyhow",
  "arrow",

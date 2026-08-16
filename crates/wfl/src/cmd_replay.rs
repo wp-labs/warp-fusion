@@ -3,13 +3,14 @@ use std::io::{BufRead, BufReader, IsTerminal};
 use std::path::PathBuf;
 
 use orion_error::conversion::SourceErr;
+use smol_str::SmolStr;
 
 use crate::error::{self, WflReason, WflResult, WflStructExt};
 use wf_config::ConfigVarContext;
 use wf_data::time::parse_json_timestamp_nanos;
 use wf_engine::alert::OutputRecord;
 use wf_engine::match_engine::{
-    CepStateMachine, CloseReason, Event, RuleExecutor, StepResult, Value, WindowLookup,
+    CepStateMachine, CloseReason, EngineHashMap, Event, RuleExecutor, StepResult, Value, WindowLookup,
 };
 use wf_lang::WindowSchema;
 use wf_lang::plan::RulePlan;
@@ -573,7 +574,7 @@ fn handle_output_record(
     match_count: &mut u64,
 ) {
     if is_internal_window_name(&record.yield_target) {
-        queue.push_back((record.yield_target.clone(), output_record_to_event(&record)));
+        queue.push_back((record.yield_target.to_string(), output_record_to_event(&record)));
     } else {
         alerts.push(record);
         *match_count += 1;
@@ -581,13 +582,13 @@ fn handle_output_record(
 }
 
 fn output_record_to_event(record: &OutputRecord) -> Event {
-    let mut fields = HashMap::new();
+    let mut fields = EngineHashMap::default();
     fields.insert(
-        PIPE_EVENT_TIME_FIELD.to_string(),
+        SmolStr::from(PIPE_EVENT_TIME_FIELD),
         Value::Number(record.event_time_nanos as f64),
     );
     for (name, value) in &record.yield_fields {
-        fields.insert(name.clone(), value.clone());
+        fields.insert(SmolStr::from(&**name), value.clone());
     }
     Event { fields }
 }
@@ -601,13 +602,13 @@ fn json_to_event_with_time_fields(
     json: &serde_json::Value,
     time_fields: &HashSet<String>,
 ) -> Event {
-    let mut fields = HashMap::new();
+    let mut fields = EngineHashMap::default();
     if let serde_json::Value::Object(map) = json {
         for (key, val) in map {
             if time_fields.contains(key)
                 && let Some(nanos) = parse_json_timestamp_nanos(val)
             {
-                fields.insert(key.clone(), Value::Number(nanos as f64));
+                fields.insert(SmolStr::from(key.as_str()), Value::Number(nanos as f64));
                 continue;
             }
 
@@ -619,11 +620,11 @@ fn json_to_event_with_time_fields(
                         continue;
                     }
                 }
-                serde_json::Value::String(s) => Value::Str(s.clone()),
+                serde_json::Value::String(s) => Value::Str(SmolStr::from(s.as_str())),
                 serde_json::Value::Bool(b) => Value::Bool(*b),
                 _ => continue, // skip arrays, objects, nulls
             };
-            fields.insert(key.clone(), v);
+            fields.insert(SmolStr::from(key.as_str()), v);
         }
     }
     Event { fields }

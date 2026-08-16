@@ -200,8 +200,13 @@ FAIL_THRESHOLD = "3"
     let raw = RawFusionConfigTree::from_toml_str(&toml_str, &base_dir).expect("parse raw toml");
 
     // ---- Convert GenEvents → typed Arrow batches → framed Arrow file ----
-    let batches = wfgen::output::arrow_ipc::events_to_typed_batches(&events, &loaded.schemas)
-        .expect("events_to_typed_batches failed");
+    let batches = wfgen::output::arrow_ipc::events_to_typed_batches(
+        &events,
+        &loaded.schemas,
+        wfgen::output::arrow_ipc::DEFAULT_MAX_FRAME_BYTES,
+        wfgen::output::arrow_ipc::DEFAULT_MAX_FRAME_ROWS,
+    )
+    .expect("events_to_typed_batches failed");
     let mut framed = Vec::new();
     for (stream_name, batch) in &batches {
         for offset in (0..batch.num_rows()).step_by(ARROW_FRAME_CHUNK_ROWS) {

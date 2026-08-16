@@ -54,9 +54,9 @@ pub fn run(
         .alerts
         .into_iter()
         .map(|a| ActualAlert {
-            rule_name: a.rule_name,
+            rule_name: a.rule_name.to_string(),
             score: a.score,
-            entity_type: a.entity_type,
+            entity_type: a.entity_type.to_string(),
             entity_id: a.entity_id,
             origin: a.origin.as_str().to_string(),
             fired_at: a.fired_at,

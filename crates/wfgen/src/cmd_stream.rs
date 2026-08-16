@@ -1,14 +1,25 @@
 //! Continuous data generation — daemon mode.
 //!
 //! Loads multiple `.wfg` scenarios, cycles through them indefinitely,
-//! and sends events via persistent TCP connection.
+//! and sends events via a persistent TCP connection.
+//!
+//! The scenario is generated in fixed *event-time slices*: each batch spans a
+//! short slice of event time (default 1s) and the slice's start advances
+//! monotonically between batches, so windows progress correctly on a long run
+//! (the previous implementation regenerated the whole scenario over the same
+//! fixed 60s window every time). The send loop paces each slice to span the
+//! same wall-clock duration as its event-time span, i.e. data flows at the
+//! scenario's declared rate (or an explicit `--rate` override). Batch size is
+//! `rate × slice` and is capped so wfgen's memory stays bounded.
 //!
 //! Usage:
-//!   wpgen stream --scenario-dir scenarios/ --ws schemas/*.wfs --addr 127.0.0.1:9800
+//!   wpgen stream --scenario-dir scenarios/ --ws schemas/*.wfs --wfl rules/*.wfl \
+//!     --addr 127.0.0.1:9800 --rate 2000000 --slice-ms 1000
 
 use std::path::{Path, PathBuf};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
+use chrono::{DateTime, SecondsFormat, Utc};
 use orion_error::conversion::SourceErr;
 
 use crate::datagen::generate;
@@ -23,6 +34,14 @@ use crate::{
 
 use wf_lang::WindowSchema;
 
+/// Events per send chunk. Larger chunks amortize the Arrow batch-encode
+/// overhead (events_to_typed_batches builds builders per call); 40k ≈ the
+/// per-frame row cap, so a chunk typically becomes 1-2 frames.
+const CHUNK_SIZE: usize = 40_000;
+/// Upper bound on one generated batch, so wfgen memory stays bounded even at
+/// very high rates (batch = rate × slice, capped here).
+const MAX_BATCH: u64 = 2_000_000;
+
 /// A loaded scenario ready for continuous generation.
 struct LoadedScenario {
     name: String,
@@ -36,7 +55,8 @@ pub async fn run(
     wfl: Vec<PathBuf>,
     addr: String,
     interval_secs: u64,
-    rate_sleep_ms: u64,
+    rate_eps_override: u64,
+    slice_ms: u64,
 ) -> WfgenResult<()> {
     // 1. Load schemas
     let mut schemas: Vec<WindowSchema> = Vec::new();
@@ -66,8 +86,8 @@ pub async fn run(
         scenario_dir.display()
     );
     eprintln!(
-        "Rate: sleep {}ms between batches | Scenario interval: {}s",
-        rate_sleep_ms, interval_secs
+        "Rate: override={} | slice={}ms | scenario interval={}s",
+        rate_eps_override, slice_ms, interval_secs
     );
     eprintln!("Target: {}", addr);
 
@@ -76,8 +96,7 @@ pub async fn run(
     eprintln!("Connected to {}", addr);
 
     // 5. Cycle through scenarios forever
-    let sleep_dur = tokio::time::Duration::from_millis(rate_sleep_ms);
-    let scenario_dur = std::time::Duration::from_secs(interval_secs);
+    let scenario_dur = Duration::from_secs(interval_secs);
     let mut idx = 0usize;
     let mut total_events: u64 = 0;
     let mut total_frames: u64 = 0;
@@ -85,37 +104,109 @@ pub async fn run(
 
     loop {
         let scenario = &scenarios[idx];
+
+        // Effective target rate: explicit --rate wins, else scenario declared rate.
+        let base_rate: f64 = scenario
+            .wfg
+            .scenario
+            .streams
+            .iter()
+            .map(|s| s.rate.events_per_second())
+            .sum();
+        if base_rate <= 0.0 && rate_eps_override == 0 {
+            return error::fail(
+                WfgenReason::Validation,
+                format!(
+                    "scenario '{}' declares no stream rate and no --rate override given",
+                    scenario.name
+                ),
+            );
+        }
+        let rate: f64 = if rate_eps_override > 0 {
+            rate_eps_override as f64
+        } else {
+            base_rate
+        };
+
+        let base_start: DateTime<Utc> = scenario
+            .wfg
+            .scenario
+            .time_clause
+            .start
+            .parse()
+            .map_err(|e| {
+                error::error(
+                    WfgenReason::Generation,
+                    format!(
+                        "invalid scenario start '{}': {}",
+                        scenario.wfg.scenario.time_clause.start, e
+                    ),
+                )
+            })?;
+        let base_seed = scenario.wfg.scenario.seed;
+
         let phase_start = Instant::now();
-        let mut phase_events = 0u64;
-        let mut phase_frames = 0u64;
+        let mut phase_events: u64 = 0;
+        let mut phase_frames: u64 = 0;
+        let mut cursor_nanos: i128 = 0; // accumulated event-time offset
 
         eprintln!(
-            "[{}] phase=start scenario={} (idx {}/{})",
+            "[{}] phase=start scenario={} (idx {}/{}) rate={:.0}/s",
             chrono::Local::now().format("%H:%M:%S"),
             scenario.name,
             idx,
-            scenarios.len()
+            scenarios.len(),
+            rate
         );
 
         while phase_start.elapsed() < scenario_dur {
-            let result = generate(&scenario.wfg, &schemas, &scenario.rule_plans)?;
-            let event_count = result.events.len();
+            // Batch = rate × slice, bounded to keep wfgen memory in check.
+            let batch_total = ((rate * slice_ms as f64 / 1000.0).round() as u64).clamp(1, MAX_BATCH);
+            // Actual event-time span for this batch (seconds).
+            let slice_secs = batch_total as f64 / rate;
+            let slice_nanos = (slice_secs * 1e9).max(1.0) as u64;
 
-            // Split into smaller chunks so wfusion can process them incrementally
-            const CHUNK_SIZE: usize = 1000;
+            // Build a modified scenario: advancing start, slice duration, bounded
+            // total, and a per-slice seed so field values differ across batches.
+            let mut wfg = scenario.wfg.clone();
+            wfg.scenario.seed = base_seed.wrapping_add(cursor_nanos as u64);
+            wfg.scenario.time_clause.start = (base_start
+                + chrono::Duration::nanoseconds(cursor_nanos as i64))
+                .to_rfc3339_opts(SecondsFormat::Nanos, true);
+            wfg.scenario.time_clause.duration = Duration::from_nanos(slice_nanos);
+            wfg.scenario.total = batch_total;
+
+            // Start the slice timer before generate() so generation time is counted
+            // inside the slice budget — the send pacing below then makes each slice
+            // span ~slice_secs of wall time end to end (generate + send).
+            let batch_start = Instant::now();
+            let result = generate(&wfg, &schemas, &scenario.rule_plans)?;
+            let event_count = result.events.len() as u64;
+
             let mut gen_frames = 0u64;
-            for chunk in result.events.chunks(CHUNK_SIZE) {
-                let sent =
-                    crate::tcp_send::send_events_with_stream(chunk, &schemas, &mut writer).await?;
+            let num_chunks = result.events.len().div_ceil(CHUNK_SIZE).max(1);
+            for (i, chunk) in result.events.chunks(CHUNK_SIZE).enumerate() {
+                let sent = crate::tcp_send::send_events_with_stream(chunk, &schemas, &mut writer)
+                    .await?;
                 gen_frames += sent as u64;
-                if sleep_dur > tokio::time::Duration::ZERO {
-                    tokio::time::sleep(sleep_dur).await;
+
+                // Pace each chunk so the whole slice spans ~slice_secs of wall
+                // time (i.e. event-time rate ≈ real-time). Under daemon
+                // backpressure the send itself takes longer and this sleep is
+                // skipped automatically — the stream then flows at the daemon's
+                // consumption rate instead of flooding it.
+                let ideal = batch_start
+                    + Duration::from_secs_f64(slice_secs * (i as f64 + 1.0) / num_chunks as f64);
+                let now = Instant::now();
+                if now < ideal {
+                    tokio::time::sleep(ideal - now).await;
                 }
             }
 
-            total_events += event_count as u64;
+            cursor_nanos += slice_nanos as i128;
+            total_events += event_count;
             total_frames += gen_frames;
-            phase_events += event_count as u64;
+            phase_events += event_count;
             phase_frames += gen_frames;
         }
 

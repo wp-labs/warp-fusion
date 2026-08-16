@@ -105,9 +105,9 @@ pub fn run_oracle(
                     && let Ok(alert_record) = engine.executor.execute_match(&ctx)
                 {
                     alerts.push(OracleAlert {
-                        rule_name: alert_record.rule_name,
+                        rule_name: alert_record.rule_name.to_string(),
                         score: alert_record.score,
-                        entity_type: alert_record.entity_type,
+                        entity_type: alert_record.entity_type.to_string(),
                         entity_id: alert_record.entity_id,
                         origin: alert_record.origin.as_str().to_string(),
                         emit_time: alert_record.fired_at.clone(),
@@ -159,9 +159,9 @@ fn collect_close_alerts(
     for close_out in close_outputs {
         if let Ok(Some(alert_record)) = executor.execute_close(&close_out) {
             alerts.push(OracleAlert {
-                rule_name: alert_record.rule_name,
+                rule_name: alert_record.rule_name.to_string(),
                 score: alert_record.score,
-                entity_type: alert_record.entity_type,
+                entity_type: alert_record.entity_type.to_string(),
                 entity_id: alert_record.entity_id,
                 origin: alert_record.origin.as_str().to_string(),
                 emit_time: alert_record.fired_at.clone(),

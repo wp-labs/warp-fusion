@@ -32,3 +32,6 @@ examples/wp-pipeline/kafka/wparse/data/
 examples/wp-pipeline/streaming/data/
 examples/wp-pipeline/streaming_ipv6/data/
 examples/wp-pipeline/data/
+
+# MoJu drafts are temporary; keep the reviewed model committed
+moju/draft/

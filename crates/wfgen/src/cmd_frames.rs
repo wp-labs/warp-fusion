@@ -44,6 +44,8 @@ pub async fn dump_frames(
     ws: Vec<PathBuf>,
     output: PathBuf,
     chunk: Option<usize>,
+    max_frame_bytes: usize,
+    max_frame_rows: usize,
 ) -> WfgenResult<()> {
     let wfg_content = std::fs::read_to_string(&scenario).source_err(
         WfgenReason::Io,
@@ -91,7 +93,15 @@ pub async fn dump_frames(
 
         if let Some(n) = chunk {
             if events.len() >= n {
-                total_frames += write_frames(&events, &schemas, &sink, &mut writer, &mut total_bytes)?;
+                total_frames += write_frames(
+                    &events,
+                    &schemas,
+                    &sink,
+                    &mut writer,
+                    &mut total_bytes,
+                    max_frame_bytes,
+                    max_frame_rows,
+                )?;
                 total_events += events.len();
                 events.clear();
             }
@@ -99,7 +109,15 @@ pub async fn dump_frames(
     }
 
     if !events.is_empty() {
-        total_frames += write_frames(&events, &schemas, &sink, &mut writer, &mut total_bytes)?;
+        total_frames += write_frames(
+            &events,
+            &schemas,
+            &sink,
+            &mut writer,
+            &mut total_bytes,
+            max_frame_bytes,
+            max_frame_rows,
+        )?;
         total_events += events.len();
     }
 
@@ -161,8 +179,10 @@ fn write_frames(
     sink: &wp_core_connectors::sinks::tcp::TcpArrowSink,
     writer: &mut impl Write,
     total_bytes: &mut usize,
+    max_frame_bytes: usize,
+    max_frame_rows: usize,
 ) -> WfgenResult<usize> {
-    let batches = events_to_typed_batches(events, schemas)?;
+    let batches = events_to_typed_batches(events, schemas, max_frame_bytes, max_frame_rows)?;
     let mut frames = 0usize;
     for (stream_name, batch) in &batches {
         let payload = sink

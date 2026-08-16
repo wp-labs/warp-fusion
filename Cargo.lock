@@ -5612,6 +5612,7 @@ dependencies = [
  "clap",
  "orion-error",
  "serde_json",
+ "smol_str",
  "tree-sitter",
  "tree-sitter-wfl",
  "wf-config",

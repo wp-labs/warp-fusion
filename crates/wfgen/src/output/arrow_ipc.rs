@@ -97,7 +97,8 @@ pub fn write_arrow_ipc(events: &[GenEvent], output_path: &Path) -> WfgenResult<(
     Ok(())
 }
 
-/// Upper bound on the encoded size of a single Arrow frame sent to the runtime.
+/// Default upper bound on the encoded size of a single Arrow frame sent to the
+/// runtime.
 ///
 /// A frame is appended to a window as *one* batch, and window memory eviction
 /// operates on whole batches — a single oversized frame that exceeds the
@@ -106,15 +107,15 @@ pub fn write_arrow_ipc(events: &[GenEvent], output_path: &Path) -> WfgenResult<(
 /// that, and keeps the ordered commit worker from ever holding one giant
 /// RecordBatch. Overcounting the per-event estimate only splits a frame a
 /// little earlier — the safe direction.
-const MAX_FRAME_BYTES: usize = 8 * 1024 * 1024; // 8 MiB
+pub const DEFAULT_MAX_FRAME_BYTES: usize = 8 * 1024 * 1024; // 8 MiB
 
-/// Secondary per-frame row cap: protects builder memory even when the byte
-/// estimate is tiny (e.g. mostly-null or narrow rows).
-const MAX_FRAME_ROWS: usize = 100_000;
+/// Default secondary per-frame row cap: protects builder memory even when the
+/// byte estimate is tiny (e.g. mostly-null or narrow rows).
+pub const DEFAULT_MAX_FRAME_ROWS: usize = 100_000;
 
 /// Group GenEvents by window, build typed Arrow RecordBatches keyed by stream
 /// name, splitting each window's events into multiple frames once a frame
-/// exceeds [`MAX_FRAME_BYTES`] or [`MAX_FRAME_ROWS`].
+/// exceeds `max_frame_bytes` or `max_frame_rows`.
 ///
 /// Column types are derived from the [`WindowSchema`] field definitions,
 /// matching the runtime's expected schema exactly. Frame splitting preserves
@@ -122,6 +123,8 @@ const MAX_FRAME_ROWS: usize = 100_000;
 pub fn events_to_typed_batches(
     events: &[GenEvent],
     schemas: &[WindowSchema],
+    max_frame_bytes: usize,
+    max_frame_rows: usize,
 ) -> WfgenResult<Vec<(String, RecordBatch)>> {
     let schema_by_window: HashMap<&str, &WindowSchema> =
         schemas.iter().map(|s| (s.name.as_str(), s)).collect();
@@ -154,7 +157,7 @@ pub fn events_to_typed_batches(
         for event in group_events {
             let est = event_frame_bytes(event, schema);
             if !frame.is_empty()
-                && (frame_bytes + est > MAX_FRAME_BYTES || frame.len() + 1 > MAX_FRAME_ROWS)
+                && (frame_bytes + est > max_frame_bytes || frame.len() + 1 > max_frame_rows)
             {
                 build_frame(&mut batches, stream_name, schema, &frame)?;
                 frame.clear();
@@ -370,7 +373,9 @@ mod tests {
         let events: Vec<GenEvent> = (0..10_000).map(|i| event(i, Some(&big))).collect();
         let per_event = event_frame_bytes(&events[0], &schema());
 
-        let batches = events_to_typed_batches(&events, &[schema()]).unwrap();
+        let batches =
+            events_to_typed_batches(&events, &[schema()], DEFAULT_MAX_FRAME_BYTES, DEFAULT_MAX_FRAME_ROWS)
+                .unwrap();
 
         assert!(
             batches.len() >= 2,
@@ -381,11 +386,11 @@ mod tests {
         assert_eq!(total_rows, events.len(), "no event may be dropped or duplicated");
         for (_, b) in &batches {
             assert!(
-                b.num_rows() * per_event <= MAX_FRAME_BYTES,
+                b.num_rows() * per_event <= DEFAULT_MAX_FRAME_BYTES,
                 "frame of {} rows × {per_event}B must stay under the byte cap",
                 b.num_rows()
             );
-            assert!(b.num_rows() <= MAX_FRAME_ROWS);
+            assert!(b.num_rows() <= DEFAULT_MAX_FRAME_ROWS);
         }
     }
 
@@ -393,13 +398,19 @@ mod tests {
     /// RecordBatch never pins the commit worker with one huge vector.
     #[test]
     fn narrow_events_split_at_row_cap() {
-        // ~52B/event → 100k rows ≈ 5.2MB < MAX_FRAME_BYTES, so the row cap is
-        // the binding constraint.
-        let events: Vec<GenEvent> = (0..(MAX_FRAME_ROWS + MAX_FRAME_ROWS / 2))
+        // ~52B/event → 100k rows ≈ 5.2MB < DEFAULT_MAX_FRAME_BYTES, so the row
+        // cap is the binding constraint.
+        let events: Vec<GenEvent> = (0..(DEFAULT_MAX_FRAME_ROWS + DEFAULT_MAX_FRAME_ROWS / 2))
             .map(|i| event(i, None))
             .collect();
 
-        let batches = events_to_typed_batches(&events, &[schema()]).unwrap();
+        let batches = events_to_typed_batches(
+            &events,
+            &[schema()],
+            DEFAULT_MAX_FRAME_BYTES,
+            DEFAULT_MAX_FRAME_ROWS,
+        )
+        .unwrap();
 
         assert!(
             batches.len() >= 2,
@@ -410,7 +421,7 @@ mod tests {
         assert_eq!(total_rows, events.len());
         for (_, b) in &batches {
             assert!(
-                b.num_rows() <= MAX_FRAME_ROWS,
+                b.num_rows() <= DEFAULT_MAX_FRAME_ROWS,
                 "frame must not exceed the row cap ({} rows)",
                 b.num_rows()
             );

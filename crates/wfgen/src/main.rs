@@ -165,6 +165,15 @@ enum Commands {
         /// event counts.
         #[arg(long)]
         chunk: Option<usize>,
+
+        /// Frame byte cap (default 8388608 = 8MiB). A frame is one window commit;
+        /// smaller frames → lower per-batch memory, more commits.
+        #[arg(long, default_value_t = wfgen::output::arrow_ipc::DEFAULT_MAX_FRAME_BYTES)]
+        max_frame_bytes: usize,
+
+        /// Frame row cap (default 100000).
+        #[arg(long, default_value_t = wfgen::output::arrow_ipc::DEFAULT_MAX_FRAME_ROWS)]
+        max_frame_rows: usize,
     },
     /// Replay pre-encoded Arrow frame bytes over one TCP connection (no JSON
     /// parsing / Arrow encoding on the hot path)
@@ -225,9 +234,13 @@ enum Commands {
         #[arg(long, default_value = "60")]
         interval: u64,
 
-        /// Sleep (ms) between generate batches — controls event rate
-        #[arg(long, default_value = "100")]
-        rate_sleep: u64,
+        /// Target event rate (events/sec). 0 = use the scenario's declared `gen N/s`
+        #[arg(long, default_value = "0")]
+        rate: u64,
+
+        /// Event-time slice per batch (ms). Batch size = rate × slice, capped for bounded memory
+        #[arg(long, default_value = "1000")]
+        slice_ms: u64,
     },
 }
 
@@ -291,8 +304,20 @@ async fn run_cli() -> WfgenResult<()> {
             ws,
             output,
             chunk,
+            max_frame_bytes,
+            max_frame_rows,
         } => {
-            wfgen::cmd_frames::dump_frames(scenario, input, addr, ws, output, chunk).await
+            wfgen::cmd_frames::dump_frames(
+                scenario,
+                input,
+                addr,
+                ws,
+                output,
+                chunk,
+                max_frame_bytes,
+                max_frame_rows,
+            )
+            .await
         }
         Commands::SendArrow { input, addr } => {
             wfgen::cmd_frames::send_arrow(input, addr).await
@@ -311,8 +336,9 @@ async fn run_cli() -> WfgenResult<()> {
             wfl,
             addr,
             interval,
-            rate_sleep,
-        } => wfgen::cmd_stream::run(scenario_dir, ws, wfl, addr, interval, rate_sleep).await,
+            rate,
+            slice_ms,
+        } => wfgen::cmd_stream::run(scenario_dir, ws, wfl, addr, interval, rate, slice_ms).await,
     }
 }
 

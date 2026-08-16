@@ -1,0 +1,85 @@
+// Verify orchestra flows
+
+verify RunCliOk for flow Run {
+  given {
+    RunCli.config = "wfusion.toml"
+  }
+
+  when RunCli
+
+  expect {
+    Reactor.base_dir == "wfusion.toml"
+  }
+}
+
+verify ConfigRenderOk for flow ConfigRender {
+  given {
+    RenderConfigCmd.config = "cfg"
+  }
+
+  when RenderConfigCmd
+
+  expect {
+    ResolvedConfigLoad.config_path == "cfg"
+  }
+}
+
+verify ConfigDiffOk for flow ConfigDiff {
+  given {
+    DiffCmd.base_config = "base"
+  }
+
+  when DiffCmd
+
+  expect {
+    ResolvedConfigLoad.config_path == "base"
+  }
+}
+
+verify ReactorStartOk for flow ReactorStart {
+  given {
+    RunCommand.config_path = "cfg"
+  }
+
+  when RunCommand
+
+  expect {
+    Reactor.base_dir == "cfg"
+  }
+}
+
+verify ReactorShutdownOk for flow ReactorShutdown {
+  given {
+    ShutdownSignal.reason = "sigterm"
+  }
+
+  when ShutdownSignal
+
+  expect {
+    TaskGroup.name == "sigterm"
+  }
+}
+
+verify DataIngestOk for flow DataIngest {
+  given {
+    IncomingData.stream_name = "auth_events"
+  }
+
+  when IncomingData
+
+  expect {
+    ReplayRoute.stream_name == "auth_events"
+  }
+}
+
+verify HotReloadOk for flow HotReload {
+  given {
+    ConfigChange.new_config = "cfg"
+  }
+
+  when ConfigChange
+
+  expect {
+    PreparedRuleReload.next_raw == "cfg"
+  }
+}

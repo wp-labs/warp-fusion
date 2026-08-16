@@ -1,0 +1,51 @@
+// ---------------------------------------------------------------------------
+// generator domain — flows
+// ---------------------------------------------------------------------------
+
+// GenerateScenario：加载 WFG → 生成事件流（含 fault / injection）
+flow GenerateScenario {
+  trigger GenCommand
+  creates GenResult
+
+  step LoadScenario {
+    create LoadedScenario {
+      name = GenCommand.scenario
+    }
+  }
+
+  step Generate {
+    create GenEvent {
+      stream_name = GenCommand.scenario
+    }
+  }
+
+  step Collect {
+    create GenResult {
+      events = GenCommand.scenario
+    }
+  }
+}
+
+// VerifyRun：oracle 期望 vs 实际告警 → 汇总报告
+flow VerifyRun {
+  trigger VerifyCommand
+  creates VerifyReport
+
+  step RunOracle {
+    create OracleResult {
+      alerts = VerifyCommand.wfg
+    }
+  }
+
+  step Compare {
+    create MatchResult {
+      matched = VerifyCommand.wfg
+    }
+  }
+
+  step Report {
+    create VerifyReport {
+      status = VerifyCommand.wfg
+    }
+  }
+}

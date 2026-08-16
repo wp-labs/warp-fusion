@@ -1,0 +1,689 @@
+// ---------------------------------------------------------------------------
+// lang domain — WFL rule language, schema, compiled plans, checker
+// Crate: wf-lang
+// ---------------------------------------------------------------------------
+
+// -- Trigger command --------------------------------------------------------
+
+command CompileRequest {
+  source: String
+  rule_name: String?
+}
+
+// -- Schema (LangSchema) ----------------------------------------------------
+
+state BaseType {
+  Chars
+  Digit
+  Float
+  Bool
+  Time
+  Ip
+  Hex
+}
+
+state FieldType {
+  Base
+  ArrayAny
+  Array
+  Object
+}
+
+struct FieldDef {
+  name: String
+  field_type: FieldType
+}
+
+struct WindowSchema {
+  name: String
+  streams: List<String>
+  time_field: String?
+  over: Int
+  fields: List<FieldDef>
+}
+
+struct StaticWindowSchema {
+  name: String
+  fields: List<FieldDef>
+}
+
+struct ParsedWfs {
+  windows: List<WindowSchema>
+  static_windows: List<StaticWindowSchema>
+}
+
+// -- Rule AST (LangRule) ----------------------------------------------------
+
+struct WflFile {
+  uses: List<UseDecl>
+  patterns: List<PatternDecl>
+  yield_presets: List<YieldPresetDecl>
+  rules: List<RuleDecl>
+  tests: List<TestBlock>
+}
+
+struct RuleDecl {
+  meta {
+    label en "Rule Declaration"
+  }
+  name: String
+  meta_block: MetaBlock?
+  events: EventsBlock
+  match_clause: MatchClause
+  each_clause: EachClause?
+  score: ScoreExpr
+  joins: List<JoinClause>
+  pipeline_stages: List<PipelineStage>
+  entity: EntityClause
+  yield_clause: YieldClause
+  pattern_origin: PatternOrigin?
+  conv: ConvClause?
+  limits: LimitsBlock?
+}
+
+struct PatternDecl {
+  name: String
+  params: List<String>
+  body: String
+}
+
+struct PatternOrigin {
+  pattern_name: String
+  args: List<String>
+}
+
+struct UseDecl {
+  path: String
+}
+
+struct PipelineStage {
+  match_clause: MatchClause
+  each_clause: EachClause?
+  joins: List<JoinClause>
+}
+
+struct MetaBlock {
+  entries: List<MetaEntry>
+}
+
+struct MetaEntry {
+  key: String
+  value: String
+}
+
+struct EventsBlock {
+  decls: List<EventDecl>
+}
+
+struct EventDecl {
+  alias: String
+  window: String
+  filter: Expr?
+}
+
+struct YieldPresetDecl {
+  name: String
+  params: List<YieldPresetParam>
+  args: List<NamedArg>
+}
+
+struct YieldPresetParam {
+  name: String
+  default: Expr?
+}
+
+// -- Match AST (LangMatch) --------------------------------------------------
+
+state WindowMode {
+  Sliding
+  Fixed
+  Session
+}
+
+state CloseMode {
+  Or
+  And
+}
+
+state MatchMode {
+  Seq
+  Any
+}
+
+state SeqSkip {
+  PastLast
+  ToNext
+}
+
+struct CloseBlock {
+  mode: CloseMode
+  steps: List<MatchStep>
+}
+
+struct MatchClause {
+  keys: List<FieldRef>
+  key_mapping: List<KeyMapItem>?
+  duration: Int
+  window_mode: WindowMode
+  on_event: List<MatchStep>
+  on_close: CloseBlock?
+  match_mode: MatchMode
+  seq: SeqClause?
+  accu: Bool
+}
+
+struct EachClause {
+  alias: String
+  filter: Expr?
+}
+
+struct KeyMapItem {
+  logical_name: String
+  source_field: FieldRef
+}
+
+struct MatchStep {
+  branches: List<StepBranch>
+}
+
+struct StepBranch {
+  label: String?
+  source: String
+  field: FieldSelector?
+  guard: Expr?
+  pipe: PipeChain
+}
+
+struct PipeChain {
+  transforms: List<Transform>
+  measure: Measure
+  cmp: CmpOp
+  threshold: Expr
+}
+
+state Transform {
+  Distinct
+}
+
+state Measure {
+  Count
+  Sum
+  Avg
+  Min
+  Max
+}
+
+struct SeqClause {
+  consec: Bool
+  skip: SeqSkip
+  steps: List<SeqStep>
+}
+
+struct SeqStep {
+  neg: Bool
+  within: Int?
+  branch: StepBranch
+}
+
+// -- Expression AST (LangExpr) ----------------------------------------------
+
+state FieldRef {
+  Simple
+  Qualified
+  Bracketed
+  Path
+}
+
+state FieldSelector {
+  Dot
+  Bracket
+}
+
+state PathSegment {
+  Field
+  Index
+}
+
+state CmpOp {
+  Eq
+  Ne
+  Lt
+  Gt
+  Le
+  Ge
+}
+
+state BinOp {
+  And
+  Or
+  Eq
+  Ne
+  Lt
+  Gt
+  Le
+  Ge
+  Add
+  Sub
+  Mul
+  Div
+  Mod
+}
+
+state SystemVar {
+  Score
+  EventFirstTime
+  EventLastTime
+  EvidenceStartTime
+  EvidenceEndTime
+  WindowStartTime
+  WindowEndTime
+  EmitTime
+}
+
+struct ObjectItem {
+  targets: List<String>
+  type_hint: String?
+  value: Expr
+}
+
+state Expr {
+  Number
+  StringLit
+  Bool
+  SystemVar
+  WfuMeta
+  Field
+  PresetParam
+  BinOp
+  Neg
+  FuncCall
+  Object
+  Array
+  InList
+  IfThenElse
+}
+
+// -- Rule clauses (LangClauses) ---------------------------------------------
+
+struct ScoreExpr {
+  expr: Expr
+}
+
+struct EntityClause {
+  entity_type: EntityTypeVal
+  id_expr: Expr
+}
+
+state EntityTypeVal {
+  Ident
+  StringLit
+}
+
+struct YieldClause {
+  target: String
+  version: Int?
+  presets: List<YieldPresetRef>
+  args: List<NamedArg>
+}
+
+struct YieldPresetRef {
+  name: String
+  args: List<Expr>
+}
+
+struct NamedArg {
+  name: String
+  value: Expr
+}
+
+struct LimitsBlock {
+  items: List<LimitItem>
+}
+
+struct LimitItem {
+  key: String
+  value: String
+}
+
+// -- Join (LangJoin) --------------------------------------------------------
+
+state JoinMode {
+  Snapshot
+  Asof
+  Anti
+}
+
+struct JoinClause {
+  target_window: String
+  mode: JoinMode
+  conditions: List<JoinCondition>
+}
+
+struct JoinCondition {
+  left: FieldRef
+  right: FieldRef
+}
+
+// -- Conversion (LangConv) --------------------------------------------------
+
+state ConvStep {
+  Sort
+  Top
+  Dedup
+  Where
+}
+
+struct ConvClause {
+  chains: List<ConvChain>
+}
+
+struct ConvChain {
+  steps: List<ConvStep>
+}
+
+struct SortKey {
+  expr: Expr
+  descending: Bool
+}
+
+// -- Test contract (LangTest) -----------------------------------------------
+
+struct TestBlock {
+  name: String
+  rule_name: String
+  input: List<InputStmt>
+  expect: List<ExpectStmt>
+  options: TestOptions?
+}
+
+state InputStmt {
+  Row
+  Tick
+}
+
+struct FieldAssign {
+  name: String
+  value: Expr
+}
+
+state ExpectStmt {
+  Hits
+  HitAssert
+}
+
+state HitAssert {
+  Score
+  Origin
+  EntityType
+  EntityId
+  Field
+}
+
+struct TestOptions {
+  close_trigger: CloseTrigger?
+  eval_mode: EvalMode?
+  permutation: PermutationMode?
+  runs: Int?
+}
+
+state CloseTrigger {
+  Timeout
+  Flush
+  Eos
+}
+
+state EvalMode {
+  Strict
+  Lenient
+}
+
+state PermutationMode {
+  Shuffle
+}
+
+// -- Compiled plan: rule shape (LangCompile) --------------------------------
+
+struct RulePlan {
+  meta {
+    label en "Rule Plan"
+  }
+  name: String
+  binds: List<BindPlan>
+  match_plan: MatchPlan
+  each_plan: EachPlan?
+  joins: List<JoinPlan>
+  entity_plan: EntityPlan
+  yield_plan: YieldPlan
+  score_plan: ScorePlan
+  pattern_origin: PatternOriginPlan?
+  conv_plan: ConvPlan?
+  limits_plan: LimitsPlan?
+}
+
+struct EachPlan {
+  alias: String
+  filter: Expr?
+}
+
+struct PatternOriginPlan {
+  pattern_name: String
+  args: List<String>
+}
+
+struct BindPlan {
+  alias: String
+  window: String
+  filter: Expr?
+}
+
+struct MatchPlan {
+  keys: List<FieldRef>
+  key_map: List<KeyMapPlan>?
+  window_spec: WindowSpec
+  event_steps: List<StepPlan>
+  close_steps: List<StepPlan>
+  close_mode: CloseMode
+  tracked_bind_aliases: List<String>
+  tracked_bind_fields: Map<String, List<String>>
+  tracked_plain_fields: List<String>
+  match_mode: MatchMode
+  seq: SeqPlan?
+  accu: Bool
+  needs_field_history: Bool
+}
+
+struct KeyMapPlan {
+  logical_name: String
+  source_alias: String
+  source_field: String
+}
+
+state WindowSpec {
+  Sliding
+  Fixed
+  Session
+}
+
+struct StepPlan {
+  branches: List<BranchPlan>
+}
+
+struct BranchPlan {
+  label: String?
+  source: String
+  field: FieldSelector?
+  guard: Expr?
+  agg: AggPlan
+}
+
+struct AggPlan {
+  transforms: List<Transform>
+  measure: Measure
+  cmp: CmpOp
+  threshold: Expr
+}
+
+struct SeqPlan {
+  consec: Bool
+  skip: SeqSkipPlan
+  steps: List<SeqStepPlan>
+}
+
+state SeqSkipPlan {
+  PastLast
+  ToNext
+}
+
+struct SeqStepPlan {
+  neg: Bool
+  within: Int?
+  branch: BranchPlan
+}
+
+// -- Compiled plan: execution shape (LangExePlan) ---------------------------
+
+struct JoinPlan {
+  right_window: String
+  mode: JoinMode
+  conds: List<JoinCondPlan>
+}
+
+struct JoinCondPlan {
+  left: FieldRef
+  right: FieldRef
+}
+
+struct LimitsPlan {
+  max_memory_bytes: Int?
+  max_instances: Int?
+  max_throttle: RateSpec?
+  on_exceed: ExceedAction
+}
+
+state ExceedAction {
+  Throttle
+  DropOldest
+  FailRule
+}
+
+struct RateSpec {
+  count: Int
+  per: Int
+}
+
+struct EntityPlan {
+  entity_type: String
+  entity_id_expr: Expr
+}
+
+struct ScorePlan {
+  expr: Expr
+}
+
+struct YieldPlan {
+  target: String
+  version: Int?
+  fields: List<YieldField>
+}
+
+struct YieldField {
+  name: String
+  value: Expr
+}
+
+struct ConvPlan {
+  chains: List<ConvChainPlan>
+}
+
+struct ConvChainPlan {
+  ops: List<ConvOpPlan>
+}
+
+state ConvOpPlan {
+  Sort
+  Top
+  Dedup
+  Where
+}
+
+struct SortKeyPlan {
+  expr: Expr
+  descending: Bool
+}
+
+// -- Checker (LangChecker) --------------------------------------------------
+
+state Severity {
+  Error
+  Warning
+}
+
+struct CheckError {
+  severity: Severity
+  rule: String?
+  test: String?
+  message: String
+}
+
+state LangReason {
+  Parse
+  Validation
+  Compile
+  General
+}
+
+// -- Explain output ---------------------------------------------------------
+
+struct RuleExplanation {
+  name: String
+  pattern_origin: String?
+  bindings: List<BindingExpl>
+  match_expl: MatchExpl
+  score: String
+  joins: List<String>
+  entity_type: String
+  entity_id: String
+  yield_target: String
+  yield_fields: List<Map<String, String>>
+  conv: List<String>?
+  limits: String?
+  lineage: List<Map<String, String>>
+}
+
+struct BindingExpl {
+  alias: String
+  window: String
+  filter: String?
+}
+
+struct MatchExpl {
+  keys: String
+  window_spec: String
+  event_steps: List<String>
+  close_steps: List<String>
+  close_mode: CloseMode?
+  seq: List<String>?
+  accu: Bool
+}
+
+// -- WFU metadata fields ----------------------------------------------------
+
+state WfuMetaField {
+  Id
+  RuleName
+  Score
+  EntityType
+  EntityId
+  Origin
+  CloseReason
+  FiredAt
+  EmitTime
+  Summary
+}
+
+state WfuIntermediateMetaField {
+  RuleName
+  Score
+  EntityType
+  EntityId
+}

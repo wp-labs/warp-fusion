@@ -1,0 +1,58 @@
+// ---------------------------------------------------------------------------
+// Cross-domain dataflow — the reactor pipeline
+// ---------------------------------------------------------------------------
+
+dataflow ReactorPipeline {
+  node<flow> Config.LoadConfig
+  node<flow> Lang.CompileWfl
+  node<flow> Engine.ProcessEvents
+  node<flow> Orchestra.DataIngest
+  node<flow> Orchestra.HotReload
+
+  edge<trigger> Orchestra.DataIngest -> Engine.ProcessEvents {
+    data Engine.IncomingBatch
+  }
+
+  edge<trigger> Lang.CompileWfl -> Engine.ProcessEvents {
+    data Engine.IncomingBatch
+  }
+
+  edge<trigger> Config.LoadConfig -> Orchestra.DataIngest {
+    data Orchestra.IncomingData
+  }
+
+  edge<trigger> Config.LoadConfig -> Orchestra.HotReload {
+    data Orchestra.ConfigChange
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Product pipeline — warp-fusion daemon, generator and tooling around the reactor
+// ---------------------------------------------------------------------------
+
+dataflow ProductPipeline {
+  node<flow> Fusion.EngineCommand
+  node<flow> Fusion.ReloadFlow
+  node<flow> Generator.GenerateScenario
+  node<flow> Generator.VerifyRun
+  node<flow> Admin.EngineReload
+  node<flow> Orchestra.HotReload
+  node<flow> Orchestra.ReactorStart
+  node<flow> Engine.ProcessEvents
+
+  edge<trigger> Fusion.EngineCommand -> Orchestra.ReactorStart {
+    data Orchestra.RunCommand
+  }
+
+  edge<trigger> Fusion.ReloadFlow -> Orchestra.HotReload {
+    data Orchestra.ConfigChange
+  }
+
+  edge<trigger> Generator.GenerateScenario -> Engine.ProcessEvents {
+    data Engine.IncomingBatch
+  }
+
+  edge<trigger> Admin.EngineReload -> Fusion.ReloadFlow {
+    data Fusion.ReloadCommand
+  }
+}

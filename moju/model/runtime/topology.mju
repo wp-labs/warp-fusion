@@ -1,0 +1,18 @@
+// ---------------------------------------------------------------------------
+// Reactor topology — single-node reactor process with outbound sink network
+// ---------------------------------------------------------------------------
+
+node ReactorNode
+
+network ReactorNet {
+  ingress internal_only
+  trust_level internal
+  contains ReactorNode
+}
+
+network SinkNetwork {
+  ingress internal_only
+  trust_level internal
+}
+
+link<network> ReactorNet -> SinkNetwork

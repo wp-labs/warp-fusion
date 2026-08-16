@@ -1,0 +1,227 @@
+// ---------------------------------------------------------------------------
+// lang domain — WFG scenario / traffic-generation AST (LangWfg)
+// Crate: wf-lang (wfg_ast + wfg_parser)
+// ---------------------------------------------------------------------------
+
+struct WfgFile {
+  uses: List<UseDecl>
+  scenario: ScenarioDecl
+  syntax: SyntaxScenario?
+}
+
+struct ScenarioDecl {
+  name: String
+  seed: Int
+  time_clause: TimeClause
+  total: Int
+  streams: List<StreamBlock>
+  injects: List<InjectBlock>
+  faults: FaultsBlock?
+  oracle: OracleBlock?
+}
+
+struct TimeClause {
+  start: String
+  duration: Int
+}
+
+struct SyntaxScenario {
+  attrs: List<ScenarioAttr>
+  inline_annos: List<ScenarioAttr>
+  traffic: TrafficBlock
+  injection: SyntaxInjectionBlock?
+  expect: ExpectBlock?
+}
+
+struct ScenarioAttr {
+  key: String
+  value: AttrValue
+}
+
+state AttrValue {
+  Number
+  Duration
+  String
+  Bool
+}
+
+struct TrafficBlock {
+  streams: List<SyntaxStreamDecl>
+}
+
+struct SyntaxStreamDecl {
+  stream: String
+  rate: RateExpr
+}
+
+state RateExpr {
+  Constant
+  Wave
+  Burst
+  Timeline
+}
+
+state WaveShape {
+  Sine
+  Triangle
+  Square
+}
+
+struct TimelineSegment {
+  start: Int
+  end: Int
+  rate: Rate
+}
+
+struct SyntaxInjectionBlock {
+  cases: List<SyntaxInjectCase>
+}
+
+struct SyntaxInjectCase {
+  mode: InjectCaseMode
+  percent: Float
+  target_rule: String?
+  stream: String
+  seq: SeqBlock
+}
+
+state InjectCaseMode {
+  Hit
+  NearMiss
+  Miss
+}
+
+struct SeqBlock {
+  entity: String
+  steps: List<SeqStep>
+}
+
+struct FieldPredicate {
+  field: String
+  value: AttrValue
+}
+
+struct ExpectBlock {
+  checks: List<ExpectCheck>
+}
+
+struct ExpectCheck {
+  metric: ExpectMetric
+  rule: String
+  op: CompareOp
+  value: ExpectValue
+}
+
+state ExpectMetric {
+  Hit
+  NearMiss
+  Miss
+  Precision
+  Recall
+  Fpr
+  LatencyP95
+}
+
+state CompareOp {
+  Gte
+  Lte
+  Gt
+  Lt
+  Eq
+}
+
+state ExpectValue {
+  Percent
+  Number
+  Duration
+}
+
+struct Rate {
+  count: Int
+  unit: RateUnit
+}
+
+state RateUnit {
+  PerSecond
+  PerMinute
+  PerHour
+}
+
+struct StreamBlock {
+  alias: String
+  window: String
+  rate: Rate
+  overrides: List<FieldOverride>
+}
+
+struct FieldOverride {
+  field_name: String
+  gen_expr: GenExpr
+}
+
+state GenExpr {
+  StringLit
+  NumberLit
+  BoolLit
+  GenFunc
+}
+
+struct GenArg {
+  name: String?
+  value: GenExpr
+}
+
+struct InjectBlock {
+  rule: String
+  streams: List<String>
+  lines: List<InjectLine>
+}
+
+struct InjectLine {
+  mode: InjectMode
+  percent: Float
+  params: List<ParamAssign>
+  use_steps: List<InjectUseStep>
+}
+
+struct InjectUseStep {
+  count: Int
+  predicates: List<FieldPredicate>
+}
+
+state InjectMode {
+  Hit
+  NearMiss
+  NonHit
+}
+
+struct FaultsBlock {
+  faults: List<FaultLine>
+}
+
+state FaultType {
+  OutOfOrder
+  Late
+  Duplicate
+  Drop
+}
+
+struct FaultLine {
+  fault_type: FaultType
+  percent: Float
+}
+
+struct OracleBlock {
+  params: List<ParamAssign>
+}
+
+struct ParamAssign {
+  name: String
+  value: ParamValue
+}
+
+state ParamValue {
+  Number
+  Duration
+  String
+}

@@ -1,0 +1,63 @@
+// ---------------------------------------------------------------------------
+// config domain — flows
+// ---------------------------------------------------------------------------
+
+// LoadConfig：读取 wfusion.toml → 合并 overlay → 变量解析 → 产出 FusionConfig
+flow LoadConfig {
+  trigger ConfigLoadRequest
+  creates FusionConfig
+
+  step LoadRaw {
+    create RawFusionConfigTree {
+      value = ConfigLoadRequest.path
+    }
+  }
+
+  step MergeOverlays {
+    create RawFusionConfigTree {
+      value = ConfigLoadRequest.path
+    }
+  }
+
+  step Resolve {
+    create FusionConfig {
+      mode = ConfigLoadRequest.path
+    }
+  }
+}
+
+// ResolveVars：展开 $VAR / ${VAR:default}，记录每个值的来源
+flow ResolveVars {
+  trigger ResolveVarRequest
+  creates ExpandedToml
+
+  step Expand {
+    create ExpandedToml {
+      value = ResolveVarRequest.raw
+    }
+  }
+
+  step Trace {
+    create TracedValue {
+      value = ResolveVarRequest.raw
+    }
+  }
+}
+
+// ClassifyChanges：对比新旧配置树，产出热重载/重启计划
+flow ClassifyChanges {
+  trigger ConfigSnapshot
+  creates FusionReloadPlan
+
+  step Classify {
+    create ClassifiedFusionConfigChange {
+      reason = ConfigSnapshot.before
+    }
+  }
+
+  step Plan {
+    create FusionReloadPlan {
+      hot_reload = ConfigSnapshot.before
+    }
+  }
+}

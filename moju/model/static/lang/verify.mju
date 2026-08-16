@@ -1,0 +1,13 @@
+// Verify WFL compile flow
+
+verify CompileOk for flow CompileWfl {
+  given {
+    CompileRequest.source = "rule.wfl"
+  }
+
+  when CompileRequest
+
+  expect {
+    RulePlan.name == "rule.wfl"
+  }
+}

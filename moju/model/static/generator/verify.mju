@@ -1,0 +1,25 @@
+// Verify generator flows
+
+verify GenerateOk for flow GenerateScenario {
+  given {
+    GenCommand.scenario = "auth"
+  }
+
+  when GenCommand
+
+  expect {
+    GenResult.events == "auth"
+  }
+}
+
+verify VerifyRunOk for flow VerifyRun {
+  given {
+    VerifyCommand.wfg = "report"
+  }
+
+  when VerifyCommand
+
+  expect {
+    VerifyReport.status == "report"
+  }
+}

@@ -1,0 +1,488 @@
+// ---------------------------------------------------------------------------
+// engine domain — windowing, NFA/CEP matching, alert output, sink dispatch
+// Crate: wf-engine
+// ---------------------------------------------------------------------------
+
+// -- Trigger commands -------------------------------------------------------
+
+command IncomingBatch {
+  stream_name: String
+  rows: Int
+}
+
+command MemoryPressure {
+  window_name: String
+}
+
+command NewEvents {
+  rule_name: String
+}
+
+// -- Actors -----------------------------------------------------------------
+
+actor DataSender {
+  can IncomingBatch
+}
+
+// -- Match engine: event & value -------------------------------------------
+
+struct Event {
+  fields: Map<String, Value>
+}
+
+state Value {
+  Number
+  Str
+  Bool
+  Array
+  Object
+}
+
+state JoinKey {
+  Int
+  Str
+  Bool
+}
+
+state ValueKey {
+  Number
+  Str
+  Bool
+  Array
+  Object
+}
+
+struct InstanceKey {
+  scope_key_str: String
+  bucket_start: Int?
+}
+
+// -- Match engine: NFA step evaluation --------------------------------------
+
+state StepResult {
+  Accumulate
+  Advance
+  Matched
+}
+
+struct StepProgress {
+  rule_name: String
+  scope_key: List<Value>
+  machine_id: String
+  step_index: Int
+  step_label: String?
+  branch_index: Int
+  branch_source: String
+  threshold_checked_branches: Int
+  measure_value: Float
+  cmp: String
+  threshold: String
+  satisfied: Bool
+  instances: Int
+}
+
+struct StepOutcome {
+  result: StepResult
+  progress: StepProgress?
+}
+
+struct StepData {
+  satisfied_branch_index: Int
+  label: String?
+  measure_value: Float
+  event_first_time_nanos: Int?
+  event_last_time_nanos: Int?
+  collected_values: List<Value>
+  field_values: Map<String, Value>
+}
+
+struct BindData {
+  alias: String
+  count: Int
+  field_values: Map<String, Value>
+}
+
+struct MatchedContext {
+  rule_name: String
+  scope_key: List<Value>
+  step_data: List<StepData>
+  bind_data: List<BindData>
+  event_time_nanos: Int
+  event_first_time_nanos: Int
+  event_last_time_nanos: Int
+  window_start_time_nanos: Int
+  window_end_time_nanos: Int
+  machine_id: String
+  trigger_event: Event?
+}
+
+state CloseReason {
+  Timeout
+  Flush
+  Eos
+}
+
+struct CloseOutput {
+  rule_name: String
+  scope_key: List<Value>
+  close_reason: CloseReason
+  event_ok: Bool
+  close_ok: Bool
+  close_mode: Lang.CloseMode
+  event_emitted: Bool
+  event_step_data: List<StepData>
+  close_step_data: List<StepData>
+  bind_data: List<BindData>
+  watermark_nanos: Int
+  machine_id: String
+  event_first_time_nanos: Int
+  event_last_time_nanos: Int
+  window_start_time_nanos: Int
+  window_end_time_nanos: Int
+  last_event_nanos: Int
+}
+
+struct RollingStats {
+  count: Int
+  sum: Float
+  sum_sq: Float
+  method: String
+  ewma: Float
+  ewma_alpha: Float
+  values: List<Float>
+}
+
+// -- Match engine: instance state -------------------------------------------
+
+struct BranchState {
+  count: Int
+  sum: Float
+  min: Float
+  max: Float
+  avg_sum: Float
+  avg_count: Int
+  event_first_time_nanos: Int?
+  event_last_time_nanos: Int?
+}
+
+struct AliasState {
+  count: Int
+  field_values: Map<String, Value>
+}
+
+struct StepState {
+  branch_states: List<BranchState>
+}
+
+struct Instance {
+  machine_id: String
+  created_at: Int
+  last_event_nanos: Int
+  current_step: Int
+  event_ok: Bool
+  event_emitted: Bool
+  step_states: List<StepState>
+  completed_steps: List<String>
+  close_step_states: List<StepState>
+  neg_violated: Bool
+  satisfied_flags: List<Bool>
+  base_cost: Int
+}
+
+struct NegCheck {
+  branch: Lang.BranchPlan
+  within: Int?
+  prev_step_idx: Int?
+}
+
+struct SeqRuntime {
+  within: List<Int?>
+  negs: List<NegCheck>
+  consec: Bool
+}
+
+struct CepStateMachine {
+  rule_name: String
+  plan: Lang.MatchPlan
+  instances: Map<String, Instance>
+  time_field: String?
+  watermark_nanos: Int
+  limits: Lang.LimitsPlan?
+  failed: Bool
+  emit_count: Int
+  emit_window_start: Int
+  estimated_memory_bytes: Int
+  seq_meta: SeqRuntime?
+}
+
+// -- Match engine: executor -------------------------------------------------
+
+struct OutputStatic {
+  rule_name: String
+  entity_type: String
+  yield_target: String
+  yield_specs: String
+  yield_field_types: Map<String, Lang.FieldType>
+  each_summary: String?
+}
+
+struct RuleExecutorOptions {
+  yield_field_types: Map<String, Lang.FieldType>
+  output: Config.OutputConfig
+}
+
+struct RuleExecutor {
+  plan: Lang.RulePlan
+  yield_field_types: Map<String, Lang.FieldType>
+  output: Config.OutputConfig
+  bind_filters: Map<String, Lang.Expr?>
+  output_static: OutputStatic
+}
+
+struct YieldMeta {
+  score: Float?
+  wfx_id: String?
+  rule_name: String?
+  entity_type: String?
+  entity_id: String?
+  origin: String?
+  close_reason: String?
+  fired_at: String?
+  emit_time: String?
+  summary: String?
+  event_first_time_nanos: Int?
+  event_last_time_nanos: Int?
+  window_start_time_nanos: Int?
+  window_end_time_nanos: Int?
+  emit_time_nanos: Int?
+  time_format: String?
+}
+
+state StatSelector {
+  WindowEvent
+  MatchEvent
+  MatchDistinct
+  Trigger
+  Final
+}
+
+// -- Alert output -----------------------------------------------------------
+
+state AlertOrigin {
+  Event
+  Close
+}
+
+struct OutputRecord {
+  wfx_id: String
+  rule_name: String
+  score: Float
+  entity_type: String
+  entity_id: String
+  origin: AlertOrigin
+  fired_at: String
+  emit_time: String
+  matched_rows: List<Bytes>
+  summary: String
+  yield_target: String
+  yield_fields: List<Map<String, Value>>
+  yield_field_types: Map<String, Lang.FieldType>
+  event_time_nanos: Int
+  machine_id: String
+  scope_key: List<Value>
+}
+
+// -- Sink dispatch ----------------------------------------------------------
+
+struct WildmatchMatcher {
+  patterns: List<String>
+}
+
+struct WfMetaDisableMatcher {
+  patterns: List<String>
+}
+
+struct SinkRuntime {
+  name: String
+  spec: String
+  tags: List<String>
+  output_fields: List<String>?
+  wf_meta_disable: List<String>
+  parallel: Int
+}
+
+struct SinkRouteBinding {
+  matcher: WildmatchMatcher
+  sinks: List<SinkRuntime>
+}
+
+struct SinkDispatcher {
+  routes: List<SinkRouteBinding>
+  default_sinks: List<SinkRuntime>
+  error_sinks: List<SinkRuntime>
+  monitor_sinks: List<SinkRuntime>
+  all_sinks: List<SinkRuntime>
+}
+
+// -- Window manager ---------------------------------------------------------
+
+struct WindowParams {
+  name: String
+  schema: String
+  time_col_index: Int?
+  over: Int
+  materialize_fields: List<String>?
+}
+
+struct TimedBatch {
+  batch: Bytes
+  event_time_range: String
+  row_count: Int
+  byte_size: Int
+  seq: Int
+  parsed_events: List<Event>?
+}
+
+state AppendOutcome {
+  Appended
+  DroppedLate
+}
+
+struct JoinIndex {
+  key_field: String
+  by_key: Map<String, Value>
+}
+
+struct Window {
+  meta {
+    label zh "窗口"
+    label en "Window"
+  }
+  name: String
+  schema: String
+  time_col_index: Int?
+  over: Int
+  config: Config.WindowConfig
+  batches: List<TimedBatch>
+  current_bytes: Int
+  total_rows: Int
+  watermark_nanos: Int
+  next_seq: Int
+  materialize_fields: List<String>?
+  join_index: JoinIndex?
+}
+
+struct WindowDef {
+  params: WindowParams
+  streams: List<String>
+  config: Config.WindowConfig
+}
+
+struct Subscription {
+  window_name: String
+  mode: Config.DistMode
+}
+
+state FanoutMode {
+  Single
+  Sharded
+  RoundRobin
+}
+
+struct FanoutSubscription {
+  mode: FanoutMode
+}
+
+struct RuleFanout {
+  meta {
+    label en "Rule Fanout"
+    tag "sharding"
+  }
+  subscriptions: Map<String, List<FanoutSubscription>>
+}
+
+struct RulePush {
+  window_name: String
+  events: List<Event>
+}
+
+struct WindowRouteOutcome {
+  window_name: String
+  rows: Int
+  late: Bool
+}
+
+struct RouteReport {
+  delivered: Int
+  dropped_late: Int
+  skipped_non_local: Int
+  per_window: List<WindowRouteOutcome>
+}
+
+struct ParsedWindow {
+  window_name: String
+  events: List<Event>?
+  events_bytes: Int
+}
+
+struct ParsedRoute {
+  windows: List<ParsedWindow>
+  skipped_non_local: Int
+  content_bytes: Int
+}
+
+struct Router {
+  registry: WindowRegistry
+  rule_fanout: RuleFanout
+}
+
+struct WindowRegistry {
+  windows: Map<String, Window>
+  provider_windows: Map<String, ProviderWindow>
+}
+
+struct ProviderWindow {
+  table: String
+  query: String
+  refresh: String?
+  rows: List<Map<String, Value>>
+}
+
+struct WindowEvictCount {
+  window_name: String
+  time_evicted: Int
+}
+
+struct EvictReport {
+  windows_scanned: Int
+  batches_time_evicted: Int
+  batches_memory_evicted: Int
+  per_window_evicted: List<WindowEvictCount>
+}
+
+struct Evictor {
+  max_total_bytes: Int
+}
+
+// -- Pipe relay (intermediate / yield targets) ------------------------------
+
+struct Pipe {
+  name: String
+  schema: String
+  over: Int
+  time_col_index: Int?
+}
+
+struct PipeRegistry {
+  pipes: Map<String, Pipe>
+}
+
+// -- Error state ------------------------------------------------------------
+
+state CoreReason {
+  WindowBuild
+  RuleExec
+  DataFormat
+  Sink
+  General
+}

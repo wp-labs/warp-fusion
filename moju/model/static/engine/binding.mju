@@ -1,0 +1,9 @@
+// ---------------------------------------------------------------------------
+// engine domain — implementation bindings
+// ---------------------------------------------------------------------------
+// Event ingress binds to Arrow IPC RecordBatch sources (wf-connector-api
+// BatchSource adapters). SinkDispatch binds alert records to connector sinks
+// via the wp-connector-api SinkFactory adapter registry.
+
+bind Engine.TimedBatch to ArrowIpcBatch with storage
+bind Engine.SinkRuntime to ConnectorSinkAdapter with storage

@@ -1,0 +1,21 @@
+// ---------------------------------------------------------------------------
+// tooling domain — flows
+// ---------------------------------------------------------------------------
+
+// ReplayRun：把事件文件回放到规则引擎，得到告警结果
+flow ReplayRun {
+  trigger ReplayCommand
+  creates ReplayResult
+
+  step Resolve {
+    create ResolvedPaths {
+      file = ReplayCommand.file
+    }
+  }
+
+  step Replay {
+    create ReplayResult {
+      event_count = ReplayCommand.file
+    }
+  }
+}

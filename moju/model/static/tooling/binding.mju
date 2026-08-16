@@ -1,0 +1,6 @@
+// ---------------------------------------------------------------------------
+// tooling domain — implementation bindings
+// ---------------------------------------------------------------------------
+// Replay events bind to the reactor match engine for offline execution.
+
+bind Tooling.ReplayEngine to ReactorMatchEngine with storage

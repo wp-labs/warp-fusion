@@ -1,0 +1,9 @@
+// ---------------------------------------------------------------------------
+// lang domain — implementation bindings
+// ---------------------------------------------------------------------------
+// WFL/WFS sources bind to file-based .wfl and .wfs project sources. Compiled
+// RulePlan feeds the engine RuleExecutor at runtime.
+
+bind Lang.WflFile to WflSource with storage
+bind Lang.WindowSchema to WfsSource with storage
+bind Lang.RulePlan to Engine.RuleExecutor with storage

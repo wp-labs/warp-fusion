@@ -1,0 +1,39 @@
+// ---------------------------------------------------------------------------
+// admin domain — flows
+// ---------------------------------------------------------------------------
+
+// CheckFlow：解析项目文件 → 逐项健康检查 → 汇总计数
+flow CheckFlow {
+  trigger CheckCommand
+  creates SummaryCounts
+
+  step Resolve {
+    create ResolvedFiles {
+      files = CheckCommand.work_root
+    }
+  }
+
+  step Check {
+    create Cell {
+      ok = CheckCommand.work_root
+    }
+  }
+
+  step Summarize {
+    create SummaryCounts {
+      conf = CheckCommand.work_root
+    }
+  }
+}
+
+// EngineReload：通过管理 API 触发引擎配置重载
+flow EngineReload {
+  trigger EngineReloadCmd
+  creates EngineReloadResponse
+
+  step Call {
+    create EngineReloadResponse {
+      result = EngineReloadCmd.reason
+    }
+  }
+}

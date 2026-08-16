@@ -1,0 +1,80 @@
+{
+  "source": {
+    "projects": [
+      {
+        "project": "/Users/zuowenjian/devspace/rust/wfusion/wp-reactor",
+        "workspace_version": "0.4.0",
+        "crates": ["wf-config", "wf-data", "wf-engine", "wf-lang", "wf-runtime"],
+        "annotated": true,
+        "facts": ["extract/wf-config.facts.json", "extract/wf-data.facts.json", "extract/wf-engine.facts.json", "extract/wf-lang.facts.json", "extract/wf-runtime.facts.json"]
+      },
+      {
+        "project": "/Users/zuowenjian/devspace/rust/wfusion/warp-fusion",
+        "workspace_version": "0.1.45",
+        "crates": ["wfusion", "wfgen", "wfl", "wfadm", "wf-project-remote"],
+        "annotated": false,
+        "facts": ["extract/wfusion.facts.json", "extract/wfgen.facts.json", "extract/wfl.facts.json", "extract/wfadm.facts.json", "extract/wf-project-remote.facts.json"]
+      }
+    ],
+    "extractor": "moju-code 0.1.9",
+    "extracted_at": "2026-08-16"
+  },
+  "method": "Fresh extraction of both workspaces merged into one model at warp-fusion/moju/model. Reactor domains clustered by #[moju(kind, domain, module)] annotations; warp-fusion product domains clustered by crate responsibility (no annotations present except wfusion cli_config). Field names/types are code ground truth.",
+  "domain_mapping": {
+    "config": { "crate": "wf-config", "modules": 9 },
+    "engine": { "crate": "wf-engine", "modules": 6 },
+    "lang": { "crate": "wf-lang", "modules": 13 },
+    "orchestra": { "crate": "wf-runtime (+ wf-engine CLI)", "modules": 8 },
+    "fusion": { "crate": "wfusion", "modules": 2 },
+    "generator": { "crate": "wfgen", "modules": 6 },
+    "tooling": { "crate": "wfl", "modules": 2 },
+    "admin": { "crate": "wfadm", "modules": 5 },
+    "project": { "crate": "wf-project-remote", "modules": 1 }
+  },
+  "counts": {
+    "structs": 277,
+    "states": 97,
+    "commands": 22,
+    "actors": 2,
+    "flows": 22,
+    "verify": 22,
+    "modules": 52,
+    "services": 5,
+    "subsystems": 2,
+    "dataflows": 2
+  },
+  "confidence": {
+    "high": "All struct/state field names and types sourced from extracted facts; reactor domain/module clustering honors #[moju] annotations.",
+    "medium": "Flow step sequences and design-level trigger commands (ConfigLoadRequest, IncomingBatch, RunCli, DaemonCommand, GenCommand, ReplayCommand, CheckCommand, ProjectUpdateCommand, ...) inferred from CLI entry points and module responsibilities.",
+    "low": "Runtime service composition (warp-fusion/wfgen/wfl/wfadm as services of subsystem WarpFusion); bindings reference external adapters; wfgen vendored wfg_ast treated as the Lang WFG contract."
+  },
+  "normalizations": [
+    "TomlValue -> String (serialized TOML)",
+    "PathBuf -> String",
+    "RecordBatch / arrow batch -> Bytes",
+    "Duration -> Int (nanos)",
+    "SmolStr / Arc<T> / Box<T> -> String / T",
+    "EngineHashMap -> Map<String, Value>",
+    "ResolvedSinkSpec / SchemaRef / ConnectorDef -> String (opaque external spec)",
+    "CancellationToken / JoinHandle / Notify / SocketAddr -> String (opaque)",
+    "AtomicU64 / Mutex / RwLock / VecDeque -> Int / Map / List (container unwrapped)",
+    "tuple (K, V) -> List<Map<K, V>>",
+    "ExprPlan is a type alias for Expr (plan.rs) -> modeled as Expr"
+  ],
+  "not_modeled": [
+    "wf-data crate (3 timestamp-normalization helper functions, no types) — infrastructure utility",
+    "Internal checker scope/stat plumbing (Scope, StatLabelInfo, FuncCheckCtx, ValType, BindTracking, WindowFieldUsage)",
+    "Metrics record internals (MetricsRecord, RegistryLookup) and runtime per-batch debug stats",
+    "Receiver batch column builder (ColumnBuilder), RedisBackend, tracing_init structures",
+    "Internal hashes/allocators (Fnv1a), test mocks (MockWindowLookup, RuntimeServant, RemoteFixture), EvalTimeScope / StepEvaluationInput plumbing",
+    "wfgen vendored wfg_ast copy (WfgFile/ScenarioDecl/... ) — modeled via the Lang domain WFG contract instead of duplicating"
+  ],
+  "naming_decisions": [
+    "RuleDecl.meta (reserved word) -> meta_block in model",
+    "Duplicate YieldField (ast::clauses vs plan) resolved to the plan version (used by YieldPlan)",
+    "FanoutSubscription abstracts the private engine Subscription enum (Single/Sharded/RoundRobin)",
+    "Reactor modeled with domain-relevant fields only (internal handles/channels omitted)",
+    "wfgen vendored wfg_ast types referenced as Lang.* to avoid duplicate WFG AST definitions",
+    "Only one target<bin,cli> kept (reactor) — the current parser allows a single anonymous bin target per kind"
+  ]
+}

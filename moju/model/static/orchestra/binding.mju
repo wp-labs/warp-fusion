@@ -1,0 +1,12 @@
+// ---------------------------------------------------------------------------
+// orchestra domain — implementation bindings
+// ---------------------------------------------------------------------------
+// The reactor binary (wf-runtime::cli::run_cli) drives the full lifecycle.
+// Receiver binds to wf-connector-api BatchSource adapters; SinkFactory binds
+// alert delivery to wp-connector-api SinkFactory adapters; external() binds to
+// the wp-knowledge runtime.
+
+bind Orchestra.EngineEntry to ReactorCliBinary with config
+bind Orchestra.Receiver to BatchSourceAdapter with storage
+bind Orchestra.SinkFactoryRegistry to ConnectorSinkRegistry with storage
+bind Orchestra.ExternalRuntime to KnowledgeBackend with storage

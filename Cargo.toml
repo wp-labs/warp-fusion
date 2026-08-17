@@ -51,7 +51,3 @@ git2 = { version = "0.21", default-features = false, features = ["vendored-libgi
 semver = "1"
 libc = "0.2"
 wp-self-update = "0.3"
-
-# 本地 wp-core-connectors（crates-wp 开发源）：有界读修复 macOS EINVAL
-[patch.crates-io]
-wp-core-connectors = { path = "/Users/zuowenjian/devspace/rust/crates-wp/wp-core-connectors" }

@@ -4644,7 +4644,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32497e9a4c7b38532efcdebeef879707aa9f794296a4f0244f6f69e9bc8574bd"
 dependencies = [
  "fastrand",
- "getrandom 0.4.3",
+ "getrandom 0.3.4",
  "once_cell",
  "rustix",
  "windows-sys 0.61.2",
@@ -6055,9 +6055,9 @@ dependencies = [
 
 [[package]]
 name = "wp-core-connectors"
-version = "0.8.1"
+version = "0.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "daeaa052137c69d8c4f4c0a670fa2fba2c38fd1a680e6d4c75376f7b57556fa5"
+checksum = "861eb6344173d99ffe658e0dbbad9db0c262888650455194c6037ad5032194c3"
 dependencies = [
  "anyhow",
  "arrow",
@@ -6223,9 +6223,9 @@ dependencies = [
 
 [[package]]
 name = "wp-self-update"
-version = "0.3.0"
+version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cfc95547d7be4202a41e55fa482f302cdd6f775a8b69d8df1184ddcdd611e067"
+checksum = "7a61b7059d60020bb3fac9e44973a0ba086cf25d38ae8baff6328a781a59ae61"
 dependencies = [
  "derive_more",
  "flate2",

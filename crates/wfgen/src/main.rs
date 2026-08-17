@@ -175,8 +175,10 @@ enum Commands {
         #[arg(long, default_value_t = wfgen::output::arrow_ipc::DEFAULT_MAX_FRAME_ROWS)]
         max_frame_rows: usize,
     },
-    /// Replay pre-encoded Arrow frame bytes over one TCP connection (no JSON
-    /// parsing / Arrow encoding on the hot path)
+    /// Replay pre-encoded Arrow frame bytes over `connections` concurrent TCP
+    /// connections (no JSON parsing / Arrow encoding on the hot path).
+    /// `connections>1` is the C-UCP supply lever: the runtime's TCP source
+    /// round-robins the connections across its `instances` reader loops.
     SendArrow {
         /// Path to the frames file produced by `wfgen dump-frames`
         #[arg(long)]
@@ -185,6 +187,45 @@ enum Commands {
         /// Runtime TCP address, e.g. 127.0.0.1:9800
         #[arg(long, default_value = "127.0.0.1:9800")]
         addr: String,
+
+        /// Concurrent TCP connections (each sends a full copy of the file)
+        #[arg(long, default_value_t = 1)]
+        connections: usize,
+
+        /// Per-stream key field for key-sharded replay, e.g.
+        /// "bid_events:auction,auction_events:id,person_events:id". When set
+        /// with --connections>1, events are split by hash(key) so the same key
+        /// always goes to the same connection (key closure) — multi-connection
+        /// stays correct for stateful rules.
+        #[arg(long)]
+        shard_keys: Option<String>,
+
+        /// Comma-separated pre-sharded frame files, one per connection
+        /// (produced by `wfgen shard-frames`). Each connection raw-copies its
+        /// file — zero decode on the send path, so multi-connection stays at
+        /// raw-copy speed while preserving key closure for stateful rules.
+        #[arg(long)]
+        shard_files: Option<String>,
+    },
+    /// Split a frame file into N key-sharded frame files (one per shard;
+    /// same key always lands in the same file). Send them later with
+    /// `send-arrow --shard-files` for zero-decode multi-connection replay.
+    ShardFrames {
+        /// Path to the frame file produced by `wfgen dump-frames`
+        #[arg(long)]
+        input: PathBuf,
+
+        /// Number of shards (connections to replay with later)
+        #[arg(long)]
+        shards: usize,
+
+        /// Per-stream key field, e.g. "bid_events:auction,auction_events:id,person_events:id"
+        #[arg(long)]
+        shard_keys: String,
+
+        /// Output prefix: produces {prefix}.s0.frames .. {prefix}.s{N-1}.frames
+        #[arg(long)]
+        output_prefix: PathBuf,
     },
     /// Measure generation throughput (optional TCP send to wfusion)
     Bench {
@@ -319,7 +360,19 @@ async fn run_cli() -> WfgenResult<()> {
             )
             .await
         }
-        Commands::SendArrow { input, addr } => wfgen::cmd_frames::send_arrow(input, addr).await,
+        Commands::SendArrow {
+            input,
+            addr,
+            connections,
+            shard_keys,
+            shard_files,
+        } => wfgen::cmd_frames::send_arrow(input, addr, connections, shard_keys, shard_files).await,
+        Commands::ShardFrames {
+            input,
+            shards,
+            shard_keys,
+            output_prefix,
+        } => wfgen::cmd_frames::shard_frames(input, shards, shard_keys, output_prefix).await,
         Commands::Bench {
             scenario,
             ws,

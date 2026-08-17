@@ -316,6 +316,12 @@ pub async fn shard_frames(
     // 每分片按行攒批:保持分片文件帧大小 ≈ 原始帧(默认 100k 行),避免把
     // 大帧拆成小帧放大引擎的每帧固定成本(append/broadcast/seq)——实验实测:
     // 小帧分片使 q1(入流瓶颈)从 19.8M 掉到 5.2M;攒批后恢复。
+    // EXPERIMENT-A 结论(2026-08-17):400k 大帧(29MB)EPS 不升反降(5.57M),
+    // 内存 +65%——批大小不是门,维持 100k。
+    // EXPERIMENT-B 结论(2026-08-17):25k 小批 EPS 5.56M,也不升——
+    // 批大小在 25k~400k 均无影响,维持 100k。
+    // EXPERIMENT-C 结论(2026-08-17):preread 预算 256MB→1GB 仅 +3.4%,
+    // 墙主体是规则计算(每行 ~1.7us,10 任务饱和 ~5.9-6.1M/s)。
     const TARGET_ROWS: usize = 100_000;
     let mut pending: Vec<Option<ShardPending>> = (0..shards).map(|_| None).collect();
 

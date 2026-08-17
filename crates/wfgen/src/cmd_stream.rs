@@ -128,21 +128,22 @@ pub async fn run(
             base_rate
         };
 
-        let base_start: DateTime<Utc> = scenario
-            .wfg
-            .scenario
-            .time_clause
-            .start
-            .parse()
-            .map_err(|e| {
-                error::error(
-                    WfgenReason::Generation,
-                    format!(
-                        "invalid scenario start '{}': {}",
-                        scenario.wfg.scenario.time_clause.start, e
-                    ),
-                )
-            })?;
+        let base_start: DateTime<Utc> =
+            scenario
+                .wfg
+                .scenario
+                .time_clause
+                .start
+                .parse()
+                .map_err(|e| {
+                    error::error(
+                        WfgenReason::Generation,
+                        format!(
+                            "invalid scenario start '{}': {}",
+                            scenario.wfg.scenario.time_clause.start, e
+                        ),
+                    )
+                })?;
         let base_seed = scenario.wfg.scenario.seed;
 
         let phase_start = Instant::now();
@@ -161,7 +162,8 @@ pub async fn run(
 
         while phase_start.elapsed() < scenario_dur {
             // Batch = rate × slice, bounded to keep wfgen memory in check.
-            let batch_total = ((rate * slice_ms as f64 / 1000.0).round() as u64).clamp(1, MAX_BATCH);
+            let batch_total =
+                ((rate * slice_ms as f64 / 1000.0).round() as u64).clamp(1, MAX_BATCH);
             // Actual event-time span for this batch (seconds).
             let slice_secs = batch_total as f64 / rate;
             let slice_nanos = (slice_secs * 1e9).max(1.0) as u64;
@@ -172,7 +174,7 @@ pub async fn run(
             wfg.scenario.seed = base_seed.wrapping_add(cursor_nanos as u64);
             wfg.scenario.time_clause.start = (base_start
                 + chrono::Duration::nanoseconds(cursor_nanos as i64))
-                .to_rfc3339_opts(SecondsFormat::Nanos, true);
+            .to_rfc3339_opts(SecondsFormat::Nanos, true);
             wfg.scenario.time_clause.duration = Duration::from_nanos(slice_nanos);
             wfg.scenario.total = batch_total;
 
@@ -186,8 +188,8 @@ pub async fn run(
             let mut gen_frames = 0u64;
             let num_chunks = result.events.len().div_ceil(CHUNK_SIZE).max(1);
             for (i, chunk) in result.events.chunks(CHUNK_SIZE).enumerate() {
-                let sent = crate::tcp_send::send_events_with_stream(chunk, &schemas, &mut writer)
-                    .await?;
+                let sent =
+                    crate::tcp_send::send_events_with_stream(chunk, &schemas, &mut writer).await?;
                 gen_frames += sent as u64;
 
                 // Pace each chunk so the whole slice spans ~slice_secs of wall

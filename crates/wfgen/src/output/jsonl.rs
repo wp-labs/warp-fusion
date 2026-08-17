@@ -123,11 +123,10 @@ pub fn parse_gen_event_line(line: &str, source: &Path) -> WfgenResult<Option<Gen
         return Ok(None);
     }
 
-    let obj: serde_json::Map<String, serde_json::Value> =
-        serde_json::from_str(line).source_err(
-            WfgenReason::Serialization,
-            format!("parsing {}", source.display()),
-        )?;
+    let obj: serde_json::Map<String, serde_json::Value> = serde_json::from_str(line).source_err(
+        WfgenReason::Serialization,
+        format!("parsing {}", source.display()),
+    )?;
 
     let stream_name = obj
         .get("_stream")

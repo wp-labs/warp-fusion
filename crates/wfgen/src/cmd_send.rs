@@ -36,8 +36,8 @@ pub async fn run(
     let reader: Box<dyn BufRead> = if input == Path::new("-") {
         Box::new(BufReader::new(std::io::stdin()))
     } else {
-        let file =
-            File::open(&input).source_err(WfgenReason::Io, format!("opening {}", input.display()))?;
+        let file = File::open(&input)
+            .source_err(WfgenReason::Io, format!("opening {}", input.display()))?;
         Box::new(BufReader::new(file))
     };
 
@@ -52,14 +52,14 @@ pub async fn run(
             events.push(ev);
         }
 
-        if let Some(n) = chunk {
-            if events.len() >= n {
-                total_frames += send_events_with_stream(&events, &schemas, &mut sink).await?;
-                total_events += events.len();
-                events.clear();
-                if let Some(ms) = rate_ms {
-                    tokio::time::sleep(Duration::from_millis(ms)).await;
-                }
+        if let Some(n) = chunk
+            && events.len() >= n
+        {
+            total_frames += send_events_with_stream(&events, &schemas, &mut sink).await?;
+            total_events += events.len();
+            events.clear();
+            if let Some(ms) = rate_ms {
+                tokio::time::sleep(Duration::from_millis(ms)).await;
             }
         }
     }

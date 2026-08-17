@@ -349,7 +349,7 @@ mod tests {
         }
     }
 
-    fn event(i: usize, conn_info: Option<&serde_json::Value>) -> GenEvent {
+    fn event(_i: usize, conn_info: Option<&serde_json::Value>) -> GenEvent {
         let mut fields = serde_json::Map::new();
         fields.insert("sip".into(), json!("10.0.0.1"));
         fields.insert("event_time".into(), json!("2026-08-13T00:00:00Z"));
@@ -373,9 +373,13 @@ mod tests {
         let events: Vec<GenEvent> = (0..10_000).map(|i| event(i, Some(&big))).collect();
         let per_event = event_frame_bytes(&events[0], &schema());
 
-        let batches =
-            events_to_typed_batches(&events, &[schema()], DEFAULT_MAX_FRAME_BYTES, DEFAULT_MAX_FRAME_ROWS)
-                .unwrap();
+        let batches = events_to_typed_batches(
+            &events,
+            &[schema()],
+            DEFAULT_MAX_FRAME_BYTES,
+            DEFAULT_MAX_FRAME_ROWS,
+        )
+        .unwrap();
 
         assert!(
             batches.len() >= 2,
@@ -383,7 +387,11 @@ mod tests {
             batches.len()
         );
         let total_rows: usize = batches.iter().map(|(_, b)| b.num_rows()).sum();
-        assert_eq!(total_rows, events.len(), "no event may be dropped or duplicated");
+        assert_eq!(
+            total_rows,
+            events.len(),
+            "no event may be dropped or duplicated"
+        );
         for (_, b) in &batches {
             assert!(
                 b.num_rows() * per_event <= DEFAULT_MAX_FRAME_BYTES,

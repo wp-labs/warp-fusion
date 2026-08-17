@@ -85,9 +85,9 @@ fn replay_five_events_one_match() {
     assert_eq!(result.alerts.len(), 1);
 
     let alert = &result.alerts[0];
-    assert_eq!(alert.rule_name, "brute_force");
+    assert_eq!(alert.rule_name.as_ref(), "brute_force");
     assert!((alert.score - 70.0).abs() < f64::EPSILON);
-    assert_eq!(alert.entity_type, "ip");
+    assert_eq!(alert.entity_type.as_ref(), "ip");
     assert_eq!(alert.entity_id, "10.0.0.1");
 }
 
@@ -140,9 +140,9 @@ fn replay_eof_close_all_fires_alert() {
     assert_eq!(result.alerts.len(), 1);
 
     let alert = &result.alerts[0];
-    assert_eq!(alert.rule_name, "eos_close");
+    assert_eq!(alert.rule_name.as_ref(), "eos_close");
     assert!((alert.score - 80.0).abs() < f64::EPSILON);
-    assert_eq!(alert.entity_type, "ip");
+    assert_eq!(alert.entity_type.as_ref(), "ip");
     assert_eq!(alert.entity_id, "10.0.0.1");
 }
 
@@ -215,7 +215,7 @@ rule multi_src {
     assert_eq!(result.alerts.len(), 1);
 
     let alert = &result.alerts[0];
-    assert_eq!(alert.rule_name, "multi_src");
+    assert_eq!(alert.rule_name.as_ref(), "multi_src");
     // fired_at must be derived from the event time (tb), not default to 0 (1970).
     // The nanosecond timestamp 1_700_000_000_000_000_000 is ~2023-11-14.
     // Convert fired_at (ISO string) year to verify it's not 1970.
@@ -423,7 +423,7 @@ rule pipe_replay {
     assert_eq!(result.match_count, 1);
     assert_eq!(result.error_count, 0);
     assert_eq!(result.alerts.len(), 1);
-    assert_eq!(result.alerts[0].rule_name, "pipe_replay");
+    assert_eq!(result.alerts[0].rule_name.as_ref(), "pipe_replay");
     assert!(
         !result.alerts[0].rule_name.starts_with("__wf_pipe_"),
         "replay must not output internal pipeline stage alerts"

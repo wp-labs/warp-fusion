@@ -319,9 +319,7 @@ async fn run_cli() -> WfgenResult<()> {
             )
             .await
         }
-        Commands::SendArrow { input, addr } => {
-            wfgen::cmd_frames::send_arrow(input, addr).await
-        }
+        Commands::SendArrow { input, addr } => wfgen::cmd_frames::send_arrow(input, addr).await,
         Commands::Bench {
             scenario,
             ws,

@@ -10,7 +10,8 @@ use wf_config::ConfigVarContext;
 use wf_data::time::parse_json_timestamp_nanos;
 use wf_engine::alert::OutputRecord;
 use wf_engine::match_engine::{
-    CepStateMachine, CloseReason, EngineHashMap, Event, RuleExecutor, StepResult, Value, WindowLookup,
+    CepStateMachine, CloseReason, EngineHashMap, Event, RuleExecutor, StepResult, Value,
+    WindowLookup,
 };
 use wf_lang::WindowSchema;
 use wf_lang::plan::RulePlan;
@@ -574,7 +575,10 @@ fn handle_output_record(
     match_count: &mut u64,
 ) {
     if is_internal_window_name(&record.yield_target) {
-        queue.push_back((record.yield_target.to_string(), output_record_to_event(&record)));
+        queue.push_back((
+            record.yield_target.to_string(),
+            output_record_to_event(&record),
+        ));
     } else {
         alerts.push(record);
         *match_count += 1;

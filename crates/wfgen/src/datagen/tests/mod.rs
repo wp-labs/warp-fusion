@@ -94,6 +94,7 @@ fn make_brute_force_plan() -> RulePlan {
             tracked_bind_aliases: std::collections::HashSet::new(),
             tracked_bind_fields: std::collections::HashMap::new(),
             tracked_plain_fields: std::collections::HashSet::new(),
+            needs_field_history: false,
         },
         each_plan: None,
         joins: vec![],
@@ -112,6 +113,7 @@ fn make_brute_force_plan() -> RulePlan {
         pattern_origin: None,
         conv_plan: None,
         limits_plan: None,
+        conv_window: None,
     }
 }
 
@@ -154,6 +156,7 @@ fn make_auth_fail_plan() -> RulePlan {
             tracked_bind_aliases: std::collections::HashSet::new(),
             tracked_bind_fields: std::collections::HashMap::new(),
             tracked_plain_fields: std::collections::HashSet::new(),
+            needs_field_history: false,
         },
         each_plan: None,
         joins: vec![],
@@ -172,6 +175,7 @@ fn make_auth_fail_plan() -> RulePlan {
         pattern_origin: None,
         conv_plan: None,
         limits_plan: None,
+        conv_window: None,
     }
 }
 
@@ -235,6 +239,7 @@ fn make_bool_chain_plan() -> RulePlan {
             tracked_bind_aliases: std::collections::HashSet::new(),
             tracked_bind_fields: std::collections::HashMap::new(),
             tracked_plain_fields: std::collections::HashSet::new(),
+            needs_field_history: false,
         },
         each_plan: None,
         joins: vec![],
@@ -253,6 +258,7 @@ fn make_bool_chain_plan() -> RulePlan {
         pattern_origin: None,
         conv_plan: None,
         limits_plan: None,
+        conv_window: None,
     }
 }
 
@@ -303,6 +309,7 @@ fn make_distinct_close_plan() -> RulePlan {
             tracked_bind_aliases: std::collections::HashSet::new(),
             tracked_bind_fields: std::collections::HashMap::new(),
             tracked_plain_fields: std::collections::HashSet::new(),
+            needs_field_history: true,
         },
         each_plan: None,
         joins: vec![],
@@ -321,6 +328,7 @@ fn make_distinct_close_plan() -> RulePlan {
         pattern_origin: None,
         conv_plan: None,
         limits_plan: None,
+        conv_window: None,
     }
 }
 
@@ -389,6 +397,7 @@ fn make_chain_attack_plan() -> RulePlan {
             tracked_bind_aliases: std::collections::HashSet::new(),
             tracked_bind_fields: std::collections::HashMap::new(),
             tracked_plain_fields: std::collections::HashSet::new(),
+            needs_field_history: false,
         },
         each_plan: None,
         joins: vec![],
@@ -407,5 +416,6 @@ fn make_chain_attack_plan() -> RulePlan {
         pattern_origin: None,
         conv_plan: None,
         limits_plan: None,
+        conv_window: None,
     }
 }

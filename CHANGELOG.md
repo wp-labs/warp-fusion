@@ -2,7 +2,14 @@
 
 本文件记录 `wfusion` / `wfl` / `wfgen` / `wfadm` 面向使用者的变更。内部实现细节、依赖版本对齐和测试计数不在此展开。
 
-## [0.1.45 Unreleased]
+## [0.3.0 Unreleased]
+
+### 引擎（对齐 wp-reactor 1.0.0）
+
+- 对齐 `wp-reactor` v1.0.0（本地 `crates/wf-*` 路径），获得规则分片聚合与共享资源约束：
+  - **`conv` 规则可跨 shard 聚合**：fixed 窗口带 `conv`（sort/top/dedup/where）的规则现在可分片，各 shard 的 close 输出经水位 barrier 汇聚后在合并批上做全局 `apply_conv`（全局 top-N / sort），再统一限流输出；EOS 排空为完整数据出口，cancel 丢弃未 seal 部分桶。
+  - **跨 shard 共享限流/预算**：`max_throttle` / `max_instances` / `max_memory_bytes` 由各 shard 独立执行改为 `SharedLimits` 共享原子约束（限流为共享滑窗、`max_instances` 精确 CAS、FailRule 规则级 latch），`rule_instances` 指标跨 shard 求和。
+  - 语义修复：`max_instances` 分片下精确（原 read-then-act 可超限 ≤shard_count-1）；conv 阶段超限按 `on_exceed` 分派（FailRule 正确 latch）；`shards=1` 行为不变。
 
 ### 语言（WFL）
 

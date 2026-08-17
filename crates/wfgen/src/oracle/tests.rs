@@ -46,6 +46,7 @@ fn make_simple_rule_plan() -> RulePlan {
             tracked_bind_aliases: std::collections::HashSet::new(),
             tracked_bind_fields: std::collections::HashMap::new(),
             tracked_plain_fields: std::collections::HashSet::new(),
+            needs_field_history: false,
         },
         each_plan: None,
         joins: vec![],
@@ -64,6 +65,7 @@ fn make_simple_rule_plan() -> RulePlan {
         pattern_origin: None,
         conv_plan: None,
         limits_plan: None,
+        conv_window: None,
     }
 }
 
@@ -343,6 +345,7 @@ fn multi_alias_same_window_both_receive_events() {
             tracked_bind_aliases: std::collections::HashSet::new(),
             tracked_bind_fields: std::collections::HashMap::new(),
             tracked_plain_fields: std::collections::HashSet::new(),
+            needs_field_history: false,
         },
         each_plan: None,
         joins: vec![],
@@ -361,6 +364,7 @@ fn multi_alias_same_window_both_receive_events() {
         pattern_origin: None,
         conv_plan: None,
         limits_plan: None,
+        conv_window: None,
     };
 
     let start: chrono::DateTime<Utc> = "2024-01-01T00:00:00Z".parse().unwrap();
@@ -505,6 +509,7 @@ fn conv_top_filters_non_qualifying() {
             tracked_bind_aliases: std::collections::HashSet::new(),
             tracked_bind_fields: std::collections::HashMap::new(),
             tracked_plain_fields: std::collections::HashSet::new(),
+            needs_field_history: true,
         },
         each_plan: None,
         joins: vec![],
@@ -533,6 +538,7 @@ fn conv_top_filters_non_qualifying() {
             }],
         }),
         limits_plan: None,
+        conv_window: None,
     };
 
     let start: chrono::DateTime<Utc> = "2024-01-01T00:00:00Z".parse().unwrap();

@@ -214,7 +214,9 @@ FAIL_THRESHOLD = "3"
             let chunk = batch.slice(offset, len);
             let ipc_payload = wp_arrow::ipc::encode_ipc(stream_name, &chunk)
                 .unwrap_or_else(|e| panic!("encode_ipc failed for '{stream_name}': {e}"));
-            framed.extend_from_slice(&(ipc_payload.len() as u32).to_be_bytes());
+            // Wire framing must match the TCP sink `len` mode / wf-runtime receiver:
+            // `<ascii digits> <payload>` (decimal byte count + space + payload).
+            framed.extend_from_slice(format!("{} ", ipc_payload.len()).as_bytes());
             framed.extend_from_slice(&ipc_payload);
         }
     }

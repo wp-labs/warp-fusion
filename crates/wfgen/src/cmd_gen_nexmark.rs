@@ -22,14 +22,20 @@ use std::io::Write;
 use crate::error::{self, WfgenReason, WfgenResult};
 
 const BASE_NS: i64 = 1767225600000000000; // 2026-01-01T00:00:00Z
-const SPAN_NS: i64 = 1800_000_000_000; // 30 min event span
+const SPAN_NS: i64 = 1_800_000_000_000; // 30 min event span
 const PERSONS: usize = 1000;
 const HOT_SELLERS: usize = 250; // 25% 卖家为 hot
 const HOT_BIDDERS: usize = 250; // 25% 出价者为 hot
 
 const CITIES: [&str; 8] = [
-    "Mountain View", "San Francisco", "Sunnyvale", "New York",
-    "Los Angeles", "Chicago", "Boston", "Austin",
+    "Mountain View",
+    "San Francisco",
+    "Sunnyvale",
+    "New York",
+    "Los Angeles",
+    "Chicago",
+    "Boston",
+    "Austin",
 ];
 const STATES: [&str; 8] = ["CA", "CA", "CA", "NY", "CA", "IL", "MA", "TX"];
 const CHANNELS: [&str; 5] = ["Google", "Facebook", "Apple", "Direct", "Test"];
@@ -139,7 +145,7 @@ pub fn run(count: i64, seed: u64) -> WfgenResult<()> {
                 "initialBid": rng.random_range(10..=1000),
                 "reserve": rng.random_range(1000..=10000),
                 "dateTime": ns,
-                "expires": ns + rng.random_range(600_000_000_000..=1800_000_000_000),
+                "expires": ns + rng.random_range(600_000_000_000..=1_800_000_000_000),
                 "seller": a.seller,
                 "category": a.category,
                 "extra": "",

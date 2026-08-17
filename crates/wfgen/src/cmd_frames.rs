@@ -37,6 +37,7 @@ use crate::tcp_send::connect_sender;
 /// A connected `TcpArrowSink` is only borrowed for its `framed` encoding mode;
 /// the payloads go to `output`, not the network. `--addr` defaults to the
 /// benchmark port and is where the sink connects for the encode borrow.
+#[allow(clippy::too_many_arguments)]
 pub async fn dump_frames(
     scenario: PathBuf,
     input: PathBuf,
@@ -64,10 +65,10 @@ pub async fn dump_frames(
             format!("creating output directory: {}", parent.display()),
         )?;
     }
-    let mut writer = BufWriter::new(File::create(&output).source_err(
-        WfgenReason::Io,
-        format!("creating {}", output.display()),
-    )?);
+    let mut writer = BufWriter::new(
+        File::create(&output)
+            .source_err(WfgenReason::Io, format!("creating {}", output.display()))?,
+    );
 
     // `-` reads stdin, otherwise a file. Events are accumulated up to `chunk`
     // rows per Arrow batch (None = one-shot, matching `send` without --chunk);
@@ -75,8 +76,8 @@ pub async fn dump_frames(
     let reader: Box<dyn BufRead> = if input == Path::new("-") {
         Box::new(BufReader::new(std::io::stdin()))
     } else {
-        let file =
-            File::open(&input).source_err(WfgenReason::Io, format!("opening {}", input.display()))?;
+        let file = File::open(&input)
+            .source_err(WfgenReason::Io, format!("opening {}", input.display()))?;
         Box::new(BufReader::new(file))
     };
 
@@ -91,20 +92,20 @@ pub async fn dump_frames(
             events.push(ev);
         }
 
-        if let Some(n) = chunk {
-            if events.len() >= n {
-                total_frames += write_frames(
-                    &events,
-                    &schemas,
-                    &sink,
-                    &mut writer,
-                    &mut total_bytes,
-                    max_frame_bytes,
-                    max_frame_rows,
-                )?;
-                total_events += events.len();
-                events.clear();
-            }
+        if let Some(n) = chunk
+            && events.len() >= n
+        {
+            total_frames += write_frames(
+                &events,
+                &schemas,
+                &sink,
+                &mut writer,
+                &mut total_bytes,
+                max_frame_bytes,
+                max_frame_rows,
+            )?;
+            total_events += events.len();
+            events.clear();
         }
     }
 
@@ -146,9 +147,10 @@ pub async fn send_arrow(input: PathBuf, addr: String) -> WfgenResult<()> {
     let mut file = tokio::fs::File::open(&input)
         .await
         .source_err(WfgenReason::Io, format!("opening {}", input.display()))?;
-    let stream = tokio::net::TcpStream::connect(&addr)
-        .await
-        .source_err(WfgenReason::Network, format!("connecting to runtime: {addr}"))?;
+    let stream = tokio::net::TcpStream::connect(&addr).await.source_err(
+        WfgenReason::Network,
+        format!("connecting to runtime: {addr}"),
+    )?;
     stream
         .set_nodelay(true)
         .source_err(WfgenReason::Network, "set_nodelay")?;

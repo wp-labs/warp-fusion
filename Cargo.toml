@@ -14,18 +14,18 @@ arrow = { version = "59", default-features = false, features = ["ipc"] }
 async-trait = "0.1"
 orion-error = { version = "0.8", features = ["derive", "serde_json", "toml", "tracing"] }
 # @gxl:block(remote_reactor)
-#wf-engine = { git = "https://github.com/wp-labs/wp-reactor.git", tag = "v0.4.0" }
-#wf-config = { git = "https://github.com/wp-labs/wp-reactor.git", tag = "v0.4.0" }
-#wf-lang = { git = "https://github.com/wp-labs/wp-reactor.git", tag = "v0.4.0" }
-#wf-data = { git = "https://github.com/wp-labs/wp-reactor.git", tag = "v0.4.0" }
-#wf-runtime = { git = "https://github.com/wp-labs/wp-reactor.git", tag = "v0.4.0" }
+wf-engine = { git = "https://github.com/wp-labs/wp-reactor.git", tag = "v1.0.1" }
+wf-config = { git = "https://github.com/wp-labs/wp-reactor.git", tag = "v1.0.1" }
+wf-lang = { git = "https://github.com/wp-labs/wp-reactor.git", tag = "v1.0.1" }
+wf-data = { git = "https://github.com/wp-labs/wp-reactor.git", tag = "v1.0.1" }
+wf-runtime = { git = "https://github.com/wp-labs/wp-reactor.git", tag = "v1.0.1" }
 # @gxl:end(remote_reactor)
 # @gxl:block(local_reactor)
-wf-engine = { path = "../wp-reactor/crates/wf-engine" }
-wf-config = { path = "../wp-reactor/crates/wf-config" }
-wf-data = { path = "../wp-reactor/crates/wf-data" }
-wf-lang = { path = "../wp-reactor/crates/wf-lang" }
-wf-runtime = { path = "../wp-reactor/crates/wf-runtime" }
+#wf-engine = { path = "../wp-reactor/crates/wf-engine" }
+#wf-config = { path = "../wp-reactor/crates/wf-config" }
+#wf-data = { path = "../wp-reactor/crates/wf-data" }
+#wf-lang = { path = "../wp-reactor/crates/wf-lang" }
+#wf-runtime = { path = "../wp-reactor/crates/wf-runtime" }
 # @gxl:end(local_reactor)
 
 wf-project-remote = { path = "crates/wf-project-remote" }
@@ -55,4 +55,3 @@ wp-self-update = "0.3"
 # 本地 wp-core-connectors（crates-wp 开发源）：有界读修复 macOS EINVAL
 [patch.crates-io]
 wp-core-connectors = { path = "/Users/zuowenjian/devspace/rust/crates-wp/wp-core-connectors" }
-

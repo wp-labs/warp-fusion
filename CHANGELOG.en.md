@@ -3,7 +3,27 @@
 This file records user-facing changes to `wfusion` / `wfl` / `wfgen` / `wfadm`.
 Internal implementation details, dependency alignment, and test counts are not covered here.
 
-## [0.1.45 Unreleased]
+## [0.3.1]
+
+### Engine (aligned with wp-reactor 1.0.2)
+
+- Aligned to `wp-reactor` v1.0.2; the preread budget (`parse_buffer_bytes`) now accounts in content bytes:
+  - **Accounting fix**: the budget no longer charges decoded Arrow allocation size (IPC decode structurally over-counts real memory ~10× and starved the pipeline slots); it now charges content bytes (≈ wire), matching the window accounting.
+  - **Default 256MB → 128MB**: avoids the 12–14GB RSS plateau at 256MB while slightly improving throughput (q1 100M: 6.13M EPS / RSS 5.88GB); raise explicitly for more throughput (512MB–2GB sweet spot; 4GB over-buffers and regresses).
+
+### wfgen
+
+- **`shard-frames` shard files + multi-connection replay**: `shard-frames` splits one frame file into N key-sharded files (`--shards` / `--shard-keys`, the same key always lands in the same file); `send-arrow --shard-files` raw-copies one shard file per TCP connection with zero decode, keeping key closure so stateful rules stay correct — the right way to scale supply across connections (C-UCP).
+- **Fix dropping the final partial frame**: rows left over at the end of a stream (less than a full frame) were previously tagged `tail`, and the engine dropped the whole frame when routing by tag — 100M lost 1.4M rows and the bench hung until timeout. Those rows now keep the original stream tag, so no data is lost.
+
+## [0.3.0 Unreleased]
+
+### Engine (aligned with wp-reactor 1.0.0)
+
+- Aligned to `wp-reactor` v1.0.0, gaining sharded rule aggregation and shared resource limits:
+  - **`conv` rules can aggregate across shards**: fixed-window `conv` (sort/top/dedup/where) rules are now shardable; each shard's close output is merged across shards via a watermark barrier and `apply_conv` runs on the merged batch (global top-N / sort), then a shared rate limit applies before emitting. EOS/drained flush is the correct exit for complete data; cancel drops unsealed (partial) buckets.
+  - **Cross-shard shared rate limit / budget**: `max_throttle` / `max_instances` / `max_memory_bytes` are enforced collectively across shards via shared `SharedLimits` atomics (shared sliding-window throttle, exact CAS instance reservation, rule-wide FailRule latch) instead of per-shard limits; the `rule_instances` metric sums across shards.
+  - Semantics fixes: `max_instances` is now exact under sharding (the old read-then-act could overshoot by ≤ shard_count-1); conv-stage throttle overflow dispatches per `on_exceed` (FailRule latches correctly); `shards=1` behavior is unchanged.
 
 ### Language (WFL)
 

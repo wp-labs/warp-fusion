@@ -259,9 +259,7 @@ async fn send_arrow_copy_files(files: Vec<PathBuf>, addr: String) -> WfgenResult
                 .set_nodelay(true)
                 .source_err(WfgenReason::Network, "set_nodelay")?;
             let mut sink = stream;
-            let copied = tokio::io::copy(&mut f, &mut sink)
-                .await
-                .source_err(WfgenReason::Network, "tcp replay write error")?;
+            let copied = copy_tcp(&mut f, &mut sink).await?;
             sink.shutdown()
                 .await
                 .source_err(WfgenReason::Network, "tcp replay shutdown")?;
@@ -285,6 +283,36 @@ async fn send_arrow_copy_files(files: Vec<PathBuf>, addr: String) -> WfgenResult
         total as f64 / n as f64 / (1024.0 * 1024.0),
     );
     Ok(())
+}
+
+/// 大块缓冲 TCP 回放:1 MiB 读写缓冲替代 `tokio::io::copy` 的 8 KiB 栈缓冲。
+///
+/// `tokio::io::copy` 用固定 8 KiB 内部缓冲——100M 数据(7.76GB)约 100 万次
+/// 文件读,每次都是 syscall + `tokio::fs` 的 spawn_blocking 线程池交接,把注入
+/// 卡在 ~20M EPS;1 MiB 缓冲把迭代降到 ~8k 次,恢复磁盘/网络级吞吐。
+async fn copy_tcp<R, W>(reader: &mut R, writer: &mut W) -> WfgenResult<u64>
+where
+    R: tokio::io::AsyncRead + Unpin,
+    W: tokio::io::AsyncWrite + Unpin,
+{
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let mut buf = vec![0u8; 1 << 22]; // 4 MiB
+    let mut total = 0u64;
+    loop {
+        let n = reader
+            .read(&mut buf)
+            .await
+            .source_err(WfgenReason::Io, "read input file")?;
+        if n == 0 {
+            break;
+        }
+        writer
+            .write_all(&buf[..n])
+            .await
+            .source_err(WfgenReason::Network, "tcp replay write")?;
+        total += n as u64;
+    }
+    Ok(total)
 }
 
 /// 把一个帧文件按 key 切分成 N 个分片帧文件(键闭包:同 key 同文件)。
@@ -460,9 +488,7 @@ async fn send_arrow_raw(input: PathBuf, addr: String, connections: usize) -> Wfg
                 .set_nodelay(true)
                 .source_err(WfgenReason::Network, "set_nodelay")?;
             let mut sink = stream;
-            let copied = tokio::io::copy(&mut file, &mut sink)
-                .await
-                .source_err(WfgenReason::Network, "tcp replay write error")?;
+            let copied = copy_tcp(&mut file, &mut sink).await?;
             sink.shutdown()
                 .await
                 .source_err(WfgenReason::Network, "tcp replay shutdown")?;

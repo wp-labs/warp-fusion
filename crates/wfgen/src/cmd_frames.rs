@@ -152,6 +152,7 @@ pub async fn send_arrow(
     connections: usize,
     shard_keys: Option<String>,
     shard_files: Option<String>,
+    rate_bytes: u64,
 ) -> WfgenResult<()> {
     let connections = connections.max(1);
 
@@ -169,7 +170,7 @@ pub async fn send_arrow(
                 "--shard-files must list at least one file",
             ));
         }
-        return send_arrow_copy_files(files, addr).await;
+        return send_arrow_copy_files(files, addr, rate_bytes).await;
     }
 
     // --shard-keys "bid_events:auction,auction_events:id,person_events:id"
@@ -178,10 +179,10 @@ pub async fn send_arrow(
 
     if key_by_stream.is_empty() {
         // 原样回放(raw copy):纯字节零解析;多连接时每条连接推完整文件
-        send_arrow_raw(input, addr, connections).await
+        send_arrow_raw(input, addr, connections, rate_bytes).await
     } else {
         // 发送时按 key 分区(动态 decode;适合无预分片文件的临时注入)
-        send_arrow_sharded(input, addr, connections, key_by_stream).await
+        send_arrow_sharded(input, addr, connections, key_by_stream, rate_bytes).await
     }
 }
 
@@ -239,7 +240,7 @@ fn shard_batch(
 /// 分片文件回放:每条连接纯 copy 一个已按 key 分区的帧文件(零解析)。
 /// 数据在生成/切分阶段按 key 分桶(键闭包),发送端不 decode——C-UCP × 键闭包
 /// 的最优注入形态(实测 100M 16 连接 ~19.8M EPS,与全量 copy 同级)。
-async fn send_arrow_copy_files(files: Vec<PathBuf>, addr: String) -> WfgenResult<()> {
+async fn send_arrow_copy_files(files: Vec<PathBuf>, addr: String, rate_bytes: u64) -> WfgenResult<()> {
     use tokio::io::AsyncWriteExt;
 
     let start = std::time::Instant::now();
@@ -259,7 +260,7 @@ async fn send_arrow_copy_files(files: Vec<PathBuf>, addr: String) -> WfgenResult
                 .set_nodelay(true)
                 .source_err(WfgenReason::Network, "set_nodelay")?;
             let mut sink = stream;
-            let copied = copy_tcp(&mut f, &mut sink).await?;
+            let copied = copy_tcp(&mut f, &mut sink, rate_bytes).await?;
             sink.shutdown()
                 .await
                 .source_err(WfgenReason::Network, "tcp replay shutdown")?;
@@ -290,14 +291,19 @@ async fn send_arrow_copy_files(files: Vec<PathBuf>, addr: String) -> WfgenResult
 /// `tokio::io::copy` 用固定 8 KiB 内部缓冲——100M 数据(7.76GB)约 100 万次
 /// 文件读,每次都是 syscall + `tokio::fs` 的 spawn_blocking 线程池交接,把注入
 /// 卡在 ~20M EPS;1 MiB 缓冲把迭代降到 ~8k 次,恢复磁盘/网络级吞吐。
-async fn copy_tcp<R, W>(reader: &mut R, writer: &mut W) -> WfgenResult<u64>
+async fn copy_tcp<R, W>(reader: &mut R, writer: &mut W, rate_bytes: u64) -> WfgenResult<u64>
 where
     R: tokio::io::AsyncRead + Unpin,
     W: tokio::io::AsyncWrite + Unpin,
 {
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    use std::time::Instant;
     let mut buf = vec![0u8; 1 << 22]; // 4 MiB
     let mut total = 0u64;
+    // 可选限速（rate_bytes/秒，0 = 不限速）：按目标速率控制平均注入，避免对
+    // 有状态引擎（如 qradar 450 规则）的瞬时 burst 积压。保持 raw-copy 零解码，
+    // 只在累计速率超前时 sleep 补齐——纯字节节流，不解析帧。
+    let start = Instant::now();
     loop {
         let n = reader
             .read(&mut buf)
@@ -311,6 +317,13 @@ where
             .await
             .source_err(WfgenReason::Network, "tcp replay write")?;
         total += n as u64;
+        if rate_bytes > 0 {
+            let expect_secs = total as f64 / rate_bytes as f64;
+            let actual_secs = start.elapsed().as_secs_f64();
+            if actual_secs < expect_secs {
+                tokio::time::sleep(tokio::time::Duration::from_secs_f64(expect_secs - actual_secs)).await;
+            }
+        }
     }
     Ok(total)
 }
@@ -465,7 +478,7 @@ fn write_frame(w: &mut impl std::io::Write, payload: &[u8]) -> WfgenResult<()> {
 
 /// 原样回放:每条连接 `tokio::io::copy` 完整帧文件(零解析)。
 /// `connections=1` 为单连接基线;`connections>1` 为 C-UCP 供给档位(只适合无状态负载)。
-async fn send_arrow_raw(input: PathBuf, addr: String, connections: usize) -> WfgenResult<()> {
+async fn send_arrow_raw(input: PathBuf, addr: String, connections: usize, rate_bytes: u64) -> WfgenResult<()> {
     use tokio::io::AsyncWriteExt;
 
     let connections = connections.max(1);
@@ -488,7 +501,7 @@ async fn send_arrow_raw(input: PathBuf, addr: String, connections: usize) -> Wfg
                 .set_nodelay(true)
                 .source_err(WfgenReason::Network, "set_nodelay")?;
             let mut sink = stream;
-            let copied = copy_tcp(&mut file, &mut sink).await?;
+            let copied = copy_tcp(&mut file, &mut sink, rate_bytes).await?;
             sink.shutdown()
                 .await
                 .source_err(WfgenReason::Network, "tcp replay shutdown")?;
@@ -526,6 +539,7 @@ async fn send_arrow_sharded(
     addr: String,
     connections: usize,
     key_by_stream: HashMap<String, String>,
+    _rate_bytes: u64,
 ) -> WfgenResult<()> {
     let start = std::time::Instant::now();
     /// 发给 writer 的消息:分桶子批次(需编码)或原始帧字节(未分桶流直发,零解码)。

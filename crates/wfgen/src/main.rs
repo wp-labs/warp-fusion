@@ -206,6 +206,13 @@ enum Commands {
         /// raw-copy speed while preserving key closure for stateful rules.
         #[arg(long)]
         shard_files: Option<String>,
+
+        /// Target replay rate in bytes/sec. 0 = unlimited (default). When > 0,
+        /// send-arrow paces its raw-copy at ~this rate per connection, so a
+        /// stateful engine (e.g. 450-rule qradar) is not hit with an instant
+        /// burst that swamps its steady-state capacity.
+        #[arg(long, default_value_t = 0)]
+        rate_bytes: u64,
     },
     /// Split a frame file into N key-sharded frame files (one per shard;
     /// same key always lands in the same file). Send them later with
@@ -366,7 +373,8 @@ async fn run_cli() -> WfgenResult<()> {
             connections,
             shard_keys,
             shard_files,
-        } => wfgen::cmd_frames::send_arrow(input, addr, connections, shard_keys, shard_files).await,
+            rate_bytes,
+        } => wfgen::cmd_frames::send_arrow(input, addr, connections, shard_keys, shard_files, rate_bytes).await,
         Commands::ShardFrames {
             input,
             shards,

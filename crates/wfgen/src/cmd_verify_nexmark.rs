@@ -16,7 +16,7 @@ use std::collections::{BinaryHeap, HashMap, HashSet};
 
 use serde_json::json;
 
-use crate::cmd_gen_nexmark::generate_events;
+use crate::cmd_gen_nexmark::{NxEvent, generate_events};
 use crate::error::WfgenResult;
 
 const SPAN: i64 = 600_000_000_000; // 10m sliding window
@@ -187,10 +187,13 @@ impl Sim {
             }
             self.heap.pop();
             self.pending.remove(&(auc, ci));
-            let cur = self
-                .state
-                .get(&auc)
-                .and_then(|st| if st[ci] != NONE { Some(st[ci] + SPAN) } else { None });
+            let cur = self.state.get(&auc).and_then(|st| {
+                if st[ci] != NONE {
+                    Some(st[ci] + SPAN)
+                } else {
+                    None
+                }
+            });
             let Some(cur) = cur else { continue };
             if cur > watermark {
                 self.pending.insert((auc, ci));
@@ -236,10 +239,9 @@ impl Sim {
         self.sweep(self.watermark);
         self.sweep2(self.watermark);
 
-        let st = self
-            .state
-            .entry(auc)
-            .or_insert([NONE, 0, NONE, 0, NONE, 0, NONE, NONE, NONE, NONE, NONE, NONE, NONE, 0, 0]);
+        let st = self.state.entry(auc).or_insert([
+            NONE, 0, NONE, 0, NONE, 0, NONE, NONE, NONE, NONE, NONE, NONE, NONE, 0, 0,
+        ]);
 
         // q5: count>=10/50/100 (fire+reset)
         for (i, t) in [10i64, 50, 100].iter().enumerate() {
@@ -271,7 +273,11 @@ impl Sim {
                     self.heap.push(Reverse((ns + SPAN, auc, ci)));
                 }
             }
-            st[mi] = if st[mi] == NONE { price } else { st[mi].max(price) };
+            st[mi] = if st[mi] == NONE {
+                price
+            } else {
+                st[mi].max(price)
+            };
             if st[mi] >= *t {
                 self.q7[i] += 1;
                 st[ci] = ns;
@@ -426,40 +432,16 @@ impl Sim {
     }
 }
 
-/// 轻量事件（丢弃 gen 输出的无关字段，桶序收集内存有界）。
-enum Ev {
-    Person { id: i64, ns: i64 },
-    Auction { ns: i64 },
-    Bid { auc: i64, price: i64, ns: i64, bidder: i64 },
-}
-
 pub fn run(count: i64, seed: u64) -> WfgenResult<()> {
     // 与 `gen-nexmark` 相同的 30s 桶序：事件按桶收集（桶内生成序），再按桶序
     // 喂模拟器——否则 phase-major 生成序会让滑动窗口/watermark 对拍失真。
+    // 直接用 NxEvent 字段（无 JSON 构造/解析），省生成阶段大部分开销。
     const T_BUCKET_NS: i64 = 30_000_000_000;
     const BASE_NS: i64 = 1767225600000000000; // 与 cmd_gen_nexmark::BASE_NS 一致
     const BUCKETS: usize = 60;
-    let mut buckets: Vec<Vec<Ev>> = (0..BUCKETS).map(|_| Vec::new()).collect();
-    generate_events(count, seed, |stream, _ns, fields| {
-        let ev = match stream {
-            "person_events" => Ev::Person {
-                id: fields.get("id").and_then(|v| v.as_i64()).unwrap_or(0),
-                ns: fields.get("dateTime").and_then(|v| v.as_i64()).unwrap_or(0),
-            },
-            "auction_events" => Ev::Auction {
-                ns: fields.get("dateTime").and_then(|v| v.as_i64()).unwrap_or(0),
-            },
-            "bid_events" => Ev::Bid {
-                auc: fields.get("auction").and_then(|v| v.as_i64()).unwrap_or(0),
-                price: fields.get("price").and_then(|v| v.as_i64()).unwrap_or(0),
-                ns: fields.get("dateTime").and_then(|v| v.as_i64()).unwrap_or(0),
-                bidder: fields.get("bidder").and_then(|v| v.as_i64()).unwrap_or(0),
-            },
-            _ => return Ok(()),
-        };
-        let ns = match &ev {
-            Ev::Person { ns, .. } | Ev::Auction { ns } | Ev::Bid { ns, .. } => *ns,
-        };
+    let mut buckets: Vec<Vec<NxEvent>> = (0..BUCKETS).map(|_| Vec::new()).collect();
+    generate_events(count, seed, |ev| {
+        let ns = ev.ns();
         let b = (((ns - BASE_NS).max(0)) / T_BUCKET_NS).min((BUCKETS - 1) as i64) as usize;
         buckets[b].push(ev);
         Ok(())
@@ -469,9 +451,15 @@ pub fn run(count: i64, seed: u64) -> WfgenResult<()> {
     for bucket in &mut buckets {
         for ev in bucket.drain(..) {
             match ev {
-                Ev::Person { id, .. } => sim.person(id),
-                Ev::Auction { .. } => sim.auction(),
-                Ev::Bid { auc, price, ns, bidder } => sim.bid(auc, price, ns, bidder),
+                NxEvent::Person { id, .. } => sim.person(id),
+                NxEvent::Auction { .. } => sim.auction(),
+                NxEvent::Bid {
+                    auc,
+                    price,
+                    ns,
+                    bidder,
+                    ..
+                } => sim.bid(auc, price, ns, bidder),
             }
         }
     }

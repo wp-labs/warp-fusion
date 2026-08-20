@@ -58,7 +58,7 @@ const STATES: [&str; 8] = ["CA", "CA", "CA", "NY", "CA", "IL", "MA", "TX"];
 const CHANNELS: [&str; 5] = ["Google", "Facebook", "Apple", "Direct", "Test"];
 
 struct Person {
-    state: &'static str,
+    state_idx: usize,
 }
 
 struct Auction {
@@ -87,6 +87,108 @@ enum BucketSink {
     },
 }
 
+/// 轻量事件描述：与 JSON 输出字段一一对应（rng 消耗顺序不变），
+/// gen 在回调里转 JSON，verify-nexmark 直接用字段（省 JSON 构造/解析）。
+#[derive(Debug, Clone, Copy)]
+pub enum NxEvent {
+    Person {
+        id: i64,
+        ns: i64,
+        city: usize,
+        state: usize,
+    },
+    Auction {
+        id: i64,
+        ns: i64,
+        initial_bid: i64,
+        reserve: i64,
+        expires: i64,
+        seller: i64,
+        category: i64,
+    },
+    Bid {
+        auc: i64,
+        ns: i64,
+        price: i64,
+        bidder: i64,
+        channel: usize,
+        url: i64,
+    },
+}
+
+impl NxEvent {
+    pub fn stream(&self) -> &'static str {
+        match self {
+            NxEvent::Person { .. } => "person_events",
+            NxEvent::Auction { .. } => "auction_events",
+            NxEvent::Bid { .. } => "bid_events",
+        }
+    }
+
+    pub fn ns(&self) -> i64 {
+        match self {
+            NxEvent::Person { ns, .. } | NxEvent::Auction { ns, .. } | NxEvent::Bid { ns, .. } => {
+                *ns
+            }
+        }
+    }
+}
+
+/// NxEvent → JSON 字段（不含 _stream/_window/_timestamp 元数据；由 write_event 补）。
+fn nx_to_value(ev: &NxEvent) -> serde_json::Value {
+    match ev {
+        NxEvent::Person {
+            id,
+            ns,
+            city,
+            state,
+        } => json!({
+            "id": id,
+            "name": format!("person_{}", id),
+            "email": format!("person{}@example.com", id),
+            "city": CITIES[*city],
+            "state": STATES[*state],
+            "dateTime": ns,
+        }),
+        NxEvent::Auction {
+            id,
+            ns,
+            initial_bid,
+            reserve,
+            expires,
+            seller,
+            category,
+        } => json!({
+            "id": id,
+            // 原版语义：id = i + 1，itemName/description 用 0 基 i（= id-1），保持兼容
+            "itemName": format!("item_{}", id - 1),
+            "description": format!("desc {}", id - 1),
+            "initialBid": initial_bid,
+            "reserve": reserve,
+            "dateTime": ns,
+            "expires": expires,
+            "seller": seller,
+            "category": category,
+            "extra": "",
+        }),
+        NxEvent::Bid {
+            auc,
+            ns,
+            price,
+            bidder,
+            channel,
+            url,
+        } => json!({
+            "auction": auc,
+            "bidder": bidder,
+            "price": price,
+            "channel": CHANNELS[*channel],
+            "url": format!("http://www.example.com/{}", url),
+            "dateTime": ns,
+            "extra": "",
+        }),
+    }
+}
 /// Serialize one event (fields + `_stream`/`_window`/`_timestamp` metadata)
 /// and route it to the time bucket covering `ns` (or stdout in `--no-sort`
 /// mode). Writes stay bounded: one bucket file is buffered at a time, never
@@ -128,10 +230,9 @@ fn write_event(
 
 pub fn generate_events<F>(count: i64, seed: u64, mut emit: F) -> WfgenResult<()>
 where
-    F: FnMut(&str, i64, serde_json::Value) -> WfgenResult<()>,
+    F: FnMut(NxEvent) -> WfgenResult<()>,
 {
     let mut rng = StdRng::seed_from_u64(seed);
-
 
     let num_person = (count as f64 * 0.02) as i64;
     let num_auction = (count as f64 * 0.06) as i64;
@@ -140,7 +241,7 @@ where
     // persons（参考数据，1000，有界）
     let persons: Vec<Person> = (0..PERSONS)
         .map(|_| Person {
-            state: STATES[rng.random_range(0..STATES.len())],
+            state_idx: rng.random_range(0..STATES.len()),
         })
         .collect();
 
@@ -166,58 +267,62 @@ where
         let pid = (i % PERSONS as i64) as usize;
         let p = &persons[pid];
         let ns = BASE_NS + rng.random_range(0..=(SPAN_NS / 10));
-        emit("person_events", ns, json!({
-                "id": pid as i64 + 1,
-                "name": format!("person_{}", pid + 1),
-                "email": format!("person{}@example.com", pid + 1),
-                "city": CITIES[rng.random_range(0..CITIES.len())],
-                "state": p.state,
-                "dateTime": ns,
-            }))?;
+        let city = rng.random_range(0..CITIES.len());
+        emit(NxEvent::Person {
+            id: pid as i64 + 1,
+            ns,
+            city,
+            state: p.state_idx,
+        })?;
     }
 
     // auctions（时间窗 10%-100%）
     for i in 0..num_auction {
         let a = &auctions[i as usize];
         let ns = BASE_NS + rng.random_range((SPAN_NS / 10)..=SPAN_NS);
-        emit("auction_events", ns, json!({
-                "id": i + 1,
-                "itemName": format!("item_{}", i),
-                "description": format!("desc {}", i),
-                "initialBid": rng.random_range(10..=1000),
-                "reserve": rng.random_range(1000..=10000),
-                "dateTime": ns,
-                "expires": ns + rng.random_range(600_000_000_000..=1_800_000_000_000),
-                "seller": a.seller,
-                "category": a.category,
-                "extra": "",
-            }))?;
+        // 必须显式 i32：原 json! 写法里 10..=1000 无约束→推断 i32（serde to_value
+        // 默认），rand 对 i32/i64 采样结果不同，类型不一致会打乱 rng 序列。
+        let initial_bid = rng.random_range(10..=1000i32) as i64;
+        let reserve = rng.random_range(1000..=10000i32) as i64;
+        let expires = ns + rng.random_range(600_000_000_000..=1_800_000_000_000);
+        emit(NxEvent::Auction {
+            id: i + 1,
+            ns,
+            initial_bid,
+            reserve,
+            expires,
+            seller: a.seller,
+            category: a.category,
+        })?;
     }
 
     // bids（92% firehose，时间窗 20%-100%）
     for _ in 0..num_bid {
         let aidx = rng.random_range(0..auctions.len());
         let a = &auctions[aidx];
+        // 同 auction：原 json! 里 price 无约束→i32，需显式 i32 保持 rng 序列。
         let price = if a.hot {
-            rng.random_range(100..=500)
+            rng.random_range(100..=500i32)
         } else {
-            rng.random_range(10..=150)
-        };
+            rng.random_range(10..=150i32)
+        } as i64;
         let bidder = if rng.random::<f64>() < 0.5 {
             rng.random_range(1..=HOT_BIDDERS as i64)
         } else {
             rng.random_range(1..=PERSONS as i64)
         };
         let ns = BASE_NS + rng.random_range((SPAN_NS / 5)..=SPAN_NS);
-        emit("bid_events", ns, json!({
-                "auction": aidx as i64 + 1,
-                "bidder": bidder,
-                "price": price,
-                "channel": CHANNELS[rng.random_range(0..CHANNELS.len())],
-                "url": format!("http://www.example.com/{}", rng.random_range(100..=999)),
-                "dateTime": ns,
-                "extra": "",
-            }))?;
+        // 同 auction：原 json! 里 100..=999 无约束→i32，需显式 i32 保持 rng 序列。
+        let channel = rng.random_range(0..CHANNELS.len());
+        let url = rng.random_range(100..=999i32) as i64;
+        emit(NxEvent::Bid {
+            auc: aidx as i64 + 1,
+            ns,
+            price,
+            bidder,
+            channel,
+            url,
+        })?;
     }
 
     Ok(())
@@ -244,8 +349,8 @@ pub fn run(count: i64, seed: u64, no_sort: bool) -> WfgenResult<()> {
     };
     let mut sink = sink;
 
-    generate_events(count, seed, |stream, ns, fields| {
-        write_event(&mut sink, stream, fields, ns)
+    generate_events(count, seed, |ev| {
+        write_event(&mut sink, ev.stream(), nx_to_value(&ev), ev.ns())
     })?;
 
     match sink {
@@ -277,4 +382,136 @@ pub fn run(count: i64, seed: u64, no_sort: bool) -> WfgenResult<()> {
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// 回归测试：NxEvent 路径（当前 generate_events）必须与重构前的 json! 写法
+    /// 产出完全一致的事件流（rng 序列不变）。
+    ///
+    /// 背景：重构时把 emit 回调从 `json!` 值改为 `NxEvent` 结构体，导致
+    /// `random_range(10..=1000)` 的整数类型推断从 i32（无约束，serde to_value
+    /// 默认）变成 i64（结构体字段类型）。rand 对 i32/i64 范围采样结果不同，
+    /// auction/bid 序列整体偏移（person 因 city 用 usize 不受影响）。
+    /// 本测试用原版 json! 写法作为参照实现，逐事件断言一致性。
+    #[test]
+    fn nxevent_preserves_json_rng_sequence() {
+        const COUNT: i64 = 2000;
+        const SEED: u64 = 1;
+
+        // 参照实现：重构前（HEAD）generate_events 的 json! 写法，保持原版类型推断。
+        let mut rng = StdRng::seed_from_u64(SEED);
+        let num_person = (COUNT as f64 * 0.02) as i64;
+        let num_auction = (COUNT as f64 * 0.06) as i64;
+        let num_bid = COUNT - num_person - num_auction;
+
+        let persons: Vec<usize> = (0..PERSONS)
+            .map(|_| rng.random_range(0..STATES.len()))
+            .collect();
+        struct RefAuction {
+            seller: i64,
+            category: i64,
+            hot: bool,
+        }
+        let auctions: Vec<RefAuction> = (0..num_auction)
+            .map(|_| {
+                let hot = rng.random::<f64>() < 0.50;
+                let seller = if hot {
+                    rng.random_range(1..=HOT_SELLERS as i64)
+                } else {
+                    rng.random_range(1..=PERSONS as i64)
+                };
+                RefAuction {
+                    seller,
+                    category: rng.random_range(1..=26),
+                    hot,
+                }
+            })
+            .collect();
+
+        let mut ref_events: Vec<(String, i64, serde_json::Value)> = Vec::new();
+        for i in 0..num_person {
+            let pid = (i % PERSONS as i64) as usize;
+            let ns = BASE_NS + rng.random_range(0..=(SPAN_NS / 10));
+            ref_events.push((
+                "person_events".into(),
+                ns,
+                json!({
+                    "id": pid as i64 + 1,
+                    "name": format!("person_{}", pid + 1),
+                    "email": format!("person{}@example.com", pid + 1),
+                    "city": CITIES[rng.random_range(0..CITIES.len())],
+                    "state": STATES[persons[pid]],
+                    "dateTime": ns,
+                }),
+            ));
+        }
+        for i in 0..num_auction {
+            let a = &auctions[i as usize];
+            let ns = BASE_NS + rng.random_range((SPAN_NS / 10)..=SPAN_NS);
+            ref_events.push((
+                "auction_events".into(),
+                ns,
+                json!({
+                    "id": i + 1,
+                    "itemName": format!("item_{}", i),
+                    "description": format!("desc {}", i),
+                    "initialBid": rng.random_range(10..=1000),
+                    "reserve": rng.random_range(1000..=10000),
+                    "dateTime": ns,
+                    "expires": ns + rng.random_range(600_000_000_000..=1_800_000_000_000),
+                    "seller": a.seller,
+                    "category": a.category,
+                    "extra": "",
+                }),
+            ));
+        }
+        for _ in 0..num_bid {
+            let aidx = rng.random_range(0..auctions.len());
+            let a = &auctions[aidx];
+            let price = if a.hot {
+                rng.random_range(100..=500)
+            } else {
+                rng.random_range(10..=150)
+            };
+            let bidder = if rng.random::<f64>() < 0.5 {
+                rng.random_range(1..=HOT_BIDDERS as i64)
+            } else {
+                rng.random_range(1..=PERSONS as i64)
+            };
+            let ns = BASE_NS + rng.random_range((SPAN_NS / 5)..=SPAN_NS);
+            ref_events.push((
+                "bid_events".into(),
+                ns,
+                json!({
+                    "auction": aidx as i64 + 1,
+                    "bidder": bidder,
+                    "price": price,
+                    "channel": CHANNELS[rng.random_range(0..CHANNELS.len())],
+                    "url": format!("http://www.example.com/{}", rng.random_range(100..=999)),
+                    "dateTime": ns,
+                    "extra": "",
+                }),
+            ));
+        }
+
+        // 目标：当前生产路径。
+        let mut got: Vec<(String, i64, serde_json::Value)> = Vec::new();
+        generate_events(COUNT, SEED, |ev| {
+            got.push((ev.stream().to_string(), ev.ns(), nx_to_value(&ev)));
+            Ok(())
+        })
+        .unwrap();
+
+        assert_eq!(got.len(), ref_events.len(), "事件数不一致");
+        for (idx, ((g_stream, g_ns, g_val), (r_stream, r_ns, r_val))) in
+            got.iter().zip(ref_events.iter()).enumerate()
+        {
+            assert_eq!(g_stream, r_stream, "event {idx}: stream 不一致");
+            assert_eq!(g_ns, r_ns, "event {idx}: ns 不一致");
+            assert_eq!(g_val, r_val, "event {idx}: 字段不一致（rng 序列被破坏）");
+        }
+    }
 }

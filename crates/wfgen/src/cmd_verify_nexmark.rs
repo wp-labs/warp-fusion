@@ -435,12 +435,16 @@ fn run_sharded(count: i64, seed: u64, n_shards: usize) -> WfgenResult<()> {
     const BASE_NS: i64 = 1767225600000000000; // 与 cmd_gen_nexmark::BASE_NS 一致
     const BUCKETS: usize = 60;
     let mut buckets: Vec<Vec<NxEvent>> = (0..BUCKETS).map(|_| Vec::new()).collect();
+    // 生成阶段进度条（stderr、仅 TTY）。
+    let pb_gen = crate::progress::ProgressBar::new(count as u64, "verify: 生成事件");
     generate_events(count, seed, |ev| {
+        pb_gen.tick();
         let ns = ev.ns();
         let b = (((ns - BASE_NS).max(0)) / T_BUCKET_NS).min((BUCKETS - 1) as i64) as usize;
         buckets[b].push(ev);
         Ok(())
     })?;
+    pb_gen.finish();
 
     // 第二遍：按桶序扫描，预计算全局前缀 max ns（含当前 bid，即单线程
     // `if ns > watermark { watermark = ns }` 之后的 watermark——注意原版
@@ -475,11 +479,15 @@ fn run_sharded(count: i64, seed: u64, n_shards: usize) -> WfgenResult<()> {
 
     // 并行处理：每分片一个 Sim，状态按 auction 隔离，watermark 用预存全局值。
     let persons = Arc::new(person_ids);
+    let n_bid = count - (count as f64 * 0.02) as i64 - (count as f64 * 0.06) as i64;
+    let pb_sim = crate::progress::ProgressBar::new(n_bid as u64, "verify: 模拟");
+    let sim_counter = pb_sim.counter();
     let mut sims: Vec<Sim> = thread::scope(|scope| {
         let handles: Vec<_> = shards
             .into_iter()
             .map(|shard| {
                 let persons = Arc::clone(&persons);
+                let counter = Arc::clone(&sim_counter);
                 scope.spawn(move || {
                     let mut sim = Sim::new();
                     for se in shard {
@@ -493,6 +501,7 @@ fn run_sharded(count: i64, seed: u64, n_shards: usize) -> WfgenResult<()> {
                         {
                             sim.bid(auc, price, ns, bidder, se.wm, &persons);
                         }
+                        counter.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                     }
                     sim
                 })
@@ -500,6 +509,7 @@ fn run_sharded(count: i64, seed: u64, n_shards: usize) -> WfgenResult<()> {
             .collect();
         handles.into_iter().map(|h| h.join().unwrap()).collect()
     });
+    pb_sim.finish();
 
     // 合并分片计数（q16_sum 按 (auc, bucket) key 求和，不同分片 key 不相交）。
     let mut merged = sims.remove(0);

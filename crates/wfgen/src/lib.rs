@@ -15,6 +15,7 @@ pub mod loader;
 pub mod oracle;
 pub mod output;
 pub mod prelude;
+pub mod progress;
 pub mod tcp_send;
 pub mod validate;
 pub mod verify;

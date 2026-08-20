@@ -349,9 +349,13 @@ pub fn run(count: i64, seed: u64, no_sort: bool) -> WfgenResult<()> {
     };
     let mut sink = sink;
 
+    // 生成阶段进度条（stderr、仅 TTY；stdout 是数据流不被污染）。
+    let pb = crate::progress::ProgressBar::new(count as u64, "gen-nexmark");
     generate_events(count, seed, |ev| {
+        pb.tick();
         write_event(&mut sink, ev.stream(), nx_to_value(&ev), ev.ns())
     })?;
+    pb.finish();
 
     match sink {
         BucketSink::Direct(mut out) => {

@@ -5640,6 +5640,7 @@ dependencies = [
  "orion-error",
  "rand 0.9.5",
  "rayon",
+ "rustc-hash",
  "serde",
  "serde_json",
  "similar",

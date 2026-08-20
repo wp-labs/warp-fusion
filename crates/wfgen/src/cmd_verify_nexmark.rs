@@ -12,10 +12,11 @@
 //! - q16 固定 10m 桶 sum(price)>=1000；q21 anti join 用 person 窗口集合。
 
 use std::cmp::Reverse;
-use std::collections::{BinaryHeap, HashMap, HashSet};
+use std::collections::BinaryHeap;
 use std::sync::Arc;
 use std::thread;
 
+use rustc_hash::{FxHashMap, FxHashSet};
 use serde_json::json;
 
 use crate::cmd_gen_nexmark::{NxEvent, generate_events};
@@ -53,25 +54,25 @@ struct Sim {
     q21: i64,
     // q5/q7/q6 shared instance table:
     // [c10,n10,c50,n50,c100,n100,c200,m200,c500,m500,c1000,m1000,c_avg,sum_avg,cnt_avg]
-    state: HashMap<i64, [i64; 15]>,
+    state: FxHashMap<i64, [i64; 15]>,
     heap: BinaryHeap<Reverse<(i64, i64, usize)>>, // (expire_at, auc, slot)
-    pending: HashSet<(i64, usize)>,
+    pending: FxHashSet<(i64, usize)>,
     // q15-q20 independent rule state (own machines, shared lazy heap)
-    q15_count: HashMap<i64, i64>,
-    q15_created: HashMap<i64, i64>,
-    q17_set: HashMap<i64, HashSet<i64>>,
-    q17_created: HashMap<i64, i64>,
-    q18_count: HashMap<i64, i64>,
-    q18_created: HashMap<i64, i64>,
-    q19_step: HashMap<i64, i64>,
-    q19_t0: HashMap<i64, i64>,
-    q19_created: HashMap<i64, i64>,
-    q20_count: HashMap<i64, i64>,
-    q20_created: HashMap<i64, i64>,
+    q15_count: FxHashMap<i64, i64>,
+    q15_created: FxHashMap<i64, i64>,
+    q17_set: FxHashMap<i64, FxHashSet<i64>>,
+    q17_created: FxHashMap<i64, i64>,
+    q18_count: FxHashMap<i64, i64>,
+    q18_created: FxHashMap<i64, i64>,
+    q19_step: FxHashMap<i64, i64>,
+    q19_t0: FxHashMap<i64, i64>,
+    q19_created: FxHashMap<i64, i64>,
+    q20_count: FxHashMap<i64, i64>,
+    q20_created: FxHashMap<i64, i64>,
     heap2: BinaryHeap<Reverse<(i64, &'static str, i64)>>,
-    pending2: HashSet<(&'static str, i64)>,
+    pending2: FxHashSet<(&'static str, i64)>,
     // q16 fixed buckets
-    q16_sum: HashMap<(i64, i64), i64>,
+    q16_sum: FxHashMap<(i64, i64), i64>,
 }
 
 impl Default for Sim {
@@ -82,6 +83,12 @@ impl Default for Sim {
 
 impl Sim {
     fn new() -> Self {
+        Self::with_capacity(1024)
+    }
+
+    /// `auction_cap` 是预期的 auction 数（num_auction）；各 per-key 状态按此预分配
+    /// 容量，避免 30M/100M 规模下大量 rehash。
+    fn with_capacity(auction_cap: usize) -> Self {
         Sim {
             q2: 0,
             n_auction: 0,
@@ -99,23 +106,23 @@ impl Sim {
             q19: 0,
             q20: 0,
             q21: 0,
-            state: HashMap::new(),
+            state: FxHashMap::with_capacity_and_hasher(auction_cap, Default::default()),
             heap: BinaryHeap::new(),
-            pending: HashSet::new(),
-            q15_count: HashMap::new(),
-            q15_created: HashMap::new(),
-            q17_set: HashMap::new(),
-            q17_created: HashMap::new(),
-            q18_count: HashMap::new(),
-            q18_created: HashMap::new(),
-            q19_step: HashMap::new(),
-            q19_t0: HashMap::new(),
-            q19_created: HashMap::new(),
-            q20_count: HashMap::new(),
-            q20_created: HashMap::new(),
+            pending: FxHashSet::with_capacity_and_hasher(auction_cap * 4, Default::default()),
+            q15_count: FxHashMap::with_capacity_and_hasher(auction_cap, Default::default()),
+            q15_created: FxHashMap::with_capacity_and_hasher(auction_cap, Default::default()),
+            q17_set: FxHashMap::with_capacity_and_hasher(auction_cap, Default::default()),
+            q17_created: FxHashMap::with_capacity_and_hasher(auction_cap, Default::default()),
+            q18_count: FxHashMap::with_capacity_and_hasher(auction_cap, Default::default()),
+            q18_created: FxHashMap::with_capacity_and_hasher(auction_cap, Default::default()),
+            q19_step: FxHashMap::with_capacity_and_hasher(auction_cap, Default::default()),
+            q19_t0: FxHashMap::with_capacity_and_hasher(auction_cap, Default::default()),
+            q19_created: FxHashMap::with_capacity_and_hasher(auction_cap, Default::default()),
+            q20_count: FxHashMap::with_capacity_and_hasher(auction_cap, Default::default()),
+            q20_created: FxHashMap::with_capacity_and_hasher(auction_cap, Default::default()),
             heap2: BinaryHeap::new(),
-            pending2: HashSet::new(),
-            q16_sum: HashMap::new(),
+            pending2: FxHashSet::with_capacity_and_hasher(auction_cap * 4, Default::default()),
+            q16_sum: FxHashMap::with_capacity_and_hasher(auction_cap * 2, Default::default()),
         }
     }
 
@@ -220,7 +227,15 @@ impl Sim {
         }
     }
 
-    fn bid(&mut self, auc: i64, price: i64, ns: i64, bidder: i64, wm: i64, persons: &HashSet<i64>) {
+    fn bid(
+        &mut self,
+        auc: i64,
+        price: i64,
+        ns: i64,
+        bidder: i64,
+        wm: i64,
+        persons: &FxHashSet<i64>,
+    ) {
         self.n_bid += 1;
         if auc % 123 == 0 {
             self.q2 += 1;
@@ -321,7 +336,7 @@ impl Sim {
         // q17: distinct bidder count >= 20 (fire+reset, set cleared)
         if !self.q17_created.contains_key(&auc) {
             self.q17_created.insert(auc, ns);
-            self.q17_set.insert(auc, HashSet::new());
+            self.q17_set.insert(auc, FxHashSet::default());
             self.push2("q17", auc, ns);
         }
         {
@@ -451,7 +466,8 @@ fn run_sharded(count: i64, seed: u64, n_shards: usize) -> WfgenResult<()> {
     // person/auction 事件不推进 watermark），同时把 bid 路由到分片。
     // person/auction 只做无状态处理；桶逐个释放控制峰值内存。
     let mut shards: Vec<Vec<ShardedEvent>> = (0..n_shards).map(|_| Vec::new()).collect();
-    let mut person_ids: HashSet<i64> = HashSet::new();
+    let mut person_ids: FxHashSet<i64> =
+        FxHashSet::with_capacity_and_hasher(1024, Default::default());
     let mut q8: i64 = 0;
     let mut n_auction: i64 = 0;
     let mut cur_max: i64 = i64::MIN;
@@ -480,6 +496,7 @@ fn run_sharded(count: i64, seed: u64, n_shards: usize) -> WfgenResult<()> {
     // 并行处理：每分片一个 Sim，状态按 auction 隔离，watermark 用预存全局值。
     let persons = Arc::new(person_ids);
     let n_bid = count - (count as f64 * 0.02) as i64 - (count as f64 * 0.06) as i64;
+    let per_shard_cap = (n_auction as usize / n_shards).max(1);
     let pb_sim = crate::progress::ProgressBar::new(n_bid as u64, "verify: 模拟");
     let sim_counter = pb_sim.counter();
     let mut sims: Vec<Sim> = thread::scope(|scope| {
@@ -489,7 +506,7 @@ fn run_sharded(count: i64, seed: u64, n_shards: usize) -> WfgenResult<()> {
                 let persons = Arc::clone(&persons);
                 let counter = Arc::clone(&sim_counter);
                 scope.spawn(move || {
-                    let mut sim = Sim::new();
+                    let mut sim = Sim::with_capacity(per_shard_cap);
                     for se in shard {
                         if let NxEvent::Bid {
                             auc,

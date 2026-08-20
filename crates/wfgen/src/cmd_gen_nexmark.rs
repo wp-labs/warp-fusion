@@ -4,18 +4,19 @@
 //! depend on Python. Emits wfusion JSONL (`_stream`/`_window`/`_timestamp`
 //! metadata + event fields, `dateTime` in epoch ns).
 //!
-//! Output is **globally time-ordered** (bucket-sorted, bounded memory): events
-//! are generated phase-major (persons → auctions → bids) exactly like the
-//! Python port, but each event is routed to one of `TIME_BUCKETS` 30-second
+//! Output is **globally time-ordered at bucket granularity** (bounded memory):
+//! events are generated phase-major (persons → auctions → bids) exactly like
+//! the Python port, but each event is routed to one of `TIME_BUCKETS` 30-second
 //! time buckets (a temp file per bucket) and emitted bucket-by-bucket, so the
-//! stream arrives in event-time order. Batch event-time span therefore drops
-//! from ~24 min (phase-major) to a few seconds at benchmark density (100M rows
-//! / 30 min ≈ 1.8 s per 100k-row batch), letting `over`-window time eviction
-//! work (previously it never fired: every 100k-row batch contained data near
-//! the end of the 30 min span, so `batch.max_ts < watermark - over` never
-//! held and the window retained the whole dataset — q1 RSS 21-25GB). The event
-//! *set* (rng consumption order, fields) is unchanged — only emission order
-//! differs — so EMIT ground truths stay valid.
+//! stream arrives in approximate event-time order (bucket-internal order is the
+//! generation order; a 30 s bucket is far below the 10 min `over` eviction
+//! granularity). Batch event-time span therefore drops from ~24 min
+//! (phase-major) to <= ~30 s, letting `over`-window time eviction work
+//! (previously it never fired: every 100k-row batch contained data near the
+//! end of the 30 min span, so `batch.max_ts < watermark - over` never held and
+//! the window retained the whole dataset — q1 RSS 21-25GB). The event *set*
+//! (rng consumption order, fields) is unchanged — only emission order differs
+//! — so EMIT ground truths stay valid.
 //!
 //! Usage: `wfgen gen-nexmark <count> [--seed N] [--no-sort]`
 
@@ -84,19 +85,6 @@ enum BucketSink {
         writers: Vec<Option<std::io::BufWriter<File>>>,
         tmp_dir: std::path::PathBuf,
     },
-}
-
-/// Extract the `dateTime` epoch-ns from one JSONL line without a full JSON
-/// parse (hot path: once per emitted event, 100M+ events).
-fn extract_date_time_ns(line: &[u8]) -> Option<i64> {
-    const KEY: &[u8] = b"\"dateTime\":";
-    let idx = line.windows(KEY.len()).position(|w| w == KEY)?;
-    let rest = &line[idx + KEY.len()..];
-    let end = rest
-        .iter()
-        .position(|b| !b.is_ascii_digit())
-        .unwrap_or(rest.len());
-    std::str::from_utf8(&rest[..end]).ok()?.parse().ok()
 }
 
 /// Serialize one event (fields + `_stream`/`_window`/`_timestamp` metadata)
@@ -269,29 +257,22 @@ pub fn run(count: i64, seed: u64, no_sort: bool) -> WfgenResult<()> {
                 .map_err(|e| error::error(WfgenReason::Io, format!("flush stdout: {e}")))?;
         }
         BucketSink::Sorted { writers, tmp_dir } => {
-            // Close all bucket files, then emit bucket-by-bucket: each bucket is
-            // read, sorted by `dateTime` (bounded: one ~55MB bucket at a time
-            // even at 100M events), and written in order → globally strict
-            // event-time order. Temp dir removed afterwards.
+            // Close all bucket files, then emit bucket-by-bucket in order. No
+            // per-bucket sort: a 30 s bucket is far below the 10 min `over`
+            // eviction granularity, so bucket-internal generation order is
+            // fine (batch span at 100M density ≈ seconds; previously phase-
+            // major emission made it ~24 min and time eviction never fired).
+            // Skipping the sort avoids re-reading + parsing + sorting the
+            // whole 10GB+ event set. Temp dir removed afterwards.
             drop(writers);
             let stdout = std::io::stdout();
-            let mut out = std::io::BufWriter::new(stdout.lock());
+            let mut out = std::io::BufWriter::with_capacity(1 << 20, stdout.lock());
             for i in 0..TIME_BUCKETS {
                 let path = tmp_dir.join(format!("b{i:03}.jsonl"));
                 let data = std::fs::read(&path)
                     .map_err(|e| error::error(WfgenReason::Io, format!("read bucket file: {e}")))?;
-                let mut entries: Vec<(i64, &[u8])> = data
-                    .split(|&b| b == b'\n')
-                    .filter(|l| !l.is_empty())
-                    .filter_map(|l| extract_date_time_ns(l).map(|ns| (ns, l)))
-                    .collect();
-                entries.sort_by_key(|(ns, _)| *ns);
-                for (_, line) in entries {
-                    out.write_all(line)
-                        .map_err(|e| error::error(WfgenReason::Io, format!("write stdout: {e}")))?;
-                    out.write_all(b"\n")
-                        .map_err(|e| error::error(WfgenReason::Io, format!("write stdout: {e}")))?;
-                }
+                out.write_all(&data)
+                    .map_err(|e| error::error(WfgenReason::Io, format!("write stdout: {e}")))?;
             }
             out.flush()
                 .map_err(|e| error::error(WfgenReason::Io, format!("flush stdout: {e}")))?;

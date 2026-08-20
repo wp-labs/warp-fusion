@@ -19,6 +19,7 @@ use std::io::{BufRead, BufReader, BufWriter, Write};
 use std::path::{Path, PathBuf};
 
 use orion_error::conversion::SourceErr;
+use rayon::prelude::*;
 
 use wf_lang::WindowSchema;
 
@@ -86,15 +87,23 @@ pub async fn dump_frames(
     let mut total_frames = 0usize;
     let mut total_bytes = 0usize;
 
+    // Read lines in `chunk`-row batches and parse them in parallel (rayon,
+    // order-preserving): `parse_gen_event_line` is a pure per-line function, so
+    // the 23GB JSONL parse dominates dump time and parallelizes cleanly. Batch
+    // boundaries stay identical to the serial path (same lines, same order).
+    let mut lines_buf: Vec<String> = Vec::with_capacity(chunk.unwrap_or(1 << 20));
     for line in reader.lines() {
         let line = line.source_err(WfgenReason::Io, format!("reading {}", input.display()))?;
-        if let Some(ev) = parse_gen_event_line(&line, &input)? {
-            events.push(ev);
-        }
+        lines_buf.push(line);
 
         if let Some(n) = chunk
-            && events.len() >= n
+            && lines_buf.len() >= n
         {
+            events = lines_buf
+                .par_iter()
+                .filter_map(|l| parse_gen_event_line(l, &input).transpose())
+                .collect::<WfgenResult<Vec<_>>>()?;
+            lines_buf.clear();
             total_frames += write_frames(
                 &events,
                 &schemas,
@@ -109,7 +118,12 @@ pub async fn dump_frames(
         }
     }
 
-    if !events.is_empty() {
+    if !lines_buf.is_empty() {
+        events = lines_buf
+            .par_iter()
+            .filter_map(|l| parse_gen_event_line(l, &input).transpose())
+            .collect::<WfgenResult<Vec<_>>>()?;
+        lines_buf.clear();
         total_frames += write_frames(
             &events,
             &schemas,
@@ -240,7 +254,11 @@ fn shard_batch(
 /// 分片文件回放:每条连接纯 copy 一个已按 key 分区的帧文件(零解析)。
 /// 数据在生成/切分阶段按 key 分桶(键闭包),发送端不 decode——C-UCP × 键闭包
 /// 的最优注入形态(实测 100M 16 连接 ~19.8M EPS,与全量 copy 同级)。
-async fn send_arrow_copy_files(files: Vec<PathBuf>, addr: String, rate_bytes: u64) -> WfgenResult<()> {
+async fn send_arrow_copy_files(
+    files: Vec<PathBuf>,
+    addr: String,
+    rate_bytes: u64,
+) -> WfgenResult<()> {
     use tokio::io::AsyncWriteExt;
 
     let start = std::time::Instant::now();
@@ -296,8 +314,8 @@ where
     R: tokio::io::AsyncRead + Unpin,
     W: tokio::io::AsyncWrite + Unpin,
 {
-    use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use std::time::Instant;
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
     let mut buf = vec![0u8; 1 << 22]; // 4 MiB
     let mut total = 0u64;
     // 可选限速（rate_bytes/秒，0 = 不限速）：按目标速率控制平均注入，避免对
@@ -321,7 +339,10 @@ where
             let expect_secs = total as f64 / rate_bytes as f64;
             let actual_secs = start.elapsed().as_secs_f64();
             if actual_secs < expect_secs {
-                tokio::time::sleep(tokio::time::Duration::from_secs_f64(expect_secs - actual_secs)).await;
+                tokio::time::sleep(tokio::time::Duration::from_secs_f64(
+                    expect_secs - actual_secs,
+                ))
+                .await;
             }
         }
     }
@@ -478,7 +499,12 @@ fn write_frame(w: &mut impl std::io::Write, payload: &[u8]) -> WfgenResult<()> {
 
 /// 原样回放:每条连接 `tokio::io::copy` 完整帧文件(零解析)。
 /// `connections=1` 为单连接基线;`connections>1` 为 C-UCP 供给档位(只适合无状态负载)。
-async fn send_arrow_raw(input: PathBuf, addr: String, connections: usize, rate_bytes: u64) -> WfgenResult<()> {
+async fn send_arrow_raw(
+    input: PathBuf,
+    addr: String,
+    connections: usize,
+    rate_bytes: u64,
+) -> WfgenResult<()> {
     use tokio::io::AsyncWriteExt;
 
     let connections = connections.max(1);

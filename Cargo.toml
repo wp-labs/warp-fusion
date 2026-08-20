@@ -35,6 +35,7 @@ wf-connector-api =  "0.2"
 wp-connectors = { git = "https://github.com/wp-labs/wp-connectors.git", tag = "v0.19.0" }
 wp-core-connectors = "0.8"
 serde_json = "1.0"
+rayon = "1"
 chrono = { version = "0.4", features = ["serde"] }
 clap = { version = "4", features = ["derive"] }
 tokio = { version = "1", features = ["net", "time", "rt", "rt-multi-thread", "macros", "signal"] }

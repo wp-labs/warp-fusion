@@ -71,6 +71,11 @@ enum Commands {
         /// RNG seed for deterministic output
         #[arg(long, default_value_t = 1)]
         seed: u64,
+
+        /// Emit phase-major generation order instead of event-time order
+        /// (pre-2026-08-20 behavior; breaks `over`-window time eviction)
+        #[arg(long)]
+        no_sort: bool,
     },
     /// Lint (validate) a .wfg scenario file
     Lint {
@@ -320,7 +325,11 @@ async fn run_cli() -> WfgenResult<()> {
             )
             .await
         }
-        Commands::GenNexmark { count, seed } => wfgen::cmd_gen_nexmark::run(count, seed),
+        Commands::GenNexmark {
+            count,
+            seed,
+            no_sort,
+        } => wfgen::cmd_gen_nexmark::run(count, seed, no_sort),
         Commands::Lint { scenario, ws, wfl } => wfgen::cmd_lint::run(scenario, ws, wfl),
         Commands::Verify {
             expected,
@@ -374,7 +383,17 @@ async fn run_cli() -> WfgenResult<()> {
             shard_keys,
             shard_files,
             rate_bytes,
-        } => wfgen::cmd_frames::send_arrow(input, addr, connections, shard_keys, shard_files, rate_bytes).await,
+        } => {
+            wfgen::cmd_frames::send_arrow(
+                input,
+                addr,
+                connections,
+                shard_keys,
+                shard_files,
+                rate_bytes,
+            )
+            .await
+        }
         Commands::ShardFrames {
             input,
             shards,

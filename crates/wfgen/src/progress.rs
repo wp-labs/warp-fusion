@@ -17,19 +17,25 @@ pub struct ProgressBar {
     done: Arc<AtomicU64>,
     total: u64,
     label: String,
+    enabled: bool,
+    start: std::time::Instant,
     handle: Option<JoinHandle<()>>,
 }
 
 impl ProgressBar {
-    /// 创建进度条。非 TTY 时返回的实例 tick/finish 均为 no-op（不启动线程）。
+    /// 创建进度条。非 TTY 时降级：不渲染，但 `finish()` 仍输出一行完成摘要
+    /// （stderr；stdout 是数据流，任何场景都不碰）。
     pub fn new(total: u64, label: impl Into<String>) -> Self {
         let label = label.into();
+        let start = Instant::now();
         let enabled = std::io::stderr().is_terminal() && total > 0;
         if !enabled {
             return Self {
                 done: Arc::new(AtomicU64::new(0)),
                 total,
                 label,
+                enabled,
+                start,
                 handle: None,
             };
         }
@@ -52,6 +58,8 @@ impl ProgressBar {
             done,
             total,
             label,
+            enabled: true,
+            start,
             handle: Some(handle),
         }
     }
@@ -73,7 +81,8 @@ impl ProgressBar {
         self.done.fetch_add(n, Ordering::Relaxed);
     }
 
-    /// 完成：等进度线程打完最后一行并清行。非 TTY 时为 no-op。
+    /// 完成：等进度线程打完最后一行并清行。
+    /// 非 TTY 时打印一行完成摘要（stderr），避免完全静默。
     pub fn finish(self) {
         if let Some(handle) = self.handle {
             self.done.store(self.total, Ordering::Relaxed);
@@ -81,6 +90,17 @@ impl ProgressBar {
             // 清行 + 换行：进度线程退出前打的是 `\r...`，这里补一个换行收尾
             // （渲染函数在 done==total 时会打 `\r... 100%`，随后这里清掉行尾）。
             eprint!("\r\x1b[K");
+        } else {
+            let d = self.done.load(Ordering::Relaxed);
+            if d > 0 {
+                eprintln!(
+                    "{}: {} / {} 完成，耗时 {:.1}s",
+                    self.label,
+                    fmt_num(d),
+                    fmt_num(self.total),
+                    self.start.elapsed().as_secs_f64()
+                );
+            }
         }
     }
 }

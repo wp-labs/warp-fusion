@@ -1,4 +1,5 @@
 pub mod cmd_bench;
+pub mod cmd_diff;
 pub mod cmd_frames;
 pub mod cmd_gen;
 pub mod cmd_gen_nexmark;

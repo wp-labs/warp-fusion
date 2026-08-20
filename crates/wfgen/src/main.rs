@@ -87,6 +87,18 @@ enum Commands {
         #[arg(long, default_value_t = 1)]
         seed: u64,
     },
+    /// 分层文件比对（L1 哈希相同性 → L2 Myers 差异量 → L3 --detail 定位）
+    Diff {
+        /// 第一个文件（如引擎 alerts）
+        a: PathBuf,
+
+        /// 第二个文件（如模拟器期望）
+        b: PathBuf,
+
+        /// 输出差异行明细（L3；差异大时降级为排序归并明细）
+        #[arg(long)]
+        detail: bool,
+    },
     /// Lint (validate) a .wfg scenario file
     Lint {
         /// Path to the .wfg scenario file
@@ -341,6 +353,13 @@ async fn run_cli() -> WfgenResult<()> {
             no_sort,
         } => wfgen::cmd_gen_nexmark::run(count, seed, no_sort),
         Commands::VerifyNexmark { count, seed } => wfgen::cmd_verify_nexmark::run(count, seed),
+        Commands::Diff { a, b, detail } => {
+            let same = wfgen::cmd_diff::run(&a.to_string_lossy(), &b.to_string_lossy(), detail)?;
+            if !same {
+                std::process::exit(1);
+            }
+            Ok(())
+        }
         Commands::Lint { scenario, ws, wfl } => wfgen::cmd_lint::run(scenario, ws, wfl),
         Commands::Verify {
             expected,

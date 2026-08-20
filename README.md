@@ -66,6 +66,7 @@ nexmark_pk 基准的三段式工具（`wfgen` 子命令），全部 Rust 实现�
 |---|---|---|
 | `gen-nexmark <count> [--seed N] [--no-sort]` | 生成 NEXMark 事件 JSONL | **默认按事件时间排序**（30s 桶序，内存有界）：批次事件时间跨度从 phase-major 的 ~24min 降到几秒，让 `over=10m` 时间驱逐恢复（旧版窗口持全量、RSS 20GB+）。事件集合与 phase-major 版逐字节一致（仅输出顺序不同），`--no-sort` 保留旧行为 |
 | `dump-frames` | JSONL → 预编码 Arrow 帧（`[ASCII长度][空格][payload]`） | rayon **并行解析** JSONL（23GB 级），顺序保持；帧缓存带 `DATA_VER` 指纹 |
+| `diff <a> <b> [--detail]` | **分层文件比对** | L1 流式哈希判相同（O(N)，10M 行 ~2s）→ L2 Myers 精确差异比例（git diff 同款；行数差 >10% 自动降级排序归并防退化）→ L3 `--detail` 差异行定位。退出码 0=相同/1=不同，供脚本判定 |
 | `verify-nexmark <count> [--seed N]` | **Q2-Q21 ground-truth 模拟器**（Rust） | 输出各规则期望 EMIT（JSON），key 与旧 Python 版 `verify_ground_truth.py` 一致；**按 auction 分片并行**（watermark 全局预计算，结果与分片数无关）：10M ~3s / 30M ~10s / 100M ~44s（Python 版 3.5min / 10min+ / >1h）。`WFGEN_VERIFY_SHARDS=N` 可调分片数 |
 
 ### verify-nexmark 的逻辑与边界

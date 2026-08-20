@@ -415,6 +415,13 @@ pub fn run_checked(count: i64, seed: u64, no_sort: bool, check: bool) -> WfgenRe
     let mut v_person: u64 = 0;
     let mut v_auction: u64 = 0;
     let mut v_bid: u64 = 0;
+    // 流序自检：桶序模式下输出 = 桶间严格递增 + 桶内乱序，故每桶独立 watermark
+    // （等价于对实际输出流统计，零解析成本）；no-sort 模式用全局 watermark
+    // （phase-major 乱序可达 ~27min，远超桶宽——这是它破坏 over 驱逐的机理）。
+    let mut seq_max_bucket: [i64; TIME_BUCKETS] = [i64::MIN; TIME_BUCKETS];
+    let mut seq_max_global: i64 = i64::MIN;
+    let mut max_oog_ns: i64 = 0;
+    let mut oog_count: u64 = 0;
     let fingerprint: Option<Arc<std::sync::Mutex<md5::Md5>>> =
         check.then(|| Arc::new(std::sync::Mutex::new(md5::Md5::default())));
 
@@ -447,8 +454,26 @@ pub fn run_checked(count: i64, seed: u64, no_sort: bool, check: bool) -> WfgenRe
     let pb = crate::progress::ProgressBar::new(count as u64, "gen-nexmark");
     generate_events(count, seed, |ev| {
         pb.tick();
-        // 流式自检（check）：值域 + 时间戳范围 + 流计数。
+        // 流式自检（check）：值域 + 时间戳范围 + 流计数 + 流序（乱序深度）。
         if check {
+            let ns = ev.ns();
+            if no_sort {
+                if ns < seq_max_global {
+                    oog_count += 1;
+                    max_oog_ns = max_oog_ns.max(seq_max_global - ns);
+                } else {
+                    seq_max_global = ns;
+                }
+            } else {
+                let b =
+                    (((ns - BASE_NS).max(0)) / BUCKET_NS).min((TIME_BUCKETS - 1) as i64) as usize;
+                if ns < seq_max_bucket[b] {
+                    oog_count += 1;
+                    max_oog_ns = max_oog_ns.max(seq_max_bucket[b] - ns);
+                } else {
+                    seq_max_bucket[b] = ns;
+                }
+            }
             let v = check_event(&ev, count);
             match ev {
                 NxEvent::Person { ns, .. } => {
@@ -558,6 +583,21 @@ pub fn run_checked(count: i64, seed: u64, no_sort: bool, check: bool) -> WfgenRe
             v_auction,
             v_bid,
             if violations == 0 { "✅" } else { "❌" }
+        );
+        let total = n_person + n_auction + n_bid;
+        let oog_ok = max_oog_ns <= if no_sort { SPAN_NS } else { BUCKET_NS };
+        eprintln!(
+            "  out-of-order: {} 事件 ({:.2}%) 最大乱序 {:.1}s {}",
+            oog_count,
+            100.0 * oog_count as f64 / total as f64,
+            max_oog_ns as f64 / 1_000_000_000.0,
+            if no_sort {
+                "（phase-major 预期大，会破坏 over 驱逐）"
+            } else if oog_ok {
+                "✅ 桶内乱序 ≤ 30s 桶宽"
+            } else {
+                "❌ 超过桶宽"
+            }
         );
         eprintln!(
             "  fingerprint (md5 of output bytes): {} {}",
@@ -802,5 +842,67 @@ mod tests {
         })
         .unwrap();
         assert_eq!(violations, 0, "生成事件不应触发自检违规");
+    }
+
+    /// 性质测试：桶序输出流（桶间严格递增 + 桶内生成序）的乱序深度
+    /// 必须 ≤ BUCKET_NS（30s 桶宽）——这是 over 驱逐能工作的前提。
+    #[test]
+    fn sorted_emission_max_oog_within_bucket_ns() {
+        let count = 50_000i64;
+        // 按桶收集（保持生成序），与 run 的 Sorted 输出路径一致。
+        let mut buckets: Vec<Vec<i64>> = vec![Vec::new(); TIME_BUCKETS];
+        generate_events(count, 7, |ev| {
+            let ns = ev.ns();
+            let b = (((ns - BASE_NS).max(0)) / BUCKET_NS).min((TIME_BUCKETS - 1) as i64) as usize;
+            buckets[b].push(ns);
+            Ok(())
+        })
+        .unwrap();
+        // 摊平后直接统计乱序（输出流语义）。
+        let mut seq_max = i64::MIN;
+        let mut max_oog = 0i64;
+        let mut oog_count = 0u64;
+        for b in &buckets {
+            for &ns in b {
+                if ns < seq_max {
+                    oog_count += 1;
+                    max_oog = max_oog.max(seq_max - ns);
+                } else {
+                    seq_max = ns;
+                }
+            }
+        }
+        assert!(
+            oog_count > 0,
+            "桶内应有乱序（桶内是生成序而非时间序），测试才有意义"
+        );
+        assert!(
+            max_oog <= BUCKET_NS,
+            "最大乱序 {:.1}s 超过桶宽 30s",
+            max_oog as f64 / 1e9
+        );
+    }
+
+    /// 性质测试：no-sort（phase-major）乱序远超桶宽——
+    /// 这是文档声称「no-sort 破坏 over 驱逐」的数字证据。
+    #[test]
+    fn no_sort_emission_has_phase_major_oog() {
+        let count = 50_000i64;
+        let mut seq_max = i64::MIN;
+        let mut max_oog = 0i64;
+        generate_events(count, 7, |ev| {
+            let ns = ev.ns();
+            if ns < seq_max {
+                max_oog = max_oog.max(seq_max - ns);
+            } else {
+                seq_max = ns;
+            }
+            Ok(())
+        })
+        .unwrap();
+        assert!(
+            max_oog > BUCKET_NS,
+            "phase-major 乱序应远超桶宽（auction 段跨 10%-100% span）"
+        );
     }
 }

@@ -13,6 +13,8 @@
 
 use std::cmp::Reverse;
 use std::collections::{BinaryHeap, HashMap, HashSet};
+use std::sync::Arc;
+use std::thread;
 
 use serde_json::json;
 
@@ -23,6 +25,14 @@ const SPAN: i64 = 600_000_000_000; // 10m sliding window
 const WITHIN_60S: i64 = 60_000_000_000; // q19 seq within 60s
 const BUCKET_NS: i64 = 600_000_000_000; // q16 fixed bucket
 const NONE: i64 = -1; // "no instance" sentinel for created/max slots
+
+/// 分片并行的事件载体：`wm` 是处理该事件时**全局** watermark（按 30s 桶序的
+/// 前缀 max ns，含当前事件），与单线程 `if ns > watermark { watermark = ns }`
+/// 语义完全一致——否则分片各自的局部 watermark 会滞后，过期判定漂移。
+struct ShardedEvent {
+    ev: NxEvent,
+    wm: i64,
+}
 
 struct Sim {
     q2: i64,
@@ -60,10 +70,8 @@ struct Sim {
     q20_created: HashMap<i64, i64>,
     heap2: BinaryHeap<Reverse<(i64, &'static str, i64)>>,
     pending2: HashSet<(&'static str, i64)>,
-    // q16 fixed buckets + q21 person set
+    // q16 fixed buckets
     q16_sum: HashMap<(i64, i64), i64>,
-    person_ids: HashSet<i64>,
-    watermark: i64,
 }
 
 impl Default for Sim {
@@ -108,8 +116,6 @@ impl Sim {
             heap2: BinaryHeap::new(),
             pending2: HashSet::new(),
             q16_sum: HashMap::new(),
-            person_ids: HashSet::new(),
-            watermark: 0,
         }
     }
 
@@ -214,16 +220,7 @@ impl Sim {
         }
     }
 
-    fn person(&mut self, id: i64) {
-        self.q8 += 1;
-        self.person_ids.insert(id);
-    }
-
-    fn auction(&mut self) {
-        self.n_auction += 1;
-    }
-
-    fn bid(&mut self, auc: i64, price: i64, ns: i64, bidder: i64) {
+    fn bid(&mut self, auc: i64, price: i64, ns: i64, bidder: i64, wm: i64, persons: &HashSet<i64>) {
         self.n_bid += 1;
         if auc % 123 == 0 {
             self.q2 += 1;
@@ -233,11 +230,9 @@ impl Sim {
         }
         self.q13 += 1;
 
-        if ns > self.watermark {
-            self.watermark = ns;
-        }
-        self.sweep(self.watermark);
-        self.sweep2(self.watermark);
+        // watermark 由分片并行调用方预计算（全局 30s 桶序前缀 max ns，含本事件）。
+        self.sweep(wm);
+        self.sweep2(wm);
 
         let st = self.state.entry(auc).or_insert([
             NONE, 0, NONE, 0, NONE, 0, NONE, NONE, NONE, NONE, NONE, NONE, NONE, 0, 0,
@@ -398,7 +393,7 @@ impl Sim {
         *self.q16_sum.entry((auc, bucket)).or_insert(0) += price;
 
         // q21: anti join — keep bid iff bidder not in person window
-        if !self.person_ids.contains(&bidder) {
+        if !persons.contains(&bidder) {
             self.q21 += 1;
         }
     }
@@ -432,10 +427,10 @@ impl Sim {
     }
 }
 
-pub fn run(count: i64, seed: u64) -> WfgenResult<()> {
+/// 分片并行主流程。`n_shards` 只影响并行度，不改变结果（wm 全局预计算）。
+fn run_sharded(count: i64, seed: u64, n_shards: usize) -> WfgenResult<()> {
     // 与 `gen-nexmark` 相同的 30s 桶序：事件按桶收集（桶内生成序），再按桶序
     // 喂模拟器——否则 phase-major 生成序会让滑动窗口/watermark 对拍失真。
-    // 直接用 NxEvent 字段（无 JSON 构造/解析），省生成阶段大部分开销。
     const T_BUCKET_NS: i64 = 30_000_000_000;
     const BASE_NS: i64 = 1767225600000000000; // 与 cmd_gen_nexmark::BASE_NS 一致
     const BUCKETS: usize = 60;
@@ -447,22 +442,103 @@ pub fn run(count: i64, seed: u64) -> WfgenResult<()> {
         Ok(())
     })?;
 
-    let mut sim = Sim::new();
-    for bucket in &mut buckets {
-        for ev in bucket.drain(..) {
+    // 第二遍：按桶序扫描，预计算全局前缀 max ns（含当前 bid，即单线程
+    // `if ns > watermark { watermark = ns }` 之后的 watermark——注意原版
+    // person/auction 事件不推进 watermark），同时把 bid 路由到分片。
+    // person/auction 只做无状态处理；桶逐个释放控制峰值内存。
+    let mut shards: Vec<Vec<ShardedEvent>> = (0..n_shards).map(|_| Vec::new()).collect();
+    let mut person_ids: HashSet<i64> = HashSet::new();
+    let mut q8: i64 = 0;
+    let mut n_auction: i64 = 0;
+    let mut cur_max: i64 = i64::MIN;
+    for b in 0..BUCKETS {
+        let evs = std::mem::take(&mut buckets[b]);
+        for ev in evs {
+            let ns = ev.ns();
             match ev {
-                NxEvent::Person { id, .. } => sim.person(id),
-                NxEvent::Auction { .. } => sim.auction(),
-                NxEvent::Bid {
-                    auc,
-                    price,
-                    ns,
-                    bidder,
-                    ..
-                } => sim.bid(auc, price, ns, bidder),
+                NxEvent::Person { id, .. } => {
+                    q8 += 1;
+                    person_ids.insert(id);
+                }
+                NxEvent::Auction { .. } => {
+                    n_auction += 1;
+                }
+                NxEvent::Bid { auc, .. } => {
+                    cur_max = cur_max.max(ns);
+                    let s = (auc as u64 % n_shards as u64) as usize;
+                    shards[s].push(ShardedEvent { ev, wm: cur_max });
+                }
             }
         }
     }
-    println!("{}", sim.to_json());
+    drop(buckets);
+
+    // 并行处理：每分片一个 Sim，状态按 auction 隔离，watermark 用预存全局值。
+    let persons = Arc::new(person_ids);
+    let mut sims: Vec<Sim> = thread::scope(|scope| {
+        let handles: Vec<_> = shards
+            .into_iter()
+            .map(|shard| {
+                let persons = Arc::clone(&persons);
+                scope.spawn(move || {
+                    let mut sim = Sim::new();
+                    for se in shard {
+                        if let NxEvent::Bid {
+                            auc,
+                            ns,
+                            price,
+                            bidder,
+                            ..
+                        } = se.ev
+                        {
+                            sim.bid(auc, price, ns, bidder, se.wm, &persons);
+                        }
+                    }
+                    sim
+                })
+            })
+            .collect();
+        handles.into_iter().map(|h| h.join().unwrap()).collect()
+    });
+
+    // 合并分片计数（q16_sum 按 (auc, bucket) key 求和，不同分片 key 不相交）。
+    let mut merged = sims.remove(0);
+    for s in sims {
+        merged.q2 += s.q2;
+        merged.n_bid += s.n_bid;
+        for i in 0..3 {
+            merged.q5[i] += s.q5[i];
+            merged.q7[i] += s.q7[i];
+        }
+        merged.q6 += s.q6;
+        merged.q10 += s.q10;
+        merged.q13 += s.q13;
+        merged.q15 += s.q15;
+        merged.q17 += s.q17;
+        merged.q18 += s.q18;
+        merged.q19 += s.q19;
+        merged.q20 += s.q20;
+        merged.q21 += s.q21;
+        for (k, v) in s.q16_sum {
+            *merged.q16_sum.entry(k).or_insert(0) += v;
+        }
+    }
+    merged.q8 = q8;
+    merged.n_auction = n_auction;
+
+    println!("{}", merged.to_json());
     Ok(())
+}
+
+pub fn run(count: i64, seed: u64) -> WfgenResult<()> {
+    let n_shards = std::env::var("WFGEN_VERIFY_SHARDS")
+        .ok()
+        .and_then(|s| s.parse::<usize>().ok())
+        .unwrap_or_else(|| {
+            thread::available_parallelism()
+                .map(|n| n.get())
+                .unwrap_or(4)
+                .min(64)
+        });
+    run_sharded(count, seed, n_shards)
 }

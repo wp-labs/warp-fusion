@@ -10,7 +10,7 @@ use wf_config::ConfigVarContext;
 use wf_data::time::parse_json_timestamp_nanos;
 use wf_engine::alert::OutputRecord;
 use wf_engine::match_engine::{
-    CepStateMachine, CloseReason, EngineHashMap, Event, RuleExecutor, StepResult, Value,
+    CepStateMachine, CloseReason, EngineHashMap, Event, JoinRow, RuleExecutor, StepResult, Value,
     WindowLookup,
 };
 use wf_lang::WindowSchema;
@@ -185,7 +185,7 @@ impl WindowLookup for NullWindowLookup {
         None
     }
 
-    fn snapshot(&self, _window: &str) -> Option<Vec<std::collections::HashMap<String, Value>>> {
+    fn snapshot(&self, _window: &str) -> Option<Vec<JoinRow>> {
         None
     }
 }

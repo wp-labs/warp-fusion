@@ -76,6 +76,11 @@ enum Commands {
         /// (pre-2026-08-20 behavior; breaks `over`-window time eviction)
         #[arg(long)]
         no_sort: bool,
+
+        /// 生成自检：流式值域/时间戳/流计数校验 + 输出字节 md5 指纹
+        /// （报告写 stderr；stdout 仍是数据流，可与 --no-sort 之外的管道共用）
+        #[arg(long)]
+        check: bool,
     },
     /// NEXMark Q2-Q21 ground-truth simulator (Rust port of
     /// nexmark_pk/scripts/verify_ground_truth.py, ~100x faster)
@@ -351,7 +356,8 @@ async fn run_cli() -> WfgenResult<()> {
             count,
             seed,
             no_sort,
-        } => wfgen::cmd_gen_nexmark::run(count, seed, no_sort),
+            check,
+        } => wfgen::cmd_gen_nexmark::run_checked(count, seed, no_sort, check),
         Commands::VerifyNexmark { count, seed } => wfgen::cmd_verify_nexmark::run(count, seed),
         Commands::Diff { a, b, detail } => {
             let same = wfgen::cmd_diff::run(&a.to_string_lossy(), &b.to_string_lossy(), detail)?;

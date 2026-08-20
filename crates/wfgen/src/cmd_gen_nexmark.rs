@@ -27,6 +27,7 @@ use serde_json::json;
 
 use std::fs::File;
 use std::io::Write;
+use std::sync::Arc;
 
 use crate::error::{self, WfgenReason, WfgenResult};
 
@@ -79,7 +80,8 @@ fn iso(ns: i64) -> String {
 /// phase-major mode). `Sorted` temp files are removed after emission in `run`.
 enum BucketSink {
     /// `--no-sort`: phase-major generation order straight to stdout.
-    Direct(std::io::BufWriter<std::io::Stdout>),
+    /// Box 里可能包 HashingWriter（`--check` 指纹），stdout lock 非 Send，故不约束 Send。
+    Direct(std::io::BufWriter<Box<dyn std::io::Write>>),
     /// Sorted mode: one temp file per 30 s bucket, emitted bucket-by-bucket.
     Sorted {
         writers: Vec<Option<std::io::BufWriter<File>>>,
@@ -329,8 +331,100 @@ where
 }
 
 pub fn run(count: i64, seed: u64, no_sort: bool) -> WfgenResult<()> {
+    run_checked(count, seed, no_sort, false)
+}
+
+/// 包装 writer：写 inner 的同时累计输出字节 md5（指纹）。
+struct HashingWriter<W: std::io::Write> {
+    inner: W,
+    hasher: Arc<std::sync::Mutex<md5::Md5>>,
+}
+
+impl<W: std::io::Write> HashingWriter<W> {
+    fn new(inner: W, hasher: Arc<std::sync::Mutex<md5::Md5>>) -> Self {
+        Self { inner, hasher }
+    }
+}
+
+impl<W: std::io::Write> std::io::Write for HashingWriter<W> {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        use md5::Digest;
+        let n = self.inner.write(buf)?;
+        self.hasher.lock().unwrap().update(&buf[..n]);
+        Ok(n)
+    }
+    fn flush(&mut self) -> std::io::Result<()> {
+        self.inner.flush()
+    }
+}
+
+/// 单事件值域自检：返回该事件是否违规（字段范围须与 `generate_events` 的
+/// 生成语义一致——auction/bid 的 id/auc 为 1..=count*0.06，不是 count/100）。
+fn check_event(ev: &NxEvent, count: i64) -> bool {
+    let num_auction = (count as f64 * 0.06) as i64;
+    match ev {
+        NxEvent::Person {
+            id, city, state, ..
+        } => !(1..=PERSONS as i64).contains(id) || *city >= CITIES.len() || *state >= STATES.len(),
+        NxEvent::Auction {
+            id,
+            ns,
+            initial_bid,
+            reserve,
+            expires,
+            seller,
+            category,
+            ..
+        } => {
+            !(1..=num_auction).contains(id)
+                || !(10..=1000).contains(initial_bid)
+                || !(1000..=10000).contains(reserve)
+                || expires < ns
+                || !(1..=PERSONS as i64).contains(seller)
+                || !(1..=26).contains(category)
+        }
+        NxEvent::Bid {
+            auc,
+            price,
+            bidder,
+            channel,
+            url,
+            ..
+        } => {
+            !(1..=num_auction).contains(auc)
+                || !(1..=PERSONS as i64).contains(bidder)
+                || *channel >= CHANNELS.len()
+                || !(100..=999).contains(url)
+                || *price < 10
+        }
+    }
+}
+
+/// 生成 + 可选自检（`--check`）：流式值域校验（字段范围/时间戳/流计数）+
+/// 输出字节 md5 指纹（确定性锚点：同 seed+count 恒等；桶序模式 = 输出文件 md5）。
+/// 校验报告写 stderr（stdout 是数据流）。
+pub fn run_checked(count: i64, seed: u64, no_sort: bool, check: bool) -> WfgenResult<()> {
+    // 校验状态：流计数 + 时间戳范围 + 值域越界数；md5 指纹由 HashingWriter 累计。
+    let mut n_person: i64 = 0;
+    let mut n_auction: i64 = 0;
+    let mut n_bid: i64 = 0;
+    let mut min_ns: i64 = i64::MAX;
+    let mut max_ns: i64 = i64::MIN;
+    let mut violations: u64 = 0;
+    // per-type 违规计数（诊断/报告用）
+    let mut v_person: u64 = 0;
+    let mut v_auction: u64 = 0;
+    let mut v_bid: u64 = 0;
+    let fingerprint: Option<Arc<std::sync::Mutex<md5::Md5>>> =
+        check.then(|| Arc::new(std::sync::Mutex::new(md5::Md5::default())));
+
     let sink = if no_sort {
-        BucketSink::Direct(std::io::BufWriter::new(std::io::stdout()))
+        let stdout = std::io::stdout();
+        let inner: Box<dyn std::io::Write> = match &fingerprint {
+            Some(h) => Box::new(HashingWriter::new(stdout.lock(), Arc::clone(h))),
+            None => Box::new(stdout.lock()),
+        };
+        BucketSink::Direct(std::io::BufWriter::with_capacity(1 << 20, inner))
     } else {
         let tmp_dir =
             std::env::temp_dir().join(format!("wfgen_nexmark_{}_{}", std::process::id(), seed));
@@ -353,6 +447,39 @@ pub fn run(count: i64, seed: u64, no_sort: bool) -> WfgenResult<()> {
     let pb = crate::progress::ProgressBar::new(count as u64, "gen-nexmark");
     generate_events(count, seed, |ev| {
         pb.tick();
+        // 流式自检（check）：值域 + 时间戳范围 + 流计数。
+        if check {
+            let v = check_event(&ev, count);
+            match ev {
+                NxEvent::Person { ns, .. } => {
+                    n_person += 1;
+                    if v {
+                        violations += 1;
+                        v_person += 1;
+                    }
+                    min_ns = min_ns.min(ns);
+                    max_ns = max_ns.max(ns);
+                }
+                NxEvent::Auction { ns, .. } => {
+                    n_auction += 1;
+                    if v {
+                        violations += 1;
+                        v_auction += 1;
+                    }
+                    min_ns = min_ns.min(ns);
+                    max_ns = max_ns.max(ns);
+                }
+                NxEvent::Bid { ns, .. } => {
+                    n_bid += 1;
+                    if v {
+                        violations += 1;
+                        v_bid += 1;
+                    }
+                    min_ns = min_ns.min(ns);
+                    max_ns = max_ns.max(ns);
+                }
+            }
+        }
         write_event(&mut sink, ev.stream(), nx_to_value(&ev), ev.ns())
     })?;
     pb.finish();
@@ -372,7 +499,11 @@ pub fn run(count: i64, seed: u64, no_sort: bool) -> WfgenResult<()> {
             // whole 10GB+ event set. Temp dir removed afterwards.
             drop(writers);
             let stdout = std::io::stdout();
-            let mut out = std::io::BufWriter::with_capacity(1 << 20, stdout.lock());
+            let inner: Box<dyn std::io::Write> = match &fingerprint {
+                Some(h) => Box::new(HashingWriter::new(stdout.lock(), Arc::clone(h))),
+                None => Box::new(stdout.lock()),
+            };
+            let mut out = std::io::BufWriter::with_capacity(1 << 20, inner);
             for i in 0..TIME_BUCKETS {
                 let path = tmp_dir.join(format!("b{i:03}.jsonl"));
                 let data = std::fs::read(&path)
@@ -384,6 +515,59 @@ pub fn run(count: i64, seed: u64, no_sort: bool) -> WfgenResult<()> {
                 .map_err(|e| error::error(WfgenReason::Io, format!("flush stdout: {e}")))?;
             let _ = std::fs::remove_dir_all(&tmp_dir);
         }
+    }
+
+    if check {
+        let expect_person = (count as f64 * 0.02) as i64;
+        let expect_auction = (count as f64 * 0.06) as i64;
+        let expect_bid = count - expect_person - expect_auction;
+        let rows_ok =
+            n_person == expect_person && n_auction == expect_auction && n_bid == expect_bid;
+        let ns_ok = min_ns >= BASE_NS && max_ns <= BASE_NS + SPAN_NS;
+        let fp = fingerprint
+            .as_ref()
+            .map(|h| {
+                use md5::Digest;
+                let digest = h.lock().unwrap().clone().finalize();
+                format!("{:x}", digest)
+            })
+            .unwrap_or_default();
+        eprintln!("== gen-nexmark --check {} ==", count);
+        eprintln!(
+            "  rows: {} (person {} / auction {} / bid {}) {}",
+            n_person + n_auction + n_bid,
+            n_person,
+            n_auction,
+            n_bid,
+            if rows_ok {
+                "✅"
+            } else {
+                "❌ 与期望比例不符"
+            }
+        );
+        eprintln!(
+            "  time range: [{}s, {}s] of 30m span {}",
+            (min_ns - BASE_NS) / 1_000_000_000,
+            (max_ns - BASE_NS) / 1_000_000_000,
+            if ns_ok { "✅" } else { "❌ 越界" }
+        );
+        eprintln!(
+            "  violations: {} (person {} / auction {} / bid {}) {}",
+            violations,
+            v_person,
+            v_auction,
+            v_bid,
+            if violations == 0 { "✅" } else { "❌" }
+        );
+        eprintln!(
+            "  fingerprint (md5 of output bytes): {} {}",
+            fp,
+            if fp.is_empty() {
+                "（未计算）"
+            } else {
+                "✅ 确定性锚点（同 seed+count 恒等）"
+            }
+        );
     }
     Ok(())
 }
@@ -517,5 +701,106 @@ mod tests {
             assert_eq!(g_ns, r_ns, "event {idx}: ns 不一致");
             assert_eq!(g_val, r_val, "event {idx}: 字段不一致（rng 序列被破坏）");
         }
+    }
+
+    /// 回归：auction/bid 的 id/auc 值域须与生成语义一致（1..=count*0.06），
+    /// 曾误写 count/100，导致 2M 时 163 万条“假违规”。
+    #[test]
+    fn check_event_bounds_match_generation_semantics() {
+        let count = 10_000i64;
+        let num_auction = (count as f64 * 0.06) as i64; // 600
+        // 生成器产出的真实事件全部合法（边界值 id/auc = num_auction 合法）。
+        assert!(!check_event(
+            &NxEvent::Auction {
+                id: num_auction,
+                ns: BASE_NS,
+                initial_bid: 10,
+                reserve: 1000,
+                expires: BASE_NS + 1_000_000_000,
+                seller: 1,
+                category: 1,
+            },
+            count
+        ));
+        assert!(!check_event(
+            &NxEvent::Bid {
+                auc: num_auction,
+                ns: BASE_NS,
+                price: 10,
+                bidder: 1000,
+                channel: 0,
+                url: 100,
+            },
+            count
+        ));
+        assert!(!check_event(
+            &NxEvent::Person {
+                id: 1000,
+                ns: BASE_NS,
+                city: CITIES.len() - 1,
+                state: STATES.len() - 1,
+            },
+            count
+        ));
+        // 越界（num_auction+1 / 0 / 越界枚举）必须报违规。
+        assert!(check_event(
+            &NxEvent::Auction {
+                id: num_auction + 1,
+                ns: BASE_NS,
+                initial_bid: 10,
+                reserve: 1000,
+                expires: BASE_NS + 1_000_000_000,
+                seller: 1,
+                category: 1,
+            },
+            count
+        ));
+        assert!(check_event(
+            &NxEvent::Bid {
+                auc: 0,
+                ns: BASE_NS,
+                price: 10,
+                bidder: 1000,
+                channel: 0,
+                url: 100,
+            },
+            count
+        ));
+        assert!(check_event(
+            &NxEvent::Bid {
+                auc: 1,
+                ns: BASE_NS,
+                price: 9, // < 10 下限
+                bidder: 1000,
+                channel: 0,
+                url: 100,
+            },
+            count
+        ));
+        assert!(check_event(
+            &NxEvent::Person {
+                id: 1001, // 超出 PERSONS
+                ns: BASE_NS,
+                city: 0,
+                state: 0,
+            },
+            count
+        ));
+    }
+
+    /// 回归：--check 与生成器自洽——真实 `generate_events` 产出的事件
+    /// 必须全部通过 `check_event`（否则自检与生成语义脱节，产生假违规）。
+    #[test]
+    fn generated_events_pass_self_check() {
+        let count = 10_000i64;
+        let mut violations = 0u64;
+        generate_events(count, 7, |ev| {
+            if check_event(&ev, count) {
+                violations += 1;
+            }
+            Ok(())
+        })
+        .unwrap();
+        assert_eq!(violations, 0, "生成事件不应触发自检违规");
     }
 }

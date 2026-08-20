@@ -77,6 +77,16 @@ enum Commands {
         #[arg(long)]
         no_sort: bool,
     },
+    /// NEXMark Q2-Q21 ground-truth simulator (Rust port of
+    /// nexmark_pk/scripts/verify_ground_truth.py, ~100x faster)
+    VerifyNexmark {
+        /// Number of events to simulate
+        count: i64,
+
+        /// RNG seed (must match `gen-nexmark` for comparable output)
+        #[arg(long, default_value_t = 1)]
+        seed: u64,
+    },
     /// Lint (validate) a .wfg scenario file
     Lint {
         /// Path to the .wfg scenario file
@@ -330,6 +340,7 @@ async fn run_cli() -> WfgenResult<()> {
             seed,
             no_sort,
         } => wfgen::cmd_gen_nexmark::run(count, seed, no_sort),
+        Commands::VerifyNexmark { count, seed } => wfgen::cmd_verify_nexmark::run(count, seed),
         Commands::Lint { scenario, ws, wfl } => wfgen::cmd_lint::run(scenario, ws, wfl),
         Commands::Verify {
             expected,

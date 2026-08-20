@@ -2,6 +2,7 @@ pub mod cmd_bench;
 pub mod cmd_frames;
 pub mod cmd_gen;
 pub mod cmd_gen_nexmark;
+pub mod cmd_verify_nexmark;
 pub mod cmd_helpers;
 pub mod cmd_lint;
 pub mod cmd_send;

@@ -126,8 +126,12 @@ fn write_event(
     Ok(())
 }
 
-pub fn run(count: i64, seed: u64, no_sort: bool) -> WfgenResult<()> {
+pub fn generate_events<F>(count: i64, seed: u64, mut emit: F) -> WfgenResult<()>
+where
+    F: FnMut(&str, i64, serde_json::Value) -> WfgenResult<()>,
+{
     let mut rng = StdRng::seed_from_u64(seed);
+
 
     let num_person = (count as f64 * 0.02) as i64;
     let num_auction = (count as f64 * 0.06) as i64;
@@ -157,6 +161,69 @@ pub fn run(count: i64, seed: u64, no_sort: bool) -> WfgenResult<()> {
         })
         .collect();
 
+    // persons（注册集中在前 10% 时间窗）
+    for i in 0..num_person {
+        let pid = (i % PERSONS as i64) as usize;
+        let p = &persons[pid];
+        let ns = BASE_NS + rng.random_range(0..=(SPAN_NS / 10));
+        emit("person_events", ns, json!({
+                "id": pid as i64 + 1,
+                "name": format!("person_{}", pid + 1),
+                "email": format!("person{}@example.com", pid + 1),
+                "city": CITIES[rng.random_range(0..CITIES.len())],
+                "state": p.state,
+                "dateTime": ns,
+            }))?;
+    }
+
+    // auctions（时间窗 10%-100%）
+    for i in 0..num_auction {
+        let a = &auctions[i as usize];
+        let ns = BASE_NS + rng.random_range((SPAN_NS / 10)..=SPAN_NS);
+        emit("auction_events", ns, json!({
+                "id": i + 1,
+                "itemName": format!("item_{}", i),
+                "description": format!("desc {}", i),
+                "initialBid": rng.random_range(10..=1000),
+                "reserve": rng.random_range(1000..=10000),
+                "dateTime": ns,
+                "expires": ns + rng.random_range(600_000_000_000..=1_800_000_000_000),
+                "seller": a.seller,
+                "category": a.category,
+                "extra": "",
+            }))?;
+    }
+
+    // bids（92% firehose，时间窗 20%-100%）
+    for _ in 0..num_bid {
+        let aidx = rng.random_range(0..auctions.len());
+        let a = &auctions[aidx];
+        let price = if a.hot {
+            rng.random_range(100..=500)
+        } else {
+            rng.random_range(10..=150)
+        };
+        let bidder = if rng.random::<f64>() < 0.5 {
+            rng.random_range(1..=HOT_BIDDERS as i64)
+        } else {
+            rng.random_range(1..=PERSONS as i64)
+        };
+        let ns = BASE_NS + rng.random_range((SPAN_NS / 5)..=SPAN_NS);
+        emit("bid_events", ns, json!({
+                "auction": aidx as i64 + 1,
+                "bidder": bidder,
+                "price": price,
+                "channel": CHANNELS[rng.random_range(0..CHANNELS.len())],
+                "url": format!("http://www.example.com/{}", rng.random_range(100..=999)),
+                "dateTime": ns,
+                "extra": "",
+            }))?;
+    }
+
+    Ok(())
+}
+
+pub fn run(count: i64, seed: u64, no_sort: bool) -> WfgenResult<()> {
     let sink = if no_sort {
         BucketSink::Direct(std::io::BufWriter::new(std::io::stdout()))
     } else {
@@ -177,79 +244,9 @@ pub fn run(count: i64, seed: u64, no_sort: bool) -> WfgenResult<()> {
     };
     let mut sink = sink;
 
-    // persons（注册集中在前 10% 时间窗）
-    for i in 0..num_person {
-        let pid = (i % PERSONS as i64) as usize;
-        let p = &persons[pid];
-        let ns = BASE_NS + rng.random_range(0..=(SPAN_NS / 10));
-        write_event(
-            &mut sink,
-            "person_events",
-            json!({
-                "id": pid as i64 + 1,
-                "name": format!("person_{}", pid + 1),
-                "email": format!("person{}@example.com", pid + 1),
-                "city": CITIES[rng.random_range(0..CITIES.len())],
-                "state": p.state,
-                "dateTime": ns,
-            }),
-            ns,
-        )?;
-    }
-
-    // auctions（时间窗 10%-100%）
-    for i in 0..num_auction {
-        let a = &auctions[i as usize];
-        let ns = BASE_NS + rng.random_range((SPAN_NS / 10)..=SPAN_NS);
-        write_event(
-            &mut sink,
-            "auction_events",
-            json!({
-                "id": i + 1,
-                "itemName": format!("item_{}", i),
-                "description": format!("desc {}", i),
-                "initialBid": rng.random_range(10..=1000),
-                "reserve": rng.random_range(1000..=10000),
-                "dateTime": ns,
-                "expires": ns + rng.random_range(600_000_000_000..=1_800_000_000_000),
-                "seller": a.seller,
-                "category": a.category,
-                "extra": "",
-            }),
-            ns,
-        )?;
-    }
-
-    // bids（92% firehose，时间窗 20%-100%）
-    for _ in 0..num_bid {
-        let aidx = rng.random_range(0..auctions.len());
-        let a = &auctions[aidx];
-        let price = if a.hot {
-            rng.random_range(100..=500)
-        } else {
-            rng.random_range(10..=150)
-        };
-        let bidder = if rng.random::<f64>() < 0.5 {
-            rng.random_range(1..=HOT_BIDDERS as i64)
-        } else {
-            rng.random_range(1..=PERSONS as i64)
-        };
-        let ns = BASE_NS + rng.random_range((SPAN_NS / 5)..=SPAN_NS);
-        write_event(
-            &mut sink,
-            "bid_events",
-            json!({
-                "auction": aidx as i64 + 1,
-                "bidder": bidder,
-                "price": price,
-                "channel": CHANNELS[rng.random_range(0..CHANNELS.len())],
-                "url": format!("http://www.example.com/{}", rng.random_range(100..=999)),
-                "dateTime": ns,
-                "extra": "",
-            }),
-            ns,
-        )?;
-    }
+    generate_events(count, seed, |stream, ns, fields| {
+        write_event(&mut sink, stream, fields, ns)
+    })?;
 
     match sink {
         BucketSink::Direct(mut out) => {

@@ -314,6 +314,10 @@ fn normalize_counts(
             "join 可见性：引擎 replay 的 append 超前/evictor sweep 时机非确定（oracle 为语义参考值）",
         ),
         (
+            "q12_bidder_10s_window_count",
+            "fixed+close 收口预算/scan_timeouts 时钟相关，引擎可能丢尾部收口（oracle 理想值）",
+        ),
+        (
             "q9_winning_bid",
             "fixed+close 收口预算/scan_timeouts 时钟相关，引擎可能丢尾部收口（oracle 理想值）",
         ),

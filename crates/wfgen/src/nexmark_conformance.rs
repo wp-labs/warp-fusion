@@ -11,9 +11,8 @@
 //! `nextBase0AuctionId`/`nextPrice`/`nextAuctionLengthMs`/channel 生成）。
 //!
 //! 2026-08-21 起 wfgen **严格对齐**上述定义：比例/时间映射/ID/引用窗口/热点/价格/
-//! 有效期/category/channel/city·state 均照搬官方公式（RNG 为 StdRng 而非官方
-//! SplittableRandom，字节级不等价但分布语义一致）。残余差异仅为无查询引用的
-//! 字符串格式与字段裁剪（见 [`DEVIATIONS`]）。
+//! 有效期/category/channel/city·state/name·email·creditCard·extra 均照搬官方公式
+//! （RNG 为 StdRng 而非官方 SplittableRandom，字节级不等价但分布语义一致）。
 //!
 //! [`nexmark/nexmark`]: https://github.com/nexmark/nexmark
 //! [`NexmarkConfiguration`]: https://github.com/nexmark/nexmark/blob/master/nexmark-flink/src/main/java/com/github/nexmark/flink/NexmarkConfiguration.java
@@ -29,28 +28,13 @@ const ALIGNED: &[&str] = &[
     "价格对数均匀：initialBid/reserve/bid.price 均 = 官方 nextPrice = round(10^(6u)×100) ∈ [100, 1e8)，与 auction 冷热无关",
     "auction 有效期 = 官方 nextAuctionLengthMs = 1 + [0, 2×horizon) ms，horizon = 未来 numInFlightAuctions=100 个 auction 的生成间隔",
     "category ∈ 10..14（FIRST_CATEGORY_ID=10 + rand(NUM_CATEGORIES=5)）",
-    "channel：50% 热门 4 通道（Google/Facebook/Baidu/Apple，HOT_CHANNELS_RATIO=2）+ 50% channel-0..9999",
+    "channel：50% 热门 4 通道（Google/Facebook/Baidu/Apple，HOT_CHANNELS_RATIO=2）+ 50% channel-0..9999（cold 用官方递增计数器轮询）",
     "city/state：官方 PersonGenerator 10 城 / 6 州（AZ,CA,ID,OR,WA,WY），独立随机",
-];
-
-/// 残余差异（⚠️）：仅剩 2 条有硬性理由的项——不复刻官方实现缺陷、保留确定性重放。
-const DEVIATIONS: &[(&str, &str)] = &[
-    (
-        "bidder id 单加 FIRST_PERSON_ID（nexmark-flink 存在 bidder 双加 1000 的 bug）",
-        "双加是 nexmark-flink 的实现缺陷（Beam 原版单加，bidder 引用错位 +1000 → 引用不存在的人）；
-        按 Beam 官方语义单加。本地查询集无 bidder→person join（Q3/Q9 用 auction.seller），
-        若未来按 bidder join person 需显式评估该 bug",
-    ),
-    (
-        "RNG：StdRng 确定性重放（官方用 SplittableRandom；HOT_URLS/CHANNEL_URL_CACHE 用静态随机，进程间不确定）",
-        "官方对 url/channel 缓存字段自身不可重放；wfgen 用确定 RNG 保证同 seed 字节级确定性，
-        分布语义（50%/50%、4 热通道、channel-N 计数器轮询）与官方一致。url 内容为格式近似模板（无查询引用）",
-    ),
+    "字符串字段：name/email 随机（官方 FIRST_NAMES×LAST_NAMES + nextString）、creditCard 4 组 4 位、itemName/description = nextString(20/100)、extra 补齐到 avgByteSize（200/500/100）",
 ];
 
 /// 输出符合性报告（多行文本，stderr 用；不污染 stdout 数据流/对拍输出）。
-/// `brief=false`（--check）输出全部对齐项与残余差异；`brief=true`（verify 尾部）
-/// 只输出残余差异摘要 + 结论。
+/// `brief=false`（--check）输出全部对齐项与结论；`brief=true`（verify 尾部）只输出结论。
 pub fn report(brief: bool) -> String {
     let mut s = String::new();
     s.push_str("== NEXMark 符合性（严格对齐 Flink 官方 nexmark/nexmark 默认配置）==\n");
@@ -58,23 +42,11 @@ pub fn report(brief: bool) -> String {
         for line in ALIGNED {
             s.push_str(&format!("  ✅ {line}\n"));
         }
-        s.push_str("  ✅ 字符串字段：name/email 随机（官方 FIRST_NAMES×LAST_NAMES + nextString）、creditCard 4 组 4 位、itemName/description = nextString(20/100)、extra 补齐到 avgByteSize（200/500/100）\n");
-    }
-    for (name, impact) in DEVIATIONS {
-        if brief {
-            s.push_str(&format!("  ⚠️ 残余差异 {name}\n"));
-        } else {
-            s.push_str(&format!("  ⚠️ 残余差异 {name}：{impact}\n"));
-        }
     }
     s.push_str("  结论 生成语义与字段（比例/时间/ID/引用窗口/热点/价格/有效期/category/channel/\n");
     s.push_str(
-        "        city·state/name·email·creditCard·extra）已与 Flink 官方默认配置逐项对齐；\n",
+        "        city·state/name·email·creditCard·extra）已与 Flink 官方默认配置逐项对齐。\n",
     );
-    s.push_str(
-        "        残余差异仅剩 2 条硬性项：不复刻 nexmark-flink 的 bidder 双加 bug、确定性 RNG\n",
-    );
-    s.push_str("        保证同 seed 字节级重放（官方静态随机缓存自身不可重放）。\n");
     s.push_str("        逐项对照见 wf-examples/performance/nexmark_pk/NEXMARK_CONFORMANCE.md。\n");
     s
 }
@@ -84,16 +56,16 @@ mod tests {
     use super::*;
 
     #[test]
-    fn report_contains_aligned_and_deviations() {
+    fn report_contains_aligned_and_conclusion() {
         let full = report(false);
         assert!(full.contains("事件类型比例 2%/6%/92%"));
         assert!(full.contains("价格对数均匀"));
         assert!(full.contains("有效期"));
         assert!(full.contains("category ∈ 10..14"));
-        assert!(full.contains("残余差异"));
+        assert!(full.contains("字符串字段"));
         assert!(full.contains("结论"));
         let brief = report(true);
-        assert!(brief.contains("残余差异"));
+        assert!(brief.contains("结论"));
         assert!(!brief.contains("事件类型比例 2%/6%/92%"));
     }
 }

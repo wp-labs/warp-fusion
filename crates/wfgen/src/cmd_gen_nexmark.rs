@@ -1,12 +1,13 @@
 //! Deterministic NEXMark event generation (Person/Auction/Bid) as JSONL.
 //!
-//! Native Rust port of `nexmark_pk/scripts/gen_nexmark.py` so benchmarks do not
-//! depend on Python. Emits wfusion JSONL (`_stream`/`_window`/`_timestamp`
-//! metadata + event fields, `dateTime` in epoch ns).
+//! Native Rust NEXMark generator with no Python dependency (replaces the
+//! former `nexmark_pk/scripts/gen_nexmark.py` reference). Emits wfusion JSONL
+//! (`_stream`/`_window`/`_timestamp` metadata + event fields, `dateTime` in
+//! epoch ns).
 //!
 //! Output is **globally time-ordered at bucket granularity** (bounded memory):
-//! events are generated phase-major (persons → auctions → bids) exactly like
-//! the Python port, but each event is routed to one of `TIME_BUCKETS` 30-second
+//! events are generated phase-major (persons → auctions → bids), but each
+//! event is routed to one of `TIME_BUCKETS` 30-second
 //! time buckets (a temp file per bucket) and emitted bucket-by-bucket, so the
 //! stream arrives in approximate event-time order (bucket-internal order is the
 //! generation order; a 30 s bucket is far below the 10 min `over` eviction
@@ -30,6 +31,7 @@ use std::io::Write;
 use std::sync::Arc;
 
 use crate::error::{self, WfgenReason, WfgenResult};
+use crate::progress::fmt_num;
 
 const BASE_NS: i64 = 1767225600000000000; // 2026-01-01T00:00:00Z
 const SPAN_NS: i64 = 1_800_000_000_000; // 30 min event span
@@ -137,7 +139,7 @@ impl NxEvent {
 }
 
 /// NxEvent → JSON 字段（不含 _stream/_window/_timestamp 元数据；由 write_event 补）。
-fn nx_to_value(ev: &NxEvent) -> serde_json::Value {
+pub(crate) fn nx_to_value(ev: &NxEvent) -> serde_json::Value {
     match ev {
         NxEvent::Person {
             id,
@@ -400,22 +402,19 @@ fn check_event(ev: &NxEvent, count: i64) -> bool {
     }
 }
 
-/// 生成 + 可选自检（`--check`）：流式值域校验（字段范围/时间戳/流计数）+
-/// 输出字节 md5 指纹（确定性锚点：同 seed+count 恒等；桶序模式 = 输出文件 md5）。
-/// 校验报告写 stderr（stdout 是数据流）。
+/// 生成 + 可选自检（`--check`）：生成阶段（进度条）→ 数据检查阶段
+/// （`--check` 独立进度条：同一 seed 确定性重放事件流，逐事件值域校验）
+/// + 输出字节 md5 指纹（确定性锚点：同 seed+count 恒等；桶序模式 = 输出文件 md5）。
+/// 报告写 stderr（stdout 是数据流）：默认输出简短质量报告（行数/时间/乱序），
+/// `--check` 追加值域违规与 md5 指纹。
 pub fn run_checked(count: i64, seed: u64, no_sort: bool, check: bool) -> WfgenResult<()> {
-    // 校验状态：流计数 + 时间戳范围 + 值域越界数；md5 指纹由 HashingWriter 累计。
+    // 轻量统计（默认报告用，几乎零成本）：流计数 + 时间戳范围 + 乱序深度。
     let mut n_person: i64 = 0;
     let mut n_auction: i64 = 0;
     let mut n_bid: i64 = 0;
     let mut min_ns: i64 = i64::MAX;
     let mut max_ns: i64 = i64::MIN;
-    let mut violations: u64 = 0;
-    // per-type 违规计数（诊断/报告用）
-    let mut v_person: u64 = 0;
-    let mut v_auction: u64 = 0;
-    let mut v_bid: u64 = 0;
-    // 流序自检：桶序模式下输出 = 桶间严格递增 + 桶内乱序，故每桶独立 watermark
+    // 流序统计：桶序模式下输出 = 桶间严格递增 + 桶内乱序，故每桶独立 watermark
     // （等价于对实际输出流统计，零解析成本）；no-sort 模式用全局 watermark
     // （phase-major 乱序可达 ~27min，远超桶宽——这是它破坏 over 驱逐的机理）。
     let mut seq_max_bucket: [i64; TIME_BUCKETS] = [i64::MIN; TIME_BUCKETS];
@@ -454,60 +453,58 @@ pub fn run_checked(count: i64, seed: u64, no_sort: bool, check: bool) -> WfgenRe
     let pb = crate::progress::ProgressBar::new(count as u64, "gen-nexmark");
     generate_events(count, seed, |ev| {
         pb.tick();
-        // 流式自检（check）：值域 + 时间戳范围 + 流计数 + 流序（乱序深度）。
-        if check {
-            let ns = ev.ns();
-            if no_sort {
-                if ns < seq_max_global {
-                    oog_count += 1;
-                    max_oog_ns = max_oog_ns.max(seq_max_global - ns);
-                } else {
-                    seq_max_global = ns;
-                }
+        // 轻量统计（默认报告）：流计数 + 时间戳范围 + 乱序深度。
+        let ns = ev.ns();
+        match ev {
+            NxEvent::Person { .. } => n_person += 1,
+            NxEvent::Auction { .. } => n_auction += 1,
+            NxEvent::Bid { .. } => n_bid += 1,
+        }
+        min_ns = min_ns.min(ns);
+        max_ns = max_ns.max(ns);
+        if no_sort {
+            if ns < seq_max_global {
+                oog_count += 1;
+                max_oog_ns = max_oog_ns.max(seq_max_global - ns);
             } else {
-                let b =
-                    (((ns - BASE_NS).max(0)) / BUCKET_NS).min((TIME_BUCKETS - 1) as i64) as usize;
-                if ns < seq_max_bucket[b] {
-                    oog_count += 1;
-                    max_oog_ns = max_oog_ns.max(seq_max_bucket[b] - ns);
-                } else {
-                    seq_max_bucket[b] = ns;
-                }
+                seq_max_global = ns;
             }
-            let v = check_event(&ev, count);
-            match ev {
-                NxEvent::Person { ns, .. } => {
-                    n_person += 1;
-                    if v {
-                        violations += 1;
-                        v_person += 1;
-                    }
-                    min_ns = min_ns.min(ns);
-                    max_ns = max_ns.max(ns);
-                }
-                NxEvent::Auction { ns, .. } => {
-                    n_auction += 1;
-                    if v {
-                        violations += 1;
-                        v_auction += 1;
-                    }
-                    min_ns = min_ns.min(ns);
-                    max_ns = max_ns.max(ns);
-                }
-                NxEvent::Bid { ns, .. } => {
-                    n_bid += 1;
-                    if v {
-                        violations += 1;
-                        v_bid += 1;
-                    }
-                    min_ns = min_ns.min(ns);
-                    max_ns = max_ns.max(ns);
-                }
+        } else {
+            let b = (((ns - BASE_NS).max(0)) / BUCKET_NS).min((TIME_BUCKETS - 1) as i64) as usize;
+            if ns < seq_max_bucket[b] {
+                oog_count += 1;
+                max_oog_ns = max_oog_ns.max(seq_max_bucket[b] - ns);
+            } else {
+                seq_max_bucket[b] = ns;
             }
         }
         write_event(&mut sink, ev.stream(), nx_to_value(&ev), ev.ns())
     })?;
     pb.finish();
+
+    // 数据检查阶段（仅 --check）：同一 seed 确定性重放事件流，逐事件值域校验。
+    // 事件序列与生成阶段完全一致（generate_events 是纯函数，同 seed 恒等），
+    // 检查独立成阶段以拥有自己的进度条；报告仍走 stderr（stdout 是数据流）。
+    let mut violations: u64 = 0;
+    let mut v_person: u64 = 0;
+    let mut v_auction: u64 = 0;
+    let mut v_bid: u64 = 0;
+    if check {
+        let pb_check = crate::progress::ProgressBar::new(count as u64, "check: 值域校验");
+        generate_events(count, seed, |ev| {
+            pb_check.tick();
+            if check_event(&ev, count) {
+                violations += 1;
+                match ev {
+                    NxEvent::Person { .. } => v_person += 1,
+                    NxEvent::Auction { .. } => v_auction += 1,
+                    NxEvent::Bid { .. } => v_bid += 1,
+                }
+            }
+            Ok(())
+        })?;
+        pb_check.finish();
+    }
 
     match sink {
         BucketSink::Direct(mut out) => {
@@ -542,13 +539,60 @@ pub fn run_checked(count: i64, seed: u64, no_sort: bool, check: bool) -> WfgenRe
         }
     }
 
+    // 数据质量报告（stderr；stdout 是数据流）：默认输出行数/时间范围/乱序
+    // 三项轻量指标；--check 追加值域违规与 md5 指纹。
+    let expect_person = (count as f64 * 0.02) as i64;
+    let expect_auction = (count as f64 * 0.06) as i64;
+    let expect_bid = count - expect_person - expect_auction;
+    let rows_ok = n_person == expect_person && n_auction == expect_auction && n_bid == expect_bid;
+    let ns_ok = min_ns >= BASE_NS && max_ns <= BASE_NS + SPAN_NS;
+    let total = n_person + n_auction + n_bid;
+    let oog_ok = max_oog_ns <= if no_sort { SPAN_NS } else { BUCKET_NS };
+    eprintln!(
+        "== gen-nexmark {} {} ==",
+        fmt_num(count as u64),
+        if check { "--check" } else { "(质量报告)" }
+    );
+    eprintln!(
+        "  行数  {}（person {} / auction {} / bid {}）{}",
+        fmt_num(total as u64),
+        fmt_num(n_person as u64),
+        fmt_num(n_auction as u64),
+        fmt_num(n_bid as u64),
+        if rows_ok {
+            "✅"
+        } else {
+            "❌ 与期望比例不符"
+        }
+    );
+    eprintln!(
+        "  时间  [{}s, {}s] / 30m span {}",
+        (min_ns - BASE_NS) / 1_000_000_000,
+        (max_ns - BASE_NS) / 1_000_000_000,
+        if ns_ok { "✅" } else { "❌ 越界" }
+    );
+    eprintln!(
+        "  乱序  {} 事件（{:.2}%）最大乱序 {:.1}s {}",
+        fmt_num(oog_count),
+        100.0 * oog_count as f64 / total as f64,
+        max_oog_ns as f64 / 1_000_000_000.0,
+        if no_sort {
+            "（phase-major 预期大，会破坏 over 驱逐）"
+        } else if oog_ok {
+            "✅ 桶内乱序 ≤ 30s 桶宽"
+        } else {
+            "❌ 超过桶宽"
+        }
+    );
     if check {
-        let expect_person = (count as f64 * 0.02) as i64;
-        let expect_auction = (count as f64 * 0.06) as i64;
-        let expect_bid = count - expect_person - expect_auction;
-        let rows_ok =
-            n_person == expect_person && n_auction == expect_auction && n_bid == expect_bid;
-        let ns_ok = min_ns >= BASE_NS && max_ns <= BASE_NS + SPAN_NS;
+        eprintln!(
+            "  违规  {}（person {} / auction {} / bid {}）{}",
+            fmt_num(violations),
+            fmt_num(v_person),
+            fmt_num(v_auction),
+            fmt_num(v_bid),
+            if violations == 0 { "✅" } else { "❌" }
+        );
         let fp = fingerprint
             .as_ref()
             .map(|h| {
@@ -557,55 +601,13 @@ pub fn run_checked(count: i64, seed: u64, no_sort: bool, check: bool) -> WfgenRe
                 format!("{:x}", digest)
             })
             .unwrap_or_default();
-        eprintln!("== gen-nexmark --check {} ==", count);
         eprintln!(
-            "  rows: {} (person {} / auction {} / bid {}) {}",
-            n_person + n_auction + n_bid,
-            n_person,
-            n_auction,
-            n_bid,
-            if rows_ok {
-                "✅"
-            } else {
-                "❌ 与期望比例不符"
-            }
-        );
-        eprintln!(
-            "  time range: [{}s, {}s] of 30m span {}",
-            (min_ns - BASE_NS) / 1_000_000_000,
-            (max_ns - BASE_NS) / 1_000_000_000,
-            if ns_ok { "✅" } else { "❌ 越界" }
-        );
-        eprintln!(
-            "  violations: {} (person {} / auction {} / bid {}) {}",
-            violations,
-            v_person,
-            v_auction,
-            v_bid,
-            if violations == 0 { "✅" } else { "❌" }
-        );
-        let total = n_person + n_auction + n_bid;
-        let oog_ok = max_oog_ns <= if no_sort { SPAN_NS } else { BUCKET_NS };
-        eprintln!(
-            "  out-of-order: {} 事件 ({:.2}%) 最大乱序 {:.1}s {}",
-            oog_count,
-            100.0 * oog_count as f64 / total as f64,
-            max_oog_ns as f64 / 1_000_000_000.0,
-            if no_sort {
-                "（phase-major 预期大，会破坏 over 驱逐）"
-            } else if oog_ok {
-                "✅ 桶内乱序 ≤ 30s 桶宽"
-            } else {
-                "❌ 超过桶宽"
-            }
-        );
-        eprintln!(
-            "  fingerprint (md5 of output bytes): {} {}",
+            "  指纹  {} {}",
             fp,
             if fp.is_empty() {
                 "（未计算）"
             } else {
-                "✅ 确定性锚点（同 seed+count 恒等）"
+                "✅ 同 seed+count 输出字节恒等"
             }
         );
     }

@@ -47,6 +47,28 @@ pub fn run_oracle(
     scenario_duration: &Duration,
     injected_rules: Option<&std::collections::HashSet<String>>,
 ) -> WfgenResult<OracleResult> {
+    run_oracle_events(
+        events.iter().cloned(),
+        rule_plans,
+        scenario_start,
+        scenario_duration,
+        injected_rules,
+    )
+}
+
+/// 流式版 `run_oracle`：事件以迭代器逐条送入，不要求全量物化
+/// （verify-nexmark 大流量场景——30M/100M 事件无法驻留内存）。
+/// 事件顺序必须与 `run_oracle` 的要求一致（时间序，见其文档）。
+pub fn run_oracle_events<I>(
+    events: I,
+    rule_plans: &[RulePlan],
+    scenario_start: &DateTime<Utc>,
+    scenario_duration: &Duration,
+    injected_rules: Option<&std::collections::HashSet<String>>,
+) -> WfgenResult<OracleResult>
+where
+    I: IntoIterator<Item = GenEvent>,
+{
     if rule_plans.is_empty() {
         return Ok(OracleResult { alerts: vec![] });
     }
@@ -65,6 +87,8 @@ pub fn run_oracle(
                 sm: CepStateMachine::new(plan.name.clone(), plan.match_plan.clone(), None),
                 executor: RuleExecutor::new(plan.clone()),
                 conv_plan: plan.conv_plan.clone(),
+                // `on each`（无状态）规则走事件级评估，不用状态机
+                each: plan.each_plan.is_some(),
                 alias_map,
             }
         })
@@ -76,7 +100,7 @@ pub fn run_oracle(
     for event in events {
         let event_nanos = event.timestamp.timestamp_nanos_opt().unwrap_or(0);
 
-        let core_event = gen_event_to_core(event);
+        let core_event = gen_event_to_core(&event);
 
         for engine in &mut engines {
             // Scan for expired instances first (with conv)
@@ -91,6 +115,15 @@ pub fn run_oracle(
                 None => continue, // this rule doesn't use this window
             };
 
+            // `on each`（无状态）：事件级评估一次（each 规则单 bind，
+            // 任一 alias 命中即整体评估，避免逐 alias 重复计数）。
+            if engine.each {
+                if let Ok(Some(record)) = engine.executor.execute_each(&core_event, event_nanos) {
+                    push_alert(record, &mut alerts);
+                }
+                continue;
+            }
+
             // Advance the state machine for each alias bound to this window
             for bind_alias in bind_aliases {
                 if !engine
@@ -104,14 +137,7 @@ pub fn run_oracle(
                 if let StepResult::Matched(ctx) = result
                     && let Ok(alert_record) = engine.executor.execute_match(&ctx)
                 {
-                    alerts.push(OracleAlert {
-                        rule_name: alert_record.rule_name.to_string(),
-                        score: alert_record.score,
-                        entity_type: alert_record.entity_type.to_string(),
-                        entity_id: alert_record.entity_id,
-                        origin: alert_record.origin.as_str().to_string(),
-                        emit_time: alert_record.fired_at.clone(),
-                    });
+                    push_alert(alert_record, &mut alerts);
                 }
             }
         }
@@ -147,8 +173,21 @@ struct RuleEngine {
     sm: CepStateMachine,
     executor: RuleExecutor,
     conv_plan: Option<ConvPlan>,
+    /// `on each`（无状态）规则：事件级评估，不走状态机
+    each: bool,
     /// window_name → Vec<bind_alias> for routing events to all matching aliases
     alias_map: HashMap<String, Vec<String>>,
+}
+
+fn push_alert(alert_record: wf_engine::alert::OutputRecord, alerts: &mut Vec<OracleAlert>) {
+    alerts.push(OracleAlert {
+        rule_name: alert_record.rule_name.to_string(),
+        score: alert_record.score,
+        entity_type: alert_record.entity_type.to_string(),
+        entity_id: alert_record.entity_id,
+        origin: alert_record.origin.as_str().to_string(),
+        emit_time: alert_record.fired_at.clone(),
+    });
 }
 
 fn collect_close_alerts(

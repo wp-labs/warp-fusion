@@ -28,13 +28,20 @@ pub fn run(path_a: &str, path_b: &str, detail: bool) -> WfgenResult<bool> {
     let text_b = std::fs::read_to_string(path_b)
         .map_err(|e| error::error(WfgenReason::Io, format!("read {}: {e}", path_b)))?;
 
-    // L1：流式哈希相同 → 相同（跳过 Myers）。
     let (lines_a, lines_b) = (split_lines(&text_a), split_lines(&text_b));
-    let hash_a = hash_lines(&lines_a);
-    let hash_b = hash_lines(&lines_b);
+    Ok(compare_lines(&lines_a, &lines_b, detail))
+}
+
+/// 对拍两份行列表（git diff 同款分层方法，供 verify-nexmark --engine-emit
+/// 在 wfgen 内部直接对拍，避免脚本侧 python 中介）。
+/// 返回 `true` = 相同；`false` = 不同。
+pub fn compare_lines(lines_a: &[&str], lines_b: &[&str], detail: bool) -> bool {
+    // L1：流式哈希相同 → 相同（跳过 Myers）。
+    let hash_a = hash_lines(lines_a);
+    let hash_b = hash_lines(lines_b);
     if hash_a == hash_b {
         println!("identical ✅ (L1 hash, {} lines)", lines_a.len());
-        return Ok(true);
+        return true;
     }
     println!(
         "different (L1 hash): {} vs {} lines",
@@ -43,12 +50,15 @@ pub fn run(path_a: &str, path_b: &str, detail: bool) -> WfgenResult<bool> {
     );
 
     // L2：差异量。行数差过大 → 降级排序归并（Myers 退化保护）。
+    // 统一行终止符（similar 按行 diff 需要一致行边界；L1 已按行哈希，行为不变）。
+    let text_a = join_lines(lines_a);
+    let text_b = join_lines(lines_b);
     let total = (lines_a.len() + lines_b.len()) as f64;
     let size_diff = (lines_a.len() as i64 - lines_b.len() as i64).unsigned_abs() as f64;
     let degraded = total > 0.0 && size_diff / total > DEGRADE_RATIO;
 
     let (diff_lines, ops_desc) = if degraded {
-        let (missing, extra) = merge_count(&lines_a, &lines_b);
+        let (missing, extra) = merge_count(lines_a, lines_b);
         let n = missing + extra;
         (
             n,
@@ -94,7 +104,17 @@ pub fn run(path_a: &str, path_b: &str, detail: bool) -> WfgenResult<bool> {
         print_detail(&text_a, &text_b, degraded);
     }
 
-    Ok(false)
+    false
+}
+
+/// 行列表 → 统一文本（每行补 \n，供 similar 按行 diff）。
+fn join_lines(lines: &[&str]) -> String {
+    let mut s = String::with_capacity(lines.iter().map(|l| l.len() + 1).sum());
+    for l in lines {
+        s.push_str(l);
+        s.push('\n');
+    }
+    s
 }
 
 /// 按行切分（保留行尾不换行；忽略末尾空段——read_to_string 末尾无换行时

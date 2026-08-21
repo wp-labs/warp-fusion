@@ -111,7 +111,9 @@ fn render(label: &str, done: u64, total: u64, elapsed: f64) {
     } else {
         (done as f64 / total as f64) * 100.0
     };
-    let width = 24usize;
+    // 帧宽预算 ≈ 78 列（label 16 + bar 18 + pct 7 + 计数 22 + 时间 11）——
+    // 超过终端宽度会折行，`\r` 只回到折行后的行首，帧会叠成多行（实测）。
+    let width = 18usize;
     let filled = ((pct / 100.0) * width as f64) as usize;
     let bar: String = (0..width)
         .map(|i| if i < filled { '█' } else { '░' })
@@ -124,11 +126,14 @@ fn render(label: &str, done: u64, total: u64, elapsed: f64) {
     } else {
         0.0
     };
-    eprint!("\r{label} [{bar}] {pct:5.1}% {done_disp}/{total_disp} {elapsed:.0}s ETA {eta:.0}s");
+    // 先清行再写：短帧残留的旧字符（更长帧的尾巴）必须擦掉，否则原地刷新会留残影。
+    eprint!(
+        "\r\x1b[K{label} [{bar}] {pct:5.1}% {done_disp}/{total_disp} {elapsed:.0}s ETA {eta:.0}s"
+    );
 }
 
-/// 数字格式化：1_234_567 → "1,234,567"
-fn fmt_num(n: u64) -> String {
+/// 数字格式化：1_234_567 → "1,234,567"（报告/进度条共用）
+pub(crate) fn fmt_num(n: u64) -> String {
     let s = n.to_string();
     let bytes = s.as_bytes();
     let mut out = String::with_capacity(s.len() + s.len() / 3);

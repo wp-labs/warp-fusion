@@ -77,20 +77,42 @@ enum Commands {
         #[arg(long)]
         no_sort: bool,
 
-        /// 生成自检：流式值域/时间戳/流计数校验 + 输出字节 md5 指纹
+        /// 生成自检：生成后独立检查阶段（同一 seed 重放，独立进度条），
+        /// 逐事件值域校验 + 输出字节 md5 指纹
         /// （报告写 stderr；stdout 仍是数据流，可与 --no-sort 之外的管道共用）
         #[arg(long)]
         check: bool,
     },
-    /// NEXMark Q2-Q21 ground-truth simulator (Rust port of
-    /// nexmark_pk/scripts/verify_ground_truth.py, ~100x faster)
+    /// NEXMark 引擎结果验证：用真实 WFL 规则引擎（wf_engine）处理
+    /// wfgen 生成的事件，产出各规则应 EMIT 计数（JSON），供与引擎
+    /// daemon 实际 EMIT 对拍（nexmark_pk/bench.sh --verify）
     VerifyNexmark {
-        /// Number of events to simulate
+        /// Number of events to verify
         count: i64,
 
         /// RNG seed (must match `gen-nexmark` for comparable output)
         #[arg(long, default_value_t = 1)]
         seed: u64,
+
+        /// Directory containing the NEXMark .wfl rule files (glob *.wfl)
+        #[arg(long, default_value = "models/queries")]
+        rules_dir: PathBuf,
+
+        /// NEXMark window schema .wfs (referenced by `use` in the rules)
+        #[arg(long, default_value = "models/schemas/nexmark.wfs")]
+        schemas: PathBuf,
+
+        /// 只验证指定查询的规则文件（q1..q22；默认全部 models/queries/*.wfl）。
+        /// bench 单查询验证时传 --query 大幅提速（26 规则 → 1 个文件）。
+        #[arg(long)]
+        query: Option<String>,
+
+        /// 引擎结果对拍：目录（扫描 bench_*_replay.txt，bench.sh 用法）或单文件。
+        /// 读引擎实际 EMIT 计数，在 wfgen 内用 git-diff 同款分层方法
+        /// （L1 哈希 → L2 Myers/降级 → L3 明细）与 oracle 逐规则对拍；
+        /// 退出码 0=一致 / 1=有差异（q21 已知差异不判失败）。
+        #[arg(long)]
+        engine_emit: Option<PathBuf>,
     },
     /// 分层文件比对（L1 哈希相同性 → L2 Myers 差异量 → L3 --detail 定位）
     Diff {
@@ -358,7 +380,14 @@ async fn run_cli() -> WfgenResult<()> {
             no_sort,
             check,
         } => wfgen::cmd_gen_nexmark::run_checked(count, seed, no_sort, check),
-        Commands::VerifyNexmark { count, seed } => wfgen::cmd_verify_nexmark::run(count, seed),
+        Commands::VerifyNexmark {
+            count,
+            seed,
+            rules_dir,
+            schemas,
+            query,
+            engine_emit,
+        } => wfgen::cmd_verify_nexmark::run(count, seed, rules_dir, schemas, query, engine_emit),
         Commands::Diff { a, b, detail } => {
             let same = wfgen::cmd_diff::run(&a.to_string_lossy(), &b.to_string_lossy(), detail)?;
             if !same {

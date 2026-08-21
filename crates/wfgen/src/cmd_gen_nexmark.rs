@@ -165,7 +165,7 @@ pub enum NxEvent {
         price: i64,
         bidder: i64,
         channel: usize,
-        url: i64,
+        url: String,
         extra: String,
     },
 }
@@ -245,27 +245,17 @@ pub(crate) fn nx_to_value(ev: &NxEvent) -> serde_json::Value {
             // 官方 BidGenerator：50% 热门 4 通道（Google/Facebook/Baidu/Apple），
             // 50% channel-N（官方用递增计数器轮询，非随机）。channel 编码：
             // 0..4 = 热门索引，≥4 = channel-{channel-4}。
-            let (channel_name, url_str) = if *channel < HOT_CHANNEL_MAX {
-                (
-                    HOT_CHANNELS[*channel].to_string(),
-                    format!("https://www.nexmark.com/hot/{}/item.htm?query=1", *url),
-                )
+            let channel_name = if *channel < HOT_CHANNEL_MAX {
+                HOT_CHANNELS[*channel].to_string()
             } else {
-                let n = *channel - HOT_CHANNEL_MAX;
-                (
-                    format!("channel-{}", n),
-                    format!(
-                        "https://www.nexmark.com/item.htm?query=1&channel_id={}",
-                        *url
-                    ),
-                )
+                format!("channel-{}", *channel - HOT_CHANNEL_MAX)
             };
             json!({
                 "auction": auc,
                 "bidder": bidder,
                 "price": price,
                 "channel": channel_name,
-                "url": url_str,
+                "url": url,
                 "dateTime": ns,
                 "extra": extra,
             })
@@ -314,6 +304,23 @@ fn write_event(
 /// 官方 `PersonGenerator.nextPrice`：对数均匀 [100, 1e8)。
 fn next_price(rng: &mut StdRng) -> i64 {
     (10f64.powf(rng.random::<f64>() * 6.0) * 100.0).round() as i64
+}
+
+/// 官方 `StringsGenerator.getBaseUrl`：3 段 5 字符目录 + 固定查询串
+/// （`https://www.nexmark.com/{s1}/{s2}/{s3}/item.htm?query=1`，cold 通道追加
+/// `&channel_id=`）。官方为静态缓存取值，wfgen 用确定 rng 逐 bid 生成，
+/// 目录结构与 split 语义一致（q22 URL Directories）。
+fn next_url(rng: &mut StdRng, channel_id: Option<i64>) -> String {
+    let base = format!(
+        "https://www.nexmark.com/{}/{}/{}/item.htm?query=1",
+        next_string(rng, 5),
+        next_string(rng, 5),
+        next_string(rng, 5)
+    );
+    match channel_id {
+        Some(id) => format!("{base}&channel_id={id}"),
+        None => base,
+    }
 }
 
 /// 官方 `StringsGenerator.nextString(random, len)`：len 个小写字母。
@@ -498,12 +505,12 @@ where
             let price = next_price(&mut rng);
             let (channel, url) = if rng.random_range(0..HOT_CHANNELS_RATIO) > 0 {
                 let i = rng.random_range(0..HOT_CHANNELS.len());
-                (i, i as i64)
+                (i, next_url(&mut rng, None))
             } else {
-                // 官方 cold 通道：递增计数器轮询（无 rng）。
+                // 官方 cold 通道：递增计数器轮询（无 rng），url 追加 channel_id。
                 let i = channel_counter % CHANNELS_NUMBER;
                 channel_counter += 1;
-                (HOT_CHANNEL_MAX + i as usize, i)
+                (HOT_CHANNEL_MAX + i as usize, next_url(&mut rng, Some(i)))
             };
             let current_size = 8 + 8 + 8 + 8;
             let extra = next_extra(&mut rng, current_size, AVG_BID_BYTE_SIZE);
@@ -597,7 +604,10 @@ fn check_event(ev: &NxEvent, count: i64) -> bool {
                 || !(FIRST_PERSON_ID..=person_hi).contains(bidder)
                 || *price < 100 // 官方 nextPrice 下界 100
                 || *channel >= CHANNEL_MAX
-                || !(0..CHANNELS_NUMBER).contains(url)
+                // url 官方格式：https://www.nexmark.com/{5}/{5}/{5}/item.htm?query=1[&channel_id=N]
+                // （q22 取 split('/') 索引 3/4/5，越界即违规）
+                || url.split('/').count() < 7
+                || !url.starts_with("https://www.nexmark.com/")
         }
     }
 }
@@ -940,7 +950,7 @@ mod tests {
                 price: 100,
                 bidder: person_hi,
                 channel: CHANNEL_MAX - 1,
-                url: 0,
+                url: "https://www.nexmark.com/aaaaa/bbbbb/ccccc/item.htm?query=1".to_string(),
                 extra: String::new(),
             },
             count
@@ -1012,7 +1022,7 @@ mod tests {
                 price: 100,
                 bidder: person_hi,
                 channel: 0,
-                url: 0,
+                url: "https://www.nexmark.com/aaaaa/bbbbb/ccccc/item.htm?query=1".to_string(),
                 extra: String::new(),
             },
             count
@@ -1024,7 +1034,7 @@ mod tests {
                 price: 99, // < 官方 nextPrice 下界 100
                 bidder: person_hi,
                 channel: 0,
-                url: 0,
+                url: "https://www.nexmark.com/aaaaa/bbbbb/ccccc/item.htm?query=1".to_string(),
                 extra: String::new(),
             },
             count
@@ -1036,7 +1046,7 @@ mod tests {
                 price: 100,
                 bidder: person_hi,
                 channel: CHANNEL_MAX, // 越 channel 上限（4+10000）
-                url: 0,
+                url: "https://www.nexmark.com/aaaaa/bbbbb/ccccc/item.htm?query=1".to_string(),
                 extra: String::new(),
             },
             count

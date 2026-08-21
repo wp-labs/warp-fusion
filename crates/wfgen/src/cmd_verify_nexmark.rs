@@ -227,6 +227,9 @@ pub fn run(
         for line in known_report {
             println!("{line}");
         }
+        // 数据符合性声明（stderr，不污染 stdout 对拍输出）。
+        eprintln!();
+        eprint!("{}", crate::nexmark_conformance::report(true));
         let gt_refs: Vec<&str> = gt_lines.iter().map(String::as_str).collect();
         let engine_refs: Vec<&str> = engine_lines.iter().map(String::as_str).collect();
         if !crate::cmd_diff::compare_lines(&gt_refs, &engine_refs, true) {

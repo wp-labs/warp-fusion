@@ -679,6 +679,9 @@ pub fn run_checked(count: i64, seed: u64, no_sort: bool, check: bool) -> WfgenRe
                 "✅ 同 seed+count 输出字节恒等"
             }
         );
+        // 数据符合性声明（对照 Flink 官方 nexmark/nexmark 默认配置，静态结论）。
+        eprintln!();
+        eprint!("{}", crate::nexmark_conformance::report(false));
     }
     Ok(())
 }

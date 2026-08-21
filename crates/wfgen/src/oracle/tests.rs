@@ -20,6 +20,7 @@ fn make_simple_rule_plan() -> RulePlan {
             window: "LoginWindow".to_string(),
             filter: None,
         }],
+        lets: Vec::new(),
         match_plan: MatchPlan {
             keys: vec![FieldRef::Simple("sip".to_string())],
             key_map: None,
@@ -304,6 +305,7 @@ fn multi_alias_same_window_both_receive_events() {
                 filter: None,
             },
         ],
+        lets: Vec::new(),
         match_plan: MatchPlan {
             keys: vec![FieldRef::Simple("sip".to_string())],
             key_map: None,
@@ -472,6 +474,7 @@ fn conv_top_filters_non_qualifying() {
             window: "ConnWindow".to_string(),
             filter: None,
         }],
+        lets: Vec::new(),
         match_plan: MatchPlan {
             keys: vec![FieldRef::Simple("sip".to_string())],
             key_map: None,
@@ -669,6 +672,7 @@ fn make_join_key_rule_plan() -> RulePlan {
             window: "bid_events".to_string(),
             filter: None,
         }],
+        lets: Vec::new(),
         match_plan: MatchPlan {
             keys: vec![FieldRef::Simple("category".to_string())],
             key_map: None,

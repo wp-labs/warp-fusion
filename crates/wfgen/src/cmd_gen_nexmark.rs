@@ -107,6 +107,8 @@ const AVG_AUCTION_BYTE_SIZE: usize = 500;
 const AVG_BID_BYTE_SIZE: usize = 100;
 // 官方 BidGenerator：HOT_CHANNELS 4 个（50% 概率），其余 channel-N。
 const HOT_CHANNELS: [&str; 4] = ["Google", "Facebook", "Baidu", "Apple"];
+// 官方 q21 channel_id 映射（CASE WHEN lower(channel)）：apple=0/google=1/facebook=2/baidu=3。
+const HOT_CHANNEL_IDS: [&str; 4] = ["1", "2", "3", "0"];
 const HOT_CHANNEL_MAX: usize = HOT_CHANNELS.len();
 const CHANNEL_MAX: usize = HOT_CHANNELS.len() + CHANNELS_NUMBER as usize;
 
@@ -250,11 +252,20 @@ pub(crate) fn nx_to_value(ev: &NxEvent) -> serde_json::Value {
             } else {
                 format!("channel-{}", *channel - HOT_CHANNEL_MAX)
             };
+            // 官方 q21（Add channel id）的 channel_id：热通道按官方 CASE 映射
+            // （apple=0/google=1/facebook=2/baidu=3），cold 取 url 的 channel_id=N
+            // （生成时已知，等价 SQL 计算值）。
+            let channel_id = if *channel < HOT_CHANNEL_MAX {
+                HOT_CHANNEL_IDS[*channel].to_string()
+            } else {
+                (*channel - HOT_CHANNEL_MAX).to_string()
+            };
             json!({
                 "auction": auc,
                 "bidder": bidder,
                 "price": price,
                 "channel": channel_name,
+                "channel_id": channel_id,
                 "url": url,
                 "dateTime": ns,
                 "extra": extra,

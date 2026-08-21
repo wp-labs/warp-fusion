@@ -94,6 +94,17 @@ const CITIES: [&str; 10] = [
     "Cheyenne",
 ];
 const STATES: [&str; 6] = ["AZ", "CA", "ID", "OR", "WA", "WY"];
+// 官方 PersonGenerator：随机姓名（FIRST_NAMES × LAST_NAMES）。
+const FIRST_NAMES: [&str; 11] = [
+    "Peter", "Paul", "Luke", "John", "Saul", "Vicky", "Kate", "Julie", "Sarah", "Deiter", "Walter",
+];
+const LAST_NAMES: [&str; 9] = [
+    "Shultz", "Abrams", "Spencer", "White", "Bartels", "Walton", "Smith", "Jones", "Noris",
+];
+// 官方 NexmarkConfiguration avg*ByteSize：extra 填充到该目标体积。
+const AVG_PERSON_BYTE_SIZE: usize = 200;
+const AVG_AUCTION_BYTE_SIZE: usize = 500;
+const AVG_BID_BYTE_SIZE: usize = 100;
 // 官方 BidGenerator：HOT_CHANNELS 4 个（50% 概率），其余 channel-N。
 const HOT_CHANNELS: [&str; 4] = ["Google", "Facebook", "Baidu", "Apple"];
 const HOT_CHANNEL_MAX: usize = HOT_CHANNELS.len();
@@ -122,13 +133,19 @@ enum BucketSink {
 
 /// 轻量事件描述：与 JSON 输出字段一一对应（rng 消耗顺序不变），
 /// gen 在回调里转 JSON，verify-nexmark 直接用字段（省 JSON 构造/解析）。
-#[derive(Debug, Clone, Copy)]
+/// 字符串字段（name/email/creditCard/itemName/description/extra）按官方生成器
+/// 随机生成（同 seed 确定性），与 JSON 输出字段一一对应。
+#[derive(Debug, Clone)]
 pub enum NxEvent {
     Person {
         id: i64,
         ns: i64,
         city: usize,
         state: usize,
+        name: String,
+        email: String,
+        credit_card: String,
+        extra: String,
     },
     Auction {
         id: i64,
@@ -138,6 +155,9 @@ pub enum NxEvent {
         expires: i64,
         seller: i64,
         category: i64,
+        item_name: String,
+        description: String,
+        extra: String,
     },
     Bid {
         auc: i64,
@@ -146,6 +166,7 @@ pub enum NxEvent {
         bidder: i64,
         channel: usize,
         url: i64,
+        extra: String,
     },
 }
 
@@ -175,13 +196,19 @@ pub(crate) fn nx_to_value(ev: &NxEvent) -> serde_json::Value {
             ns,
             city,
             state,
+            name,
+            email,
+            credit_card,
+            extra,
         } => json!({
             "id": id,
-            "name": format!("person_{}", id),
-            "email": format!("person{}@example.com", id),
+            "name": name,
+            "email": email,
+            "creditCard": credit_card,
             "city": CITIES[*city],
             "state": STATES[*state],
             "dateTime": ns,
+            "extra": extra,
         }),
         NxEvent::Auction {
             id,
@@ -191,18 +218,20 @@ pub(crate) fn nx_to_value(ev: &NxEvent) -> serde_json::Value {
             expires,
             seller,
             category,
+            item_name,
+            description,
+            extra,
         } => json!({
             "id": id,
-            // 原版语义：id = i + 1，itemName/description 用 0 基 i（= id-1），保持兼容
-            "itemName": format!("item_{}", id - 1),
-            "description": format!("desc {}", id - 1),
+            "itemName": item_name,
+            "description": description,
             "initialBid": initial_bid,
             "reserve": reserve,
             "dateTime": ns,
             "expires": expires,
             "seller": seller,
             "category": category,
-            "extra": "",
+            "extra": extra,
         }),
         NxEvent::Bid {
             auc,
@@ -211,9 +240,11 @@ pub(crate) fn nx_to_value(ev: &NxEvent) -> serde_json::Value {
             bidder,
             channel,
             url,
+            extra,
         } => {
             // 官方 BidGenerator：50% 热门 4 通道（Google/Facebook/Baidu/Apple），
-            // 50% channel-N。channel 编码：0..4 = 热门索引，≥4 = channel-{channel-4}。
+            // 50% channel-N（官方用递增计数器轮询，非随机）。channel 编码：
+            // 0..4 = 热门索引，≥4 = channel-{channel-4}。
             let (channel_name, url_str) = if *channel < HOT_CHANNEL_MAX {
                 (
                     HOT_CHANNELS[*channel].to_string(),
@@ -236,7 +267,7 @@ pub(crate) fn nx_to_value(ev: &NxEvent) -> serde_json::Value {
                 "channel": channel_name,
                 "url": url_str,
                 "dateTime": ns,
-                "extra": "",
+                "extra": extra,
             })
         }
     }
@@ -283,6 +314,37 @@ fn write_event(
 /// 官方 `PersonGenerator.nextPrice`：对数均匀 [100, 1e8)。
 fn next_price(rng: &mut StdRng) -> i64 {
     (10f64.powf(rng.random::<f64>() * 6.0) * 100.0).round() as i64
+}
+
+/// 官方 `StringsGenerator.nextString(random, len)`：len 个小写字母。
+fn next_string(rng: &mut StdRng, len: usize) -> String {
+    let mut s = String::with_capacity(len);
+    for _ in 0..len {
+        s.push((b'a' + rng.random_range(0u8..26)) as char);
+    }
+    s
+}
+
+/// 官方 `StringsGenerator.nextExtra`：currentSize 未超 desiredAverageSize 时补齐为随机
+/// 小写串（事件体积对齐官方 avg*ByteSize 口径）。
+fn next_extra(rng: &mut StdRng, current_size: usize, desired: usize) -> String {
+    if current_size > desired {
+        String::new()
+    } else {
+        next_string(rng, desired - current_size)
+    }
+}
+
+/// 官方 `PersonGenerator.nextCreditCard`：4 组 4 位数字（"xxxx xxxx xxxx xxxx"）。
+fn next_credit_card(rng: &mut StdRng) -> String {
+    let mut s = String::with_capacity(19);
+    for i in 0..4 {
+        if i > 0 {
+            s.push(' ');
+        }
+        s.push_str(&format!("{:04}", rng.random_range(0..10_000)));
+    }
+    s
 }
 
 /// 官方 `PersonGenerator.lastBase0PersonId`：截至 eventId 的最后 person base0 索引
@@ -348,35 +410,66 @@ where
     // 交错出现在事件流里」，让 person/auction 窗口的 watermark 随事件时间渐进推进——否则
     // phase-major 会让 person 窗口在处理 auction/bid 前就推进到 30 分钟末尾，把早期
     // seller/bidder 的 person 驱逐，导致 snapshot join 时序错配（q3 EMIT 从 600k 崩到 ~23k）。
+    // 字段生成顺序与 rng 消耗对齐官方 generator（RNG 算法不同，序列不等价，分布语义一致）。
+
+    // 官方 BidGenerator 的 channel-N 用递增计数器轮询（CHANNEL_URL_CACHE[nextChannelNumber()]）。
+    let mut channel_counter: i64 = 0;
 
     for event_id in 0..count {
         let rem = event_id % TOTAL_PROPORTION;
         let ns = BASE_NS + (event_id as i128 * SPAN_NS as i128 / count as i128) as i64;
 
         if rem < PERSON_PROPORTION {
-            // person：id 唯一（FIRST_PERSON_ID 起），每个 person 一条记录；
-            // city/state 独立随机（官方 10 城 / 6 州）。
+            // person（官方 PersonGenerator.nextPerson，消耗顺序：姓名 → 邮箱 → 卡号
+            // → 城市 → 州 → extra）：name/email/creditCard 随机，extra 补齐到 avgPersonByteSize。
             let person_idx = event_id / TOTAL_PROPORTION;
+            let name = format!(
+                "{} {}",
+                FIRST_NAMES[rng.random_range(0..FIRST_NAMES.len())],
+                LAST_NAMES[rng.random_range(0..LAST_NAMES.len())]
+            );
+            let email = format!(
+                "{}@{}.com",
+                next_string(&mut rng, 7),
+                next_string(&mut rng, 5)
+            );
+            let credit_card = next_credit_card(&mut rng);
+            let city = rng.random_range(0..CITIES.len());
+            let state = rng.random_range(0..STATES.len());
+            let current_size = 8
+                + name.len()
+                + email.len()
+                + credit_card.len()
+                + CITIES[city].len()
+                + STATES[state].len();
+            let extra = next_extra(&mut rng, current_size, AVG_PERSON_BYTE_SIZE);
             emit(NxEvent::Person {
                 id: FIRST_PERSON_ID + person_idx,
                 ns,
-                city: rng.random_range(0..CITIES.len()),
-                state: rng.random_range(0..STATES.len()),
+                city,
+                state,
+                name,
+                email,
+                credit_card,
+                extra,
             })?;
         } else if rem < PERSON_PROPORTION + AUCTION_PROPORTION {
-            // auction（官方 AuctionGenerator.nextAuction）：seller 75% 热点（最近 100 人
-            // 批次第 1 人）/ 25% cold（最近 numActivePeople ± lead）；initialBid/reserve
-            // 对数均匀；expires = 1 + [0, 2×horizon) ms；category ∈ 10..14。
+            // auction（官方 AuctionGenerator.nextAuction，消耗顺序：seller → category
+            // → initialBid → 有效期 → itemName → description → reserve → extra）。
             let auction_idx = last_base0_auction_id(event_id);
             let seller = if rng.random_range(0..HOT_SELLERS_RATIO) > 0 {
                 (last_base0_person_id(event_id) / HOT_SELLER_BATCH) * HOT_SELLER_BATCH
             } else {
                 next_base0_person_id(event_id, &mut rng)
             } + FIRST_PERSON_ID;
-            let initial_bid = next_price(&mut rng);
-            let reserve = initial_bid + next_price(&mut rng);
-            let expires = ns + auction_length_ns(event_id, ns, count, &mut rng);
             let category = FIRST_CATEGORY_ID + rng.random_range(0..NUM_CATEGORIES);
+            let initial_bid = next_price(&mut rng);
+            let expires = ns + auction_length_ns(event_id, ns, count, &mut rng);
+            let item_name = next_string(&mut rng, 20);
+            let description = next_string(&mut rng, 100);
+            let reserve = initial_bid + next_price(&mut rng);
+            let current_size = 8 + item_name.len() + description.len() + 8 + 8 + 8 + 8 + 8;
+            let extra = next_extra(&mut rng, current_size, AVG_AUCTION_BYTE_SIZE);
             emit(NxEvent::Auction {
                 id: FIRST_AUCTION_ID + auction_idx,
                 ns,
@@ -385,12 +478,13 @@ where
                 expires,
                 seller,
                 category,
+                item_name,
+                description,
+                extra,
             })?;
         } else {
-            // bid（官方 BidGenerator.nextBid）：auction 50% 热点（最近 100 个 auction 批次
-            // 第 1 个）/ 50% cold（最近 numInFlightAuctions ± lead）；bidder 75% 热点（最近
-            // 100 人批次第 2 人，与 hot seller 错开）/ 25% cold；price 对数均匀（与 auction
-            // 冷热无关）；channel 50% 热门 4 通道 / 50% channel-N。
+            // bid（官方 BidGenerator.nextBid，消耗顺序：auction → bidder → price
+            // → channel（hot 2 次 rng / cold 仅判断 1 次 + 计数器）→ extra）。
             let auc_base0 = if rng.random_range(0..HOT_AUCTION_RATIO) > 0 {
                 (last_base0_auction_id(event_id) / HOT_AUCTION_BATCH) * HOT_AUCTION_BATCH
             } else {
@@ -406,9 +500,13 @@ where
                 let i = rng.random_range(0..HOT_CHANNELS.len());
                 (i, i as i64)
             } else {
-                let i = rng.random_range(0..CHANNELS_NUMBER as usize);
-                (HOT_CHANNEL_MAX + i, i as i64)
+                // 官方 cold 通道：递增计数器轮询（无 rng）。
+                let i = channel_counter % CHANNELS_NUMBER;
+                channel_counter += 1;
+                (HOT_CHANNEL_MAX + i as usize, i)
             };
+            let current_size = 8 + 8 + 8 + 8;
+            let extra = next_extra(&mut rng, current_size, AVG_BID_BYTE_SIZE);
             emit(NxEvent::Bid {
                 auc: auc_base0 + FIRST_AUCTION_ID,
                 ns,
@@ -416,6 +514,7 @@ where
                 bidder,
                 channel,
                 url,
+                extra,
             })?;
         }
     }
@@ -828,6 +927,9 @@ mod tests {
                 expires: BASE_NS + 1_000_000_000,
                 seller: FIRST_PERSON_ID,
                 category: FIRST_CATEGORY_ID,
+                item_name: "x".repeat(20),
+                description: "x".repeat(100),
+                extra: String::new(),
             },
             count
         ));
@@ -839,6 +941,7 @@ mod tests {
                 bidder: person_hi,
                 channel: CHANNEL_MAX - 1,
                 url: 0,
+                extra: String::new(),
             },
             count
         ));
@@ -848,6 +951,10 @@ mod tests {
                 ns: BASE_NS,
                 city: CITIES.len() - 1,
                 state: STATES.len() - 1,
+                name: "Peter Shultz".to_string(),
+                email: "abc@def.com".to_string(),
+                credit_card: "1234 5678 9012 3456".to_string(),
+                extra: String::new(),
             },
             count
         ));
@@ -862,6 +969,9 @@ mod tests {
                 expires: BASE_NS + 1_000_000_000,
                 seller: FIRST_PERSON_ID,
                 category: FIRST_CATEGORY_ID,
+                item_name: "x".repeat(20),
+                description: "x".repeat(100),
+                extra: String::new(),
             },
             count
         ));
@@ -874,6 +984,9 @@ mod tests {
                 expires: BASE_NS + 1_000_000_000,
                 seller: FIRST_PERSON_ID,
                 category: FIRST_CATEGORY_ID,
+                item_name: "x".repeat(20),
+                description: "x".repeat(100),
+                extra: String::new(),
             },
             count
         ));
@@ -886,6 +999,9 @@ mod tests {
                 expires: BASE_NS + 1_000_000_000,
                 seller: FIRST_PERSON_ID,
                 category: FIRST_CATEGORY_ID + NUM_CATEGORIES, // 越 category 上限（14）
+                item_name: "x".repeat(20),
+                description: "x".repeat(100),
+                extra: String::new(),
             },
             count
         ));
@@ -897,6 +1013,7 @@ mod tests {
                 bidder: person_hi,
                 channel: 0,
                 url: 0,
+                extra: String::new(),
             },
             count
         ));
@@ -908,6 +1025,7 @@ mod tests {
                 bidder: person_hi,
                 channel: 0,
                 url: 0,
+                extra: String::new(),
             },
             count
         ));
@@ -919,6 +1037,7 @@ mod tests {
                 bidder: person_hi,
                 channel: CHANNEL_MAX, // 越 channel 上限（4+10000）
                 url: 0,
+                extra: String::new(),
             },
             count
         ));
@@ -928,6 +1047,10 @@ mod tests {
                 ns: BASE_NS,
                 city: 0,
                 state: 0,
+                name: "Peter Shultz".to_string(),
+                email: "abc@def.com".to_string(),
+                credit_card: "1234 5678 9012 3456".to_string(),
+                extra: String::new(),
             },
             count
         ));
@@ -937,6 +1060,10 @@ mod tests {
                 ns: BASE_NS,
                 city: CITIES.len(), // 越 city 上限（10）
                 state: 0,
+                name: "Peter Shultz".to_string(),
+                email: "abc@def.com".to_string(),
+                credit_card: "1234 5678 9012 3456".to_string(),
+                extra: String::new(),
             },
             count
         ));

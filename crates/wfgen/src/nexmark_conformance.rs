@@ -33,24 +33,18 @@ const ALIGNED: &[&str] = &[
     "city/state：官方 PersonGenerator 10 城 / 6 州（AZ,CA,ID,OR,WA,WY），独立随机",
 ];
 
-/// 残余差异（⚠️，均为无查询引用的格式/裁剪项，`_` 字段不被任何查询读取）：
-/// (说明, 理由与影响)。
+/// 残余差异（⚠️）：仅剩 2 条有硬性理由的项——不复刻官方实现缺陷、保留确定性重放。
 const DEVIATIONS: &[(&str, &str)] = &[
     (
-        "name/email/itemName/description/url 为确定性模板（官方为随机字符串）",
-        "本地 schema 裁剪；无查询引用（官方 Q8/Q10 按 city/state 分组已对齐值域），零影响",
-    ),
-    (
-        "无 creditCard/extra 填充字段（官方 Person 含 creditCard、各事件含 extra 补齐到 avgByteSize）",
-        "本地 schema 无 creditCard，extra 恒为 \"\"；无查询引用，零影响",
-    ),
-    (
         "bidder id 单加 FIRST_PERSON_ID（nexmark-flink 存在 bidder 双加 1000 的 bug）",
-        "按 Beam 官方语义单加；本地查询集无 bidder→person join（Q3/Q9 用 auction.seller），零影响",
+        "双加是 nexmark-flink 的实现缺陷（Beam 原版单加，bidder 引用错位 +1000 → 引用不存在的人）；
+        按 Beam 官方语义单加。本地查询集无 bidder→person join（Q3/Q9 用 auction.seller），
+        若未来按 bidder join person 需显式评估该 bug",
     ),
     (
-        "channel/url 用确定性 StdRng（nexmark-flink 的 HOT_URLS/CHANNEL_URL_CACHE 用静态 SplittableRandom，进程间不确定）",
-        "为保证同 seed 字节级确定性重放，刻意用确定 RNG；分布语义（50%/50%、4 热通道）与官方一致",
+        "RNG：StdRng 确定性重放（官方用 SplittableRandom；HOT_URLS/CHANNEL_URL_CACHE 用静态随机，进程间不确定）",
+        "官方对 url/channel 缓存字段自身不可重放；wfgen 用确定 RNG 保证同 seed 字节级确定性，
+        分布语义（50%/50%、4 热通道、channel-N 计数器轮询）与官方一致。url 内容为格式近似模板（无查询引用）",
     ),
 ];
 
@@ -64,6 +58,7 @@ pub fn report(brief: bool) -> String {
         for line in ALIGNED {
             s.push_str(&format!("  ✅ {line}\n"));
         }
+        s.push_str("  ✅ 字符串字段：name/email 随机（官方 FIRST_NAMES×LAST_NAMES + nextString）、creditCard 4 组 4 位、itemName/description = nextString(20/100)、extra 补齐到 avgByteSize（200/500/100）\n");
     }
     for (name, impact) in DEVIATIONS {
         if brief {
@@ -72,13 +67,14 @@ pub fn report(brief: bool) -> String {
             s.push_str(&format!("  ⚠️ 残余差异 {name}：{impact}\n"));
         }
     }
+    s.push_str("  结论 生成语义与字段（比例/时间/ID/引用窗口/热点/价格/有效期/category/channel/\n");
     s.push_str(
-        "  结论 生成语义（比例/时间/ID/引用窗口/热点/价格/有效期/category/channel/city·state）\n",
+        "        city·state/name·email·creditCard·extra）已与 Flink 官方默认配置逐项对齐；\n",
     );
     s.push_str(
-        "        已与 Flink 官方默认配置逐项对齐；残余差异仅为无查询引用的字符串模板与字段裁剪。\n",
+        "        残余差异仅剩 2 条硬性项：不复刻 nexmark-flink 的 bidder 双加 bug、确定性 RNG\n",
     );
-    s.push_str("        正确性对拍（oracle vs 引擎同数据）与白皮书/VVR 数字对比的可比性均不受残余差异影响。\n");
+    s.push_str("        保证同 seed 字节级重放（官方静态随机缓存自身不可重放）。\n");
     s.push_str("        逐项对照见 wf-examples/performance/nexmark_pk/NEXMARK_CONFORMANCE.md。\n");
     s
 }

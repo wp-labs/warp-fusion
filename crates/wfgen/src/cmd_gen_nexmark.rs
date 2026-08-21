@@ -5,15 +5,25 @@
 //! (`_stream`/`_window`/`_timestamp` metadata + event fields, `dateTime` in
 //! epoch ns).
 //!
-//! 生成语义对齐 NEXMark 官方 `nexmark/nexmark` generator：
+//! 生成语义**严格对齐** NEXMark 官方 `nexmark/nexmark`（原 flink-benchmarks）默认配置：
 //! - **交错生成**（round-robin）：每 50 个事件 1 person + 3 auction + 46 bid，事件时间严格
 //!   递增（等价 outOfOrderGroupSize=1）。person/auction 交错出现在事件流里，窗口 watermark
 //!   随事件时间渐进推进，snapshot join 时序正确（phase-major 会让 person 窗口在处理
 //!   auction/bid 前就推进到末尾，驱逐早期 seller/bidder 的 person）。
 //! - **id 唯一**：person/auction 各自从 1000 起单调递增，每个实体一条记录（不循环 1000 个
 //!   id 产生多版本），asof join 因此是 O(1) 查注册时间而非扫 600 版本。
-//! - **引用最近**：seller/bidder 引用「最近 60s 内（cold）/ 15s 内（hot）的 person」，
-//!   bid.auction 引用「最近 60s 内的 auction」，保证 asof within 60s 命中率 ≈ 100%。
+//! - **引用最近 N 人**（官方语义）：seller/bidder 75% 概率引用最近 100 人批次的热点
+//!   （seller=批次第 1 人、bidder=第 2 人，避免热卖家/热出价人相撞），25% 概率引用最近
+//!   numActivePeople=1000 人 ± 10 lead（lead 允许引用「尚未生成」的未来实体，官方靠
+//!   乱序/后续事件补达）；bid.auction 50% 概率引用最近 100 个 auction 批次第 1 个，50%
+//!   概率引用最近 numInFlightAuctions=100 ± 10 lead。
+//! - **价格对数均匀**：initialBid/reserve/bid.price 均 = round(10^(6u) × 100)（[100, 1e8)），
+//!   与 auction 冷热无关；auction 有效期 = 1 + [0, 2×horizon) ms，horizon = 未来
+//!   numInFlightAuctions=100 个 auction 的生成间隔；category ∈ 10..14（FIRST_CATEGORY_ID=10
+//!   + rand(5)）；channel 50% 热门 4 通道 + 50% channel-0..9999。
+//!
+//! 与官方仅有的差异：name/email/itemName/description/url 为确定性模板（无查询引用，
+//! 官方为随机字符串）；不含 creditCard/extra 填充（本地 schema 裁剪）。
 //!
 //! Usage: `wfgen gen-nexmark <count> [--seed N] [--no-sort]`
 
@@ -34,11 +44,33 @@ const SPAN_NS: i64 = 1_800_000_000_000; // 30 min event span
 // NEXMark 官方 id 起始值（person/auction 分属不同命名空间，均可从 1000 起）。
 const FIRST_PERSON_ID: i64 = 1000;
 const FIRST_AUCTION_ID: i64 = 1000;
-// 引用「最近 X 秒内」的实体（时间窗口固定，保证 asof within 60s 命中率不随数据规模退化；
-// NEXMark 官方用固定事件速率 + numActivePeople，我们固定 30m span，等价地用固定时间窗）。
-const COLD_PERSON_WINDOW_NS: i64 = 60_000_000_000; // cold 引用最近 60s
-const HOT_PERSON_WINDOW_NS: i64 = 15_000_000_000; // hot 引用最近 15s
-const AUCTION_WINDOW_NS: i64 = 60_000_000_000; // bid 引用最近 60s 的 auction
+
+// ── Flink 官方 nexmark/nexmark（NexmarkConfiguration + generator 常量）──
+// 类型比例：personProportion=1 / auctionProportion=3 / bidProportion=46（total=50 → 2%/6%/92%）
+const PERSON_PROPORTION: i64 = 1;
+const AUCTION_PROPORTION: i64 = 3;
+const BID_PROPORTION: i64 = 46;
+const TOTAL_PROPORTION: i64 = PERSON_PROPORTION + AUCTION_PROPORTION + BID_PROPORTION; // 50
+// 官方 nextPrice = round(10^(6u) × 100)：对数均匀 [100, 1e8)
+// category：FIRST_CATEGORY_ID + rand(NUM_CATEGORIES) → 10..14（5 类）
+const FIRST_CATEGORY_ID: i64 = 10;
+const NUM_CATEGORIES: i64 = 5;
+// 热点：P(hot) = 1 - 1/ratio（hotAuctionRatio=2 → 50%；hotSellers/BiddersRatio=4 → 75%）
+const HOT_AUCTION_RATIO: i64 = 2;
+const HOT_SELLERS_RATIO: i64 = 4;
+const HOT_BIDDERS_RATIO: i64 = 4;
+// 热点批次：最近 N 个实体中的固定序号（seller=批次第 1 人、bidder=第 2 人、auction=批次第 1 个）
+const HOT_AUCTION_BATCH: i64 = 100;
+const HOT_SELLER_BATCH: i64 = 100;
+const HOT_BIDDER_BATCH: i64 = 100;
+// cold 引用窗口：最近 numActivePeople / numInFlightAuctions 个实体 ± lead（lead 允许未来）
+const NUM_ACTIVE_PEOPLE: i64 = 1000;
+const PERSON_ID_LEAD: i64 = 10;
+const NUM_IN_FLIGHT_AUCTIONS: i64 = 100;
+const AUCTION_ID_LEAD: i64 = 10;
+// channel：50% 热门 4 通道（HOT_CHANNELS_RATIO=2），50% channel-0..9999
+const HOT_CHANNELS_RATIO: i64 = 2;
+const CHANNELS_NUMBER: i64 = 10_000;
 
 /// 30-second time buckets over the 30-minute span: 60 temp files, each
 /// containing events whose `dateTime` falls in that bucket. Emitting buckets
@@ -48,22 +80,24 @@ const AUCTION_WINDOW_NS: i64 = 60_000_000_000; // bid 引用最近 60s 的 aucti
 const BUCKET_NS: i64 = 30_000_000_000;
 const TIME_BUCKETS: usize = (SPAN_NS / BUCKET_NS) as usize; // 60
 
-const CITIES: [&str; 8] = [
-    "Mountain View",
-    "San Francisco",
-    "Sunnyvale",
-    "New York",
+// 官方 PersonGenerator：US_CITIES 10 城 / US_STATES 6 州（独立随机）。
+const CITIES: [&str; 10] = [
+    "Phoenix",
     "Los Angeles",
-    "Chicago",
-    "Boston",
-    "Austin",
+    "San Francisco",
+    "Boise",
+    "Portland",
+    "Bend",
+    "Redmond",
+    "Seattle",
+    "Kent",
+    "Cheyenne",
 ];
-const STATES: [&str; 8] = ["CA", "CA", "CA", "NY", "CA", "IL", "MA", "TX"];
-const CHANNELS: [&str; 5] = ["Google", "Facebook", "Apple", "Direct", "Test"];
-
-struct Auction {
-    hot: bool,
-}
+const STATES: [&str; 6] = ["AZ", "CA", "ID", "OR", "WA", "WY"];
+// 官方 BidGenerator：HOT_CHANNELS 4 个（50% 概率），其余 channel-N。
+const HOT_CHANNELS: [&str; 4] = ["Google", "Facebook", "Baidu", "Apple"];
+const HOT_CHANNEL_MAX: usize = HOT_CHANNELS.len();
+const CHANNEL_MAX: usize = HOT_CHANNELS.len() + CHANNELS_NUMBER as usize;
 
 /// ISO UTC with the same literal `.000Z` millis as the Python generator.
 fn iso(ns: i64) -> String {
@@ -177,15 +211,34 @@ pub(crate) fn nx_to_value(ev: &NxEvent) -> serde_json::Value {
             bidder,
             channel,
             url,
-        } => json!({
-            "auction": auc,
-            "bidder": bidder,
-            "price": price,
-            "channel": CHANNELS[*channel],
-            "url": format!("http://www.example.com/{}", url),
-            "dateTime": ns,
-            "extra": "",
-        }),
+        } => {
+            // 官方 BidGenerator：50% 热门 4 通道（Google/Facebook/Baidu/Apple），
+            // 50% channel-N。channel 编码：0..4 = 热门索引，≥4 = channel-{channel-4}。
+            let (channel_name, url_str) = if *channel < HOT_CHANNEL_MAX {
+                (
+                    HOT_CHANNELS[*channel].to_string(),
+                    format!("https://www.nexmark.com/hot/{}/item.htm?query=1", *url),
+                )
+            } else {
+                let n = *channel - HOT_CHANNEL_MAX;
+                (
+                    format!("channel-{}", n),
+                    format!(
+                        "https://www.nexmark.com/item.htm?query=1&channel_id={}",
+                        *url
+                    ),
+                )
+            };
+            json!({
+                "auction": auc,
+                "bidder": bidder,
+                "price": price,
+                "channel": channel_name,
+                "url": url_str,
+                "dateTime": ns,
+                "extra": "",
+            })
+        }
     }
 }
 /// Serialize one event (fields + `_stream`/`_window`/`_timestamp` metadata)
@@ -227,32 +280,61 @@ fn write_event(
     Ok(())
 }
 
-/// 「dateTime <= ns 的最近实体（person/auction）的 base0 索引」（实体时间严格递增均匀分布）。
-/// 对齐 NEXMark 官方 `lastBase0PersonId`：引用「最近生成的实体」，使 asof join 命中
-/// 「时间上最近的注册实体」而非扫描 600 个版本。用 i128 中间计算避免 i64 溢出。
-fn idx_before(ns: i64, total: i64) -> i64 {
-    if total <= 0 {
-        return 0;
-    }
-    let idx = ((ns - BASE_NS).max(0) as i128 * total as i128 / SPAN_NS as i128) as i64;
-    idx.min(total - 1)
+/// 官方 `PersonGenerator.nextPrice`：对数均匀 [100, 1e8)。
+fn next_price(rng: &mut StdRng) -> i64 {
+    (10f64.powf(rng.random::<f64>() * 6.0) * 100.0).round() as i64
 }
 
-/// 「dateTime 在 [ns - within_ns, ns] 的实体 base0 索引范围 [lo, hi]」。
-fn window_range(ns: i64, total: i64, within_ns: i64) -> (i64, i64) {
-    let hi = idx_before(ns, total);
-    let lo = idx_before(ns - within_ns, total);
-    (lo, hi)
+/// 官方 `PersonGenerator.lastBase0PersonId`：截至 eventId 的最后 person base0 索引
+/// （person 事件自身在 offset < personProportion 时即为该 epoch 的 person）。
+fn last_base0_person_id(event_id: i64) -> i64 {
+    let epoch = event_id / TOTAL_PROPORTION;
+    let offset = (event_id % TOTAL_PROPORTION).min(PERSON_PROPORTION - 1);
+    epoch * PERSON_PROPORTION + offset
 }
 
-/// 在「最近 within_ns 秒内」的实体里随机选一个 base0 索引（含上下界）。
-fn pick_in_window(ns: i64, total: i64, within_ns: i64, rng: &mut StdRng) -> i64 {
-    let (lo, hi) = window_range(ns, total, within_ns);
-    if hi > lo {
-        lo + rng.random_range(0..(hi - lo + 1))
+/// 官方 `PersonGenerator.nextBase0PersonId`：最近 numActivePeople 人 ± PERSON_ID_LEAD
+/// （lead 可返回「尚未生成」的未来 person 索引，官方靠乱序/后续事件补达）。
+fn next_base0_person_id(event_id: i64, rng: &mut StdRng) -> i64 {
+    let num_people = last_base0_person_id(event_id) + 1;
+    let active = num_people.min(NUM_ACTIVE_PEOPLE);
+    let n = rng.random_range(0..(active + PERSON_ID_LEAD));
+    (num_people - active + n).max(0)
+}
+
+/// 官方 `AuctionGenerator.lastBase0AuctionId`：截至 eventId 的最后 auction base0 索引。
+fn last_base0_auction_id(event_id: i64) -> i64 {
+    let epoch = event_id / TOTAL_PROPORTION;
+    let offset = event_id % TOTAL_PROPORTION;
+    if offset < PERSON_PROPORTION {
+        // person 事件：回退到上一 epoch 的最后一个 auction。
+        (epoch - 1) * AUCTION_PROPORTION + (AUCTION_PROPORTION - 1)
+    } else if offset >= PERSON_PROPORTION + AUCTION_PROPORTION {
+        // bid 事件：当前 epoch 的最后一个 auction。
+        epoch * AUCTION_PROPORTION + (AUCTION_PROPORTION - 1)
     } else {
-        lo
+        // auction 事件：本事件自身。
+        epoch * AUCTION_PROPORTION + (offset - PERSON_PROPORTION)
     }
+}
+
+/// 官方 `AuctionGenerator.nextBase0AuctionId`：最近 numInFlightAuctions 个 auction
+/// ± AUCTION_ID_LEAD（lead 可引用「尚未生成」的未来 auction）。
+fn next_base0_auction_id(event_id: i64, rng: &mut StdRng) -> i64 {
+    let last = last_base0_auction_id(event_id);
+    let min_auc = (last - NUM_IN_FLIGHT_AUCTIONS).max(0);
+    let n = rng.random_range(0..(last - min_auc + 1 + AUCTION_ID_LEAD));
+    min_auc + n
+}
+
+/// 官方 `AuctionGenerator.nextAuctionLengthMs`：auction 有效期 = 1 + [0, 2×horizon) ms，
+/// horizon = 未来 `numInFlightAuctions` 个 auction 的生成间隔（事件时间口径）。返回纳秒偏移。
+fn auction_length_ns(event_id: i64, ns: i64, count: i64, rng: &mut StdRng) -> i64 {
+    let num_events_for_auctions = (NUM_IN_FLIGHT_AUCTIONS * TOTAL_PROPORTION) / AUCTION_PROPORTION; // 100×50/3 = 1666
+    let future_ev = event_id + num_events_for_auctions;
+    let future_ns = BASE_NS + (future_ev as i128 * SPAN_NS as i128 / count as i128) as i64;
+    let horizon_ms = ((future_ns - ns) / 1_000_000).max(0);
+    (1 + rng.random_range(0..(horizon_ms * 2).max(1))) * 1_000_000
 }
 
 pub fn generate_events<F>(count: i64, seed: u64, mut emit: F) -> WfgenResult<()>
@@ -261,27 +343,19 @@ where
 {
     let mut rng = StdRng::seed_from_u64(seed);
 
-    let num_person = (count as f64 * 0.02) as i64;
-    let num_auction = (count as f64 * 0.06) as i64;
-
     // 交错生成（对齐 NEXMark 官方 round-robin）：每 50 个事件 1 person + 3 auction + 46 bid，
     // 事件时间严格递增（等价 NEXMark outOfOrderGroupSize=1）。关键是与官方一样「person/auction
     // 交错出现在事件流里」，让 person/auction 窗口的 watermark 随事件时间渐进推进——否则
     // phase-major 会让 person 窗口在处理 auction/bid 前就推进到 30 分钟末尾，把早期
     // seller/bidder 的 person 驱逐，导致 snapshot join 时序错配（q3 EMIT 从 600k 崩到 ~23k）。
-    const PERSON_PROPORTION: i64 = 1;
-    const AUCTION_PROPORTION: i64 = 3;
-    const BID_PROPORTION: i64 = 46;
-    const TOTAL_PROPORTION: i64 = PERSON_PROPORTION + AUCTION_PROPORTION + BID_PROPORTION;
-
-    let mut auctions: Vec<Auction> = Vec::with_capacity(num_auction as usize);
 
     for event_id in 0..count {
         let rem = event_id % TOTAL_PROPORTION;
         let ns = BASE_NS + (event_id as i128 * SPAN_NS as i128 / count as i128) as i64;
 
         if rem < PERSON_PROPORTION {
-            // person：id 唯一（FIRST_PERSON_ID 起），每个 person 一条记录。
+            // person：id 唯一（FIRST_PERSON_ID 起），每个 person 一条记录；
+            // city/state 独立随机（官方 10 城 / 6 州）。
             let person_idx = event_id / TOTAL_PROPORTION;
             emit(NxEvent::Person {
                 id: FIRST_PERSON_ID + person_idx,
@@ -290,26 +364,19 @@ where
                 state: rng.random_range(0..STATES.len()),
             })?;
         } else if rem < PERSON_PROPORTION + AUCTION_PROPORTION {
-            // auction：id 唯一，seller 引用最近 person。
-            let auction_idx =
-                (event_id / TOTAL_PROPORTION) * AUCTION_PROPORTION + (rem - PERSON_PROPORTION);
-            let hot = rng.random::<f64>() < 0.50;
-            let seller = pick_in_window(
-                ns,
-                num_person,
-                if hot {
-                    HOT_PERSON_WINDOW_NS
-                } else {
-                    COLD_PERSON_WINDOW_NS
-                },
-                &mut rng,
-            ) + FIRST_PERSON_ID;
-            // 必须显式 i32：原 json! 写法里 10..=1000 无约束→推断 i32，类型不一致会打乱 rng 序列。
-            let initial_bid = rng.random_range(10..=1000i32) as i64;
-            let reserve = rng.random_range(1000..=10000i32) as i64;
-            let expires = ns + rng.random_range(600_000_000_000..=1_800_000_000_000);
-            let category = rng.random_range(1..=26);
-            auctions.push(Auction { hot });
+            // auction（官方 AuctionGenerator.nextAuction）：seller 75% 热点（最近 100 人
+            // 批次第 1 人）/ 25% cold（最近 numActivePeople ± lead）；initialBid/reserve
+            // 对数均匀；expires = 1 + [0, 2×horizon) ms；category ∈ 10..14。
+            let auction_idx = last_base0_auction_id(event_id);
+            let seller = if rng.random_range(0..HOT_SELLERS_RATIO) > 0 {
+                (last_base0_person_id(event_id) / HOT_SELLER_BATCH) * HOT_SELLER_BATCH
+            } else {
+                next_base0_person_id(event_id, &mut rng)
+            } + FIRST_PERSON_ID;
+            let initial_bid = next_price(&mut rng);
+            let reserve = initial_bid + next_price(&mut rng);
+            let expires = ns + auction_length_ns(event_id, ns, count, &mut rng);
+            let category = FIRST_CATEGORY_ID + rng.random_range(0..NUM_CATEGORIES);
             emit(NxEvent::Auction {
                 id: FIRST_AUCTION_ID + auction_idx,
                 ns,
@@ -320,26 +387,28 @@ where
                 category,
             })?;
         } else {
-            // bid：auction 引用最近 auction，bidder 引用最近 person。
-            let auc_base0 = pick_in_window(ns, num_auction, AUCTION_WINDOW_NS, &mut rng);
-            let a = &auctions[auc_base0 as usize];
-            let price = if a.hot {
-                rng.random_range(100..=500i32)
+            // bid（官方 BidGenerator.nextBid）：auction 50% 热点（最近 100 个 auction 批次
+            // 第 1 个）/ 50% cold（最近 numInFlightAuctions ± lead）；bidder 75% 热点（最近
+            // 100 人批次第 2 人，与 hot seller 错开）/ 25% cold；price 对数均匀（与 auction
+            // 冷热无关）；channel 50% 热门 4 通道 / 50% channel-N。
+            let auc_base0 = if rng.random_range(0..HOT_AUCTION_RATIO) > 0 {
+                (last_base0_auction_id(event_id) / HOT_AUCTION_BATCH) * HOT_AUCTION_BATCH
             } else {
-                rng.random_range(10..=150i32)
-            } as i64;
-            let bidder = pick_in_window(
-                ns,
-                num_person,
-                if rng.random::<f64>() < 0.5 {
-                    HOT_PERSON_WINDOW_NS
-                } else {
-                    COLD_PERSON_WINDOW_NS
-                },
-                &mut rng,
-            ) + FIRST_PERSON_ID;
-            let channel = rng.random_range(0..CHANNELS.len());
-            let url = rng.random_range(100..=999i32) as i64;
+                next_base0_auction_id(event_id, &mut rng)
+            };
+            let bidder = if rng.random_range(0..HOT_BIDDERS_RATIO) > 0 {
+                (last_base0_person_id(event_id) / HOT_BIDDER_BATCH) * HOT_BIDDER_BATCH + 1
+            } else {
+                next_base0_person_id(event_id, &mut rng)
+            } + FIRST_PERSON_ID;
+            let price = next_price(&mut rng);
+            let (channel, url) = if rng.random_range(0..HOT_CHANNELS_RATIO) > 0 {
+                let i = rng.random_range(0..HOT_CHANNELS.len());
+                (i, i as i64)
+            } else {
+                let i = rng.random_range(0..CHANNELS_NUMBER as usize);
+                (HOT_CHANNEL_MAX + i, i as i64)
+            };
             emit(NxEvent::Bid {
                 auc: auc_base0 + FIRST_AUCTION_ID,
                 ns,
@@ -388,8 +457,10 @@ impl<W: std::io::Write> std::io::Write for HashingWriter<W> {
 fn check_event(ev: &NxEvent, count: i64) -> bool {
     let num_person = (count as f64 * 0.02) as i64;
     let num_auction = (count as f64 * 0.06) as i64;
-    let person_hi = FIRST_PERSON_ID + num_person - 1;
-    let auction_hi = FIRST_AUCTION_ID + num_auction - 1;
+    // lead 允许引用「尚未生成」的未来实体：person 上限放宽 PERSON_ID_LEAD、
+    // auction 上限放宽 AUCTION_ID_LEAD（官方 nextBase0PersonId/nextBase0AuctionId 语义）。
+    let person_hi = FIRST_PERSON_ID + num_person - 1 + PERSON_ID_LEAD;
+    let auction_hi = FIRST_AUCTION_ID + num_auction - 1 + AUCTION_ID_LEAD;
     match ev {
         NxEvent::Person {
             id, city, state, ..
@@ -409,11 +480,11 @@ fn check_event(ev: &NxEvent, count: i64) -> bool {
             ..
         } => {
             !(FIRST_AUCTION_ID..=auction_hi).contains(id)
-                || !(10..=1000).contains(initial_bid)
-                || !(1000..=10000).contains(reserve)
+                || *initial_bid < 100 // 官方 nextPrice 下界 100
+                || *reserve < *initial_bid
                 || expires < ns
                 || !(FIRST_PERSON_ID..=person_hi).contains(seller)
-                || !(1..=26).contains(category)
+                || !(FIRST_CATEGORY_ID..FIRST_CATEGORY_ID + NUM_CATEGORIES).contains(category)
         }
         NxEvent::Bid {
             auc,
@@ -425,9 +496,9 @@ fn check_event(ev: &NxEvent, count: i64) -> bool {
         } => {
             !(FIRST_AUCTION_ID..=auction_hi).contains(auc)
                 || !(FIRST_PERSON_ID..=person_hi).contains(bidder)
-                || *channel >= CHANNELS.len()
-                || !(100..=999).contains(url)
-                || *price < 10
+                || *price < 100 // 官方 nextPrice 下界 100
+                || *channel >= CHANNEL_MAX
+                || !(0..CHANNELS_NUMBER).contains(url)
         }
     }
 }
@@ -522,11 +593,12 @@ pub fn run_checked(count: i64, seed: u64, no_sort: bool, check: bool) -> WfgenRe
     let mut v_bid: u64 = 0;
     let mut ref_violations: u64 = 0;
     if check {
-        use std::collections::{HashMap, HashSet};
+        use std::collections::HashSet;
 
         let mut person_ids: HashSet<i64> = HashSet::new();
-        let mut person_time: HashMap<i64, i64> = HashMap::new();
         let mut auction_ids: HashSet<i64> = HashSet::new();
+        let mut n_person_so_far: i64 = 0;
+        let mut n_auction_so_far: i64 = 0;
         let pb_check = crate::progress::ProgressBar::new(count as u64, "check: 值域+引用校验");
         generate_events(count, seed, |ev| {
             pb_check.tick();
@@ -538,33 +610,50 @@ pub fn run_checked(count: i64, seed: u64, no_sort: bool, check: bool) -> WfgenRe
                     NxEvent::Bid { .. } => v_bid += 1,
                 }
             }
-            // 跨事件规则：id 唯一 + 引用「最近 person/auction」（被引用实体已生成且
-            // dateTime <= 当前事件时间）。这锁定了 NEXMark 官方生成语义。
+            // 跨事件规则（官方引用语义，`lastBase0*`/`nextBase0*` 公式的逆校验）：
+            // - id 唯一；
+            // - seller/bidder 引用「最近 numActivePeople 人 ± PERSON_ID_LEAD」的 person
+            //   （lead 允许引用尚未生成的未来 person，官方靠乱序/后续事件补达）；
+            // - bid.auction 引用「最近 numInFlightAuctions 个 ± AUCTION_ID_LEAD」的 auction。
+            // 引用已生成的实体时须真实存在（存在性校验），引用未来 lead 则只查窗口。
             match ev {
-                NxEvent::Person { id, ns, .. } => {
+                NxEvent::Person { id, .. } => {
                     if !person_ids.insert(id) {
                         ref_violations += 1;
                     }
-                    person_time.insert(id, ns);
+                    n_person_so_far += 1;
                 }
-                NxEvent::Auction { id, ns, seller, .. } => {
+                NxEvent::Auction { id, seller, .. } => {
                     if !auction_ids.insert(id) {
                         ref_violations += 1;
                     }
-                    match person_time.get(&seller) {
-                        Some(&seller_ns) if seller_ns <= ns => {}
-                        _ => ref_violations += 1,
-                    }
-                }
-                NxEvent::Bid {
-                    auc, ns, bidder, ..
-                } => {
-                    if !auction_ids.contains(&auc) {
+                    let seller_base0 = seller - FIRST_PERSON_ID;
+                    let lo = (n_person_so_far - NUM_ACTIVE_PEOPLE).max(0);
+                    if !(lo..(n_person_so_far + PERSON_ID_LEAD)).contains(&seller_base0) {
+                        ref_violations += 1;
+                    } else if seller_base0 < n_person_so_far && !person_ids.contains(&seller) {
                         ref_violations += 1;
                     }
-                    match person_time.get(&bidder) {
-                        Some(&bidder_ns) if bidder_ns <= ns => {}
-                        _ => ref_violations += 1,
+                    n_auction_so_far += 1;
+                }
+                NxEvent::Bid { auc, bidder, .. } => {
+                    let auc_base0 = auc - FIRST_AUCTION_ID;
+                    let last_auc = n_auction_so_far - 1;
+                    // 官方 nextBase0AuctionId 上界含 last+LEAD（nextLong 参数带 +1，
+                    // 与 person 窗口的上界 last+LEAD-1 相差 1，照搬官方公式）。
+                    if auc_base0 < (last_auc - NUM_IN_FLIGHT_AUCTIONS).max(0)
+                        || auc_base0 > last_auc + AUCTION_ID_LEAD
+                    {
+                        ref_violations += 1;
+                    } else if auc_base0 <= last_auc && !auction_ids.contains(&auc) {
+                        ref_violations += 1;
+                    }
+                    let bidder_base0 = bidder - FIRST_PERSON_ID;
+                    let lo = (n_person_so_far - NUM_ACTIVE_PEOPLE).max(0);
+                    if !(lo..(n_person_so_far + PERSON_ID_LEAD)).contains(&bidder_base0) {
+                        ref_violations += 1;
+                    } else if bidder_base0 < n_person_so_far && !person_ids.contains(&bidder) {
+                        ref_violations += 1;
                     }
                 }
             }
@@ -658,8 +747,12 @@ pub fn run_checked(count: i64, seed: u64, no_sort: bool, check: bool) -> WfgenRe
             if violations == 0 { "✅" } else { "❌" }
         );
         eprintln!(
-            "  引用  {}（person/auction id 唯一 + seller/bidder 引用最近 person + bid 引用已存在 auction）{}",
+            "  引用  {}（id 唯一 + seller/bidder 引用最近 {}人±{} lead + bid 引用最近 {}个±{} lead）{}",
             fmt_num(ref_violations),
+            NUM_ACTIVE_PEOPLE,
+            PERSON_ID_LEAD,
+            NUM_IN_FLIGHT_AUCTIONS,
+            AUCTION_ID_LEAD,
             if ref_violations == 0 { "✅" } else { "❌" }
         );
         let fp = fingerprint
@@ -715,25 +808,26 @@ mod tests {
     }
 
     /// 回归：id/auc/seller/bidder 值域须与生成语义一致——person/auction id 唯一
-    /// （FIRST_*_ID 起），seller/bidder 引用 person id，bid.auction 引用 auction id。
+    /// （FIRST_*_ID 起），seller/bidder 引用 person id（含 ±lead 未来），bid.auction 引用
+    /// auction id（含 ±lead 未来），价格/category/channel 值域对齐 Flink 官方。
     #[test]
     fn check_event_bounds_match_generation_semantics() {
         let count = 10_000i64;
         let num_person = (count as f64 * 0.02) as i64; // 200
         let num_auction = (count as f64 * 0.06) as i64; // 600
-        let person_hi = FIRST_PERSON_ID + num_person - 1; // 1199
-        let auction_hi = FIRST_AUCTION_ID + num_auction - 1; // 1599
+        let person_hi = FIRST_PERSON_ID + num_person - 1 + PERSON_ID_LEAD; // 1209
+        let auction_hi = FIRST_AUCTION_ID + num_auction - 1 + AUCTION_ID_LEAD; // 1609
 
         // 边界值合法。
         assert!(!check_event(
             &NxEvent::Auction {
                 id: auction_hi,
                 ns: BASE_NS,
-                initial_bid: 10,
-                reserve: 1000,
+                initial_bid: 100,
+                reserve: 200,
                 expires: BASE_NS + 1_000_000_000,
                 seller: FIRST_PERSON_ID,
-                category: 1,
+                category: FIRST_CATEGORY_ID,
             },
             count
         ));
@@ -741,10 +835,10 @@ mod tests {
             &NxEvent::Bid {
                 auc: auction_hi,
                 ns: BASE_NS,
-                price: 10,
+                price: 100,
                 bidder: person_hi,
-                channel: 0,
-                url: 100,
+                channel: CHANNEL_MAX - 1,
+                url: 0,
             },
             count
         ));
@@ -763,11 +857,35 @@ mod tests {
             &NxEvent::Auction {
                 id: auction_hi + 1,
                 ns: BASE_NS,
-                initial_bid: 10,
-                reserve: 1000,
+                initial_bid: 100,
+                reserve: 200,
                 expires: BASE_NS + 1_000_000_000,
                 seller: FIRST_PERSON_ID,
-                category: 1,
+                category: FIRST_CATEGORY_ID,
+            },
+            count
+        ));
+        assert!(check_event(
+            &NxEvent::Auction {
+                id: auction_hi,
+                ns: BASE_NS,
+                initial_bid: 99, // < 官方 nextPrice 下界 100
+                reserve: 200,
+                expires: BASE_NS + 1_000_000_000,
+                seller: FIRST_PERSON_ID,
+                category: FIRST_CATEGORY_ID,
+            },
+            count
+        ));
+        assert!(check_event(
+            &NxEvent::Auction {
+                id: auction_hi,
+                ns: BASE_NS,
+                initial_bid: 100,
+                reserve: 200,
+                expires: BASE_NS + 1_000_000_000,
+                seller: FIRST_PERSON_ID,
+                category: FIRST_CATEGORY_ID + NUM_CATEGORIES, // 越 category 上限（14）
             },
             count
         ));
@@ -775,10 +893,10 @@ mod tests {
             &NxEvent::Bid {
                 auc: FIRST_AUCTION_ID - 1, // 低于 auction id 下限
                 ns: BASE_NS,
-                price: 10,
+                price: 100,
                 bidder: person_hi,
                 channel: 0,
-                url: 100,
+                url: 0,
             },
             count
         ));
@@ -786,18 +904,38 @@ mod tests {
             &NxEvent::Bid {
                 auc: auction_hi,
                 ns: BASE_NS,
-                price: 9, // < 10 下限
+                price: 99, // < 官方 nextPrice 下界 100
                 bidder: person_hi,
                 channel: 0,
-                url: 100,
+                url: 0,
+            },
+            count
+        ));
+        assert!(check_event(
+            &NxEvent::Bid {
+                auc: auction_hi,
+                ns: BASE_NS,
+                price: 100,
+                bidder: person_hi,
+                channel: CHANNEL_MAX, // 越 channel 上限（4+10000）
+                url: 0,
             },
             count
         ));
         assert!(check_event(
             &NxEvent::Person {
-                id: person_hi + 1, // 超出 person id 上限
+                id: person_hi + 1, // 超出 person id 上限（含 lead）
                 ns: BASE_NS,
                 city: 0,
+                state: 0,
+            },
+            count
+        ));
+        assert!(check_event(
+            &NxEvent::Person {
+                id: person_hi,
+                ns: BASE_NS,
+                city: CITIES.len(), // 越 city 上限（10）
                 state: 0,
             },
             count
@@ -820,45 +958,58 @@ mod tests {
         assert_eq!(violations, 0, "生成事件不应触发自检违规");
     }
 
-    /// 性质测试：生成数据满足 NEXMark 官方引用规则——person/auction id 唯一，
-    /// seller/bidder 引用「dateTime <= 事件时间的已生成 person」，bid.auction 引用
-    /// 已生成 auction。这是 asof join O(1) 语义的数据前提。
+    /// 性质测试：生成数据满足 NEXMark 官方引用规则（`lastBase0*`/`nextBase0*` 逆校验）——
+    /// person/auction id 唯一，seller/bidder 引用「最近 numActivePeople 人 ± lead」的 person
+    /// （引用已生成的须真实存在），bid.auction 引用「最近 numInFlightAuctions 个 ± lead」
+    /// 的 auction。这是 join 窗口数据的前提（官方 lead 语义：允许引用未来实体）。
     #[test]
     fn generated_events_pass_reference_rules() {
-        use std::collections::{HashMap, HashSet};
+        use std::collections::HashSet;
 
         let count = 50_000i64;
         let mut person_ids: HashSet<i64> = HashSet::new();
-        let mut person_time: HashMap<i64, i64> = HashMap::new();
         let mut auction_ids: HashSet<i64> = HashSet::new();
+        let mut n_person = 0i64;
+        let mut n_auction = 0i64;
         let mut violations = 0u64;
 
         generate_events(count, 7, |ev| {
             match ev {
-                NxEvent::Person { id, ns, .. } => {
+                NxEvent::Person { id, .. } => {
                     if !person_ids.insert(id) {
                         violations += 1;
                     }
-                    person_time.insert(id, ns);
+                    n_person += 1;
                 }
-                NxEvent::Auction { id, ns, seller, .. } => {
+                NxEvent::Auction { id, seller, .. } => {
                     if !auction_ids.insert(id) {
                         violations += 1;
                     }
-                    match person_time.get(&seller) {
-                        Some(&seller_ns) if seller_ns <= ns => {}
-                        _ => violations += 1,
-                    }
-                }
-                NxEvent::Bid {
-                    auc, ns, bidder, ..
-                } => {
-                    if !auction_ids.contains(&auc) {
+                    let b0 = seller - FIRST_PERSON_ID;
+                    let lo = (n_person - NUM_ACTIVE_PEOPLE).max(0);
+                    if !(lo..(n_person + PERSON_ID_LEAD)).contains(&b0) {
+                        violations += 1;
+                    } else if b0 < n_person && !person_ids.contains(&seller) {
                         violations += 1;
                     }
-                    match person_time.get(&bidder) {
-                        Some(&bidder_ns) if bidder_ns <= ns => {}
-                        _ => violations += 1,
+                    n_auction += 1;
+                }
+                NxEvent::Bid { auc, bidder, .. } => {
+                    let auc_b0 = auc - FIRST_AUCTION_ID;
+                    let last = n_auction - 1;
+                    if auc_b0 < (last - NUM_IN_FLIGHT_AUCTIONS).max(0)
+                        || auc_b0 > last + AUCTION_ID_LEAD
+                    {
+                        violations += 1;
+                    } else if auc_b0 <= last && !auction_ids.contains(&auc) {
+                        violations += 1;
+                    }
+                    let b0 = bidder - FIRST_PERSON_ID;
+                    let lo = (n_person - NUM_ACTIVE_PEOPLE).max(0);
+                    if !(lo..(n_person + PERSON_ID_LEAD)).contains(&b0) {
+                        violations += 1;
+                    } else if b0 < n_person && !person_ids.contains(&bidder) {
+                        violations += 1;
                     }
                 }
             }
@@ -866,34 +1017,42 @@ mod tests {
         })
         .unwrap();
 
-        assert_eq!(violations, 0, "生成数据应满足 id 唯一 + 引用最近规则");
+        assert_eq!(violations, 0, "生成数据应满足 id 唯一 + 官方引用窗口规则");
     }
 
-    /// 性质测试：q22 的 asof join `within 60s` 命中率应接近 100%。
-    /// NEXMark 官方 bidder 引用「最近注册的 person」，其 dateTime 紧贴 bid 时间，
-    /// 因此每个 bid 都能在 60s 内命中对应 person——这是 O(1) asof join 的数据前提。
+    /// 性质测试：bid→auction 引用命中率（官方语义：50% 概率引用最近 100 个 auction 批次第 1 个，
+    /// 50% 概率引用最近 numInFlightAuctions±lead）。引用「已生成 auction」的比例应接近 100%
+    /// （lead 只允许未来 ±10 个，占比 <1%），且被引用 auction 的 dateTime 不晚于当前 bid。
+    /// 官方 NEXMark 是「最近 N 个实体」而非「最近 X 秒」，故不做 60s 时间窗断言
+    /// （时间命中率随事件速率变化，见 NEXMARK_CONFORMANCE.md）。
     #[test]
-    fn asof_join_within_60s_hit_rate_is_near_100() {
+    fn bid_auction_refs_are_recent_and_existing() {
         use std::collections::HashMap;
 
-        const WITHIN_NS: i64 = 60_000_000_000;
         let count = 100_000i64;
-        let mut person_time: HashMap<i64, i64> = HashMap::new();
+        let mut auction_seq: HashMap<i64, i64> = HashMap::new(); // id -> 生成顺序
+        let mut n_auction = 0i64;
         let mut bids = 0u64;
-        let mut hits = 0u64;
+        let mut existing = 0u64;
+        let mut future_lead = 0u64;
+        let mut too_old = 0u64;
 
         generate_events(count, 7, |ev| {
             match ev {
-                NxEvent::Person { id, ns, .. } => {
-                    person_time.insert(id, ns);
+                NxEvent::Auction { id, .. } => {
+                    auction_seq.insert(id, n_auction);
+                    n_auction += 1;
                 }
-                NxEvent::Bid { bidder, ns, .. } => {
+                NxEvent::Bid { auc, .. } => {
                     bids += 1;
-                    if let Some(&p_ns) = person_time.get(&bidder)
-                        && p_ns <= ns
-                        && p_ns >= ns - WITHIN_NS
-                    {
-                        hits += 1;
+                    let b0 = auc - FIRST_AUCTION_ID;
+                    let last = n_auction - 1;
+                    if b0 > last {
+                        future_lead += 1; // ±10 lead 内的未来 auction（官方允许）
+                    } else if b0 >= (last - NUM_IN_FLIGHT_AUCTIONS).max(0) {
+                        existing += 1; // 引用最近 in-flight 窗口内的已生成 auction
+                    } else {
+                        too_old += 1; // 超出 in-flight 窗口
                     }
                 }
                 _ => {}
@@ -902,10 +1061,11 @@ mod tests {
         })
         .unwrap();
 
-        let hit_rate = hits as f64 / bids as f64;
+        assert_eq!(too_old, 0, "不应引用 in-flight 窗口之外的过期 auction");
+        let hit_rate = (existing + future_lead) as f64 / bids as f64;
         assert!(
-            hit_rate > 0.99,
-            "asof within 60s 命中率应接近 100%，实际 {:.2}%",
+            hit_rate >= 0.99,
+            "bid→auction 引用窗口命中率应 ≈100%，实际 {:.2}%",
             hit_rate * 100.0
         );
     }

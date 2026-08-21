@@ -5,19 +5,15 @@
 //! (`_stream`/`_window`/`_timestamp` metadata + event fields, `dateTime` in
 //! epoch ns).
 //!
-//! Output is **globally time-ordered at bucket granularity** (bounded memory):
-//! events are generated phase-major (persons → auctions → bids), but each
-//! event is routed to one of `TIME_BUCKETS` 30-second
-//! time buckets (a temp file per bucket) and emitted bucket-by-bucket, so the
-//! stream arrives in approximate event-time order (bucket-internal order is the
-//! generation order; a 30 s bucket is far below the 10 min `over` eviction
-//! granularity). Batch event-time span therefore drops from ~24 min
-//! (phase-major) to <= ~30 s, letting `over`-window time eviction work
-//! (previously it never fired: every 100k-row batch contained data near the
-//! end of the 30 min span, so `batch.max_ts < watermark - over` never held and
-//! the window retained the whole dataset — q1 RSS 21-25GB). The event *set*
-//! (rng consumption order, fields) is unchanged — only emission order differs
-//! — so EMIT ground truths stay valid.
+//! 生成语义对齐 NEXMark 官方 `nexmark/nexmark` generator：
+//! - **交错生成**（round-robin）：每 50 个事件 1 person + 3 auction + 46 bid，事件时间严格
+//!   递增（等价 outOfOrderGroupSize=1）。person/auction 交错出现在事件流里，窗口 watermark
+//!   随事件时间渐进推进，snapshot join 时序正确（phase-major 会让 person 窗口在处理
+//!   auction/bid 前就推进到末尾，驱逐早期 seller/bidder 的 person）。
+//! - **id 唯一**：person/auction 各自从 1000 起单调递增，每个实体一条记录（不循环 1000 个
+//!   id 产生多版本），asof join 因此是 O(1) 查注册时间而非扫 600 版本。
+//! - **引用最近**：seller/bidder 引用「最近 60s 内（cold）/ 15s 内（hot）的 person」，
+//!   bid.auction 引用「最近 60s 内的 auction」，保证 asof within 60s 命中率 ≈ 100%。
 //!
 //! Usage: `wfgen gen-nexmark <count> [--seed N] [--no-sort]`
 
@@ -35,9 +31,14 @@ use crate::progress::fmt_num;
 
 const BASE_NS: i64 = 1767225600000000000; // 2026-01-01T00:00:00Z
 const SPAN_NS: i64 = 1_800_000_000_000; // 30 min event span
-const PERSONS: usize = 1000;
-const HOT_SELLERS: usize = 250; // 25% 卖家为 hot
-const HOT_BIDDERS: usize = 250; // 25% 出价者为 hot
+// NEXMark 官方 id 起始值（person/auction 分属不同命名空间，均可从 1000 起）。
+const FIRST_PERSON_ID: i64 = 1000;
+const FIRST_AUCTION_ID: i64 = 1000;
+// 引用「最近 X 秒内」的实体（时间窗口固定，保证 asof within 60s 命中率不随数据规模退化；
+// NEXMark 官方用固定事件速率 + numActivePeople，我们固定 30m span，等价地用固定时间窗）。
+const COLD_PERSON_WINDOW_NS: i64 = 60_000_000_000; // cold 引用最近 60s
+const HOT_PERSON_WINDOW_NS: i64 = 15_000_000_000; // hot 引用最近 15s
+const AUCTION_WINDOW_NS: i64 = 60_000_000_000; // bid 引用最近 60s 的 auction
 
 /// 30-second time buckets over the 30-minute span: 60 temp files, each
 /// containing events whose `dateTime` falls in that bucket. Emitting buckets
@@ -60,13 +61,7 @@ const CITIES: [&str; 8] = [
 const STATES: [&str; 8] = ["CA", "CA", "CA", "NY", "CA", "IL", "MA", "TX"];
 const CHANNELS: [&str; 5] = ["Google", "Facebook", "Apple", "Direct", "Test"];
 
-struct Person {
-    state_idx: usize,
-}
-
 struct Auction {
-    seller: i64,
-    category: i64,
     hot: bool,
 }
 
@@ -232,6 +227,34 @@ fn write_event(
     Ok(())
 }
 
+/// 「dateTime <= ns 的最近实体（person/auction）的 base0 索引」（实体时间严格递增均匀分布）。
+/// 对齐 NEXMark 官方 `lastBase0PersonId`：引用「最近生成的实体」，使 asof join 命中
+/// 「时间上最近的注册实体」而非扫描 600 个版本。用 i128 中间计算避免 i64 溢出。
+fn idx_before(ns: i64, total: i64) -> i64 {
+    if total <= 0 {
+        return 0;
+    }
+    let idx = ((ns - BASE_NS).max(0) as i128 * total as i128 / SPAN_NS as i128) as i64;
+    idx.min(total - 1)
+}
+
+/// 「dateTime 在 [ns - within_ns, ns] 的实体 base0 索引范围 [lo, hi]」。
+fn window_range(ns: i64, total: i64, within_ns: i64) -> (i64, i64) {
+    let hi = idx_before(ns, total);
+    let lo = idx_before(ns - within_ns, total);
+    (lo, hi)
+}
+
+/// 在「最近 within_ns 秒内」的实体里随机选一个 base0 索引（含上下界）。
+fn pick_in_window(ns: i64, total: i64, within_ns: i64, rng: &mut StdRng) -> i64 {
+    let (lo, hi) = window_range(ns, total, within_ns);
+    if hi > lo {
+        lo + rng.random_range(0..(hi - lo + 1))
+    } else {
+        lo
+    }
+}
+
 pub fn generate_events<F>(count: i64, seed: u64, mut emit: F) -> WfgenResult<()>
 where
     F: FnMut(NxEvent) -> WfgenResult<()>,
@@ -240,93 +263,92 @@ where
 
     let num_person = (count as f64 * 0.02) as i64;
     let num_auction = (count as f64 * 0.06) as i64;
-    let num_bid = count - num_person - num_auction;
 
-    // persons（参考数据，1000，有界）
-    let persons: Vec<Person> = (0..PERSONS)
-        .map(|_| Person {
-            state_idx: rng.random_range(0..STATES.len()),
-        })
-        .collect();
+    // 交错生成（对齐 NEXMark 官方 round-robin）：每 50 个事件 1 person + 3 auction + 46 bid，
+    // 事件时间严格递增（等价 NEXMark outOfOrderGroupSize=1）。关键是与官方一样「person/auction
+    // 交错出现在事件流里」，让 person/auction 窗口的 watermark 随事件时间渐进推进——否则
+    // phase-major 会让 person 窗口在处理 auction/bid 前就推进到 30 分钟末尾，把早期
+    // seller/bidder 的 person 驱逐，导致 snapshot join 时序错配（q3 EMIT 从 600k 崩到 ~23k）。
+    const PERSON_PROPORTION: i64 = 1;
+    const AUCTION_PROPORTION: i64 = 3;
+    const BID_PROPORTION: i64 = 46;
+    const TOTAL_PROPORTION: i64 = PERSON_PROPORTION + AUCTION_PROPORTION + BID_PROPORTION;
 
-    // auctions（参考数据，6% 量级，有界；bids 按 auction 引用其属性）
-    let auctions: Vec<Auction> = (0..num_auction)
-        .map(|_| {
+    let mut auctions: Vec<Auction> = Vec::with_capacity(num_auction as usize);
+
+    for event_id in 0..count {
+        let rem = event_id % TOTAL_PROPORTION;
+        let ns = BASE_NS + (event_id as i128 * SPAN_NS as i128 / count as i128) as i64;
+
+        if rem < PERSON_PROPORTION {
+            // person：id 唯一（FIRST_PERSON_ID 起），每个 person 一条记录。
+            let person_idx = event_id / TOTAL_PROPORTION;
+            emit(NxEvent::Person {
+                id: FIRST_PERSON_ID + person_idx,
+                ns,
+                city: rng.random_range(0..CITIES.len()),
+                state: rng.random_range(0..STATES.len()),
+            })?;
+        } else if rem < PERSON_PROPORTION + AUCTION_PROPORTION {
+            // auction：id 唯一，seller 引用最近 person。
+            let auction_idx =
+                (event_id / TOTAL_PROPORTION) * AUCTION_PROPORTION + (rem - PERSON_PROPORTION);
             let hot = rng.random::<f64>() < 0.50;
-            let seller = if hot {
-                rng.random_range(1..=HOT_SELLERS as i64)
-            } else {
-                rng.random_range(1..=PERSONS as i64)
-            };
-            Auction {
+            let seller = pick_in_window(
+                ns,
+                num_person,
+                if hot {
+                    HOT_PERSON_WINDOW_NS
+                } else {
+                    COLD_PERSON_WINDOW_NS
+                },
+                &mut rng,
+            ) + FIRST_PERSON_ID;
+            // 必须显式 i32：原 json! 写法里 10..=1000 无约束→推断 i32，类型不一致会打乱 rng 序列。
+            let initial_bid = rng.random_range(10..=1000i32) as i64;
+            let reserve = rng.random_range(1000..=10000i32) as i64;
+            let expires = ns + rng.random_range(600_000_000_000..=1_800_000_000_000);
+            let category = rng.random_range(1..=26);
+            auctions.push(Auction { hot });
+            emit(NxEvent::Auction {
+                id: FIRST_AUCTION_ID + auction_idx,
+                ns,
+                initial_bid,
+                reserve,
+                expires,
                 seller,
-                category: rng.random_range(1..=26),
-                hot,
-            }
-        })
-        .collect();
-
-    // persons（注册集中在前 10% 时间窗）
-    for i in 0..num_person {
-        let pid = (i % PERSONS as i64) as usize;
-        let p = &persons[pid];
-        let ns = BASE_NS + rng.random_range(0..=(SPAN_NS / 10));
-        let city = rng.random_range(0..CITIES.len());
-        emit(NxEvent::Person {
-            id: pid as i64 + 1,
-            ns,
-            city,
-            state: p.state_idx,
-        })?;
-    }
-
-    // auctions（时间窗 10%-100%）
-    for i in 0..num_auction {
-        let a = &auctions[i as usize];
-        let ns = BASE_NS + rng.random_range((SPAN_NS / 10)..=SPAN_NS);
-        // 必须显式 i32：原 json! 写法里 10..=1000 无约束→推断 i32（serde to_value
-        // 默认），rand 对 i32/i64 采样结果不同，类型不一致会打乱 rng 序列。
-        let initial_bid = rng.random_range(10..=1000i32) as i64;
-        let reserve = rng.random_range(1000..=10000i32) as i64;
-        let expires = ns + rng.random_range(600_000_000_000..=1_800_000_000_000);
-        emit(NxEvent::Auction {
-            id: i + 1,
-            ns,
-            initial_bid,
-            reserve,
-            expires,
-            seller: a.seller,
-            category: a.category,
-        })?;
-    }
-
-    // bids（92% firehose，时间窗 20%-100%）
-    for _ in 0..num_bid {
-        let aidx = rng.random_range(0..auctions.len());
-        let a = &auctions[aidx];
-        // 同 auction：原 json! 里 price 无约束→i32，需显式 i32 保持 rng 序列。
-        let price = if a.hot {
-            rng.random_range(100..=500i32)
+                category,
+            })?;
         } else {
-            rng.random_range(10..=150i32)
-        } as i64;
-        let bidder = if rng.random::<f64>() < 0.5 {
-            rng.random_range(1..=HOT_BIDDERS as i64)
-        } else {
-            rng.random_range(1..=PERSONS as i64)
-        };
-        let ns = BASE_NS + rng.random_range((SPAN_NS / 5)..=SPAN_NS);
-        // 同 auction：原 json! 里 100..=999 无约束→i32，需显式 i32 保持 rng 序列。
-        let channel = rng.random_range(0..CHANNELS.len());
-        let url = rng.random_range(100..=999i32) as i64;
-        emit(NxEvent::Bid {
-            auc: aidx as i64 + 1,
-            ns,
-            price,
-            bidder,
-            channel,
-            url,
-        })?;
+            // bid：auction 引用最近 auction，bidder 引用最近 person。
+            let auc_base0 = pick_in_window(ns, num_auction, AUCTION_WINDOW_NS, &mut rng);
+            let a = &auctions[auc_base0 as usize];
+            let price = if a.hot {
+                rng.random_range(100..=500i32)
+            } else {
+                rng.random_range(10..=150i32)
+            } as i64;
+            let bidder = pick_in_window(
+                ns,
+                num_person,
+                if rng.random::<f64>() < 0.5 {
+                    HOT_PERSON_WINDOW_NS
+                } else {
+                    COLD_PERSON_WINDOW_NS
+                },
+                &mut rng,
+            ) + FIRST_PERSON_ID;
+            let channel = rng.random_range(0..CHANNELS.len());
+            let url = rng.random_range(100..=999i32) as i64;
+            emit(NxEvent::Bid {
+                auc: auc_base0 + FIRST_AUCTION_ID,
+                ns,
+                price,
+                bidder,
+                channel,
+                url,
+            })?;
+        }
     }
 
     Ok(())
@@ -361,13 +383,21 @@ impl<W: std::io::Write> std::io::Write for HashingWriter<W> {
 }
 
 /// 单事件值域自检：返回该事件是否违规（字段范围须与 `generate_events` 的
-/// 生成语义一致——auction/bid 的 id/auc 为 1..=count*0.06，不是 count/100）。
+/// 生成语义一致——person/auction id 唯一（FIRST_*_ID 起），seller/bidder 引用
+/// person id，bid.auction 引用 auction id）。
 fn check_event(ev: &NxEvent, count: i64) -> bool {
+    let num_person = (count as f64 * 0.02) as i64;
     let num_auction = (count as f64 * 0.06) as i64;
+    let person_hi = FIRST_PERSON_ID + num_person - 1;
+    let auction_hi = FIRST_AUCTION_ID + num_auction - 1;
     match ev {
         NxEvent::Person {
             id, city, state, ..
-        } => !(1..=PERSONS as i64).contains(id) || *city >= CITIES.len() || *state >= STATES.len(),
+        } => {
+            !(FIRST_PERSON_ID..=person_hi).contains(id)
+                || *city >= CITIES.len()
+                || *state >= STATES.len()
+        }
         NxEvent::Auction {
             id,
             ns,
@@ -378,11 +408,11 @@ fn check_event(ev: &NxEvent, count: i64) -> bool {
             category,
             ..
         } => {
-            !(1..=num_auction).contains(id)
+            !(FIRST_AUCTION_ID..=auction_hi).contains(id)
                 || !(10..=1000).contains(initial_bid)
                 || !(1000..=10000).contains(reserve)
                 || expires < ns
-                || !(1..=PERSONS as i64).contains(seller)
+                || !(FIRST_PERSON_ID..=person_hi).contains(seller)
                 || !(1..=26).contains(category)
         }
         NxEvent::Bid {
@@ -393,8 +423,8 @@ fn check_event(ev: &NxEvent, count: i64) -> bool {
             url,
             ..
         } => {
-            !(1..=num_auction).contains(auc)
-                || !(1..=PERSONS as i64).contains(bidder)
+            !(FIRST_AUCTION_ID..=auction_hi).contains(auc)
+                || !(FIRST_PERSON_ID..=person_hi).contains(bidder)
                 || *channel >= CHANNELS.len()
                 || !(100..=999).contains(url)
                 || *price < 10
@@ -482,15 +512,22 @@ pub fn run_checked(count: i64, seed: u64, no_sort: bool, check: bool) -> WfgenRe
     })?;
     pb.finish();
 
-    // 数据检查阶段（仅 --check）：同一 seed 确定性重放事件流，逐事件值域校验。
-    // 事件序列与生成阶段完全一致（generate_events 是纯函数，同 seed 恒等），
-    // 检查独立成阶段以拥有自己的进度条；报告仍走 stderr（stdout 是数据流）。
+    // 数据检查阶段（仅 --check）：同一 seed 确定性重放事件流，逐事件值域校验 + 跨事件
+    // 规则校验（person/auction id 唯一、seller/bidder 引用「最近 person」、bid.auction
+    // 引用已存在 auction）。事件序列与生成阶段完全一致（generate_events 是纯函数，同 seed
+    // 恒等），检查独立成阶段以拥有自己的进度条；报告仍走 stderr（stdout 是数据流）。
     let mut violations: u64 = 0;
     let mut v_person: u64 = 0;
     let mut v_auction: u64 = 0;
     let mut v_bid: u64 = 0;
+    let mut ref_violations: u64 = 0;
     if check {
-        let pb_check = crate::progress::ProgressBar::new(count as u64, "check: 值域校验");
+        use std::collections::{HashMap, HashSet};
+
+        let mut person_ids: HashSet<i64> = HashSet::new();
+        let mut person_time: HashMap<i64, i64> = HashMap::new();
+        let mut auction_ids: HashSet<i64> = HashSet::new();
+        let pb_check = crate::progress::ProgressBar::new(count as u64, "check: 值域+引用校验");
         generate_events(count, seed, |ev| {
             pb_check.tick();
             if check_event(&ev, count) {
@@ -499,6 +536,36 @@ pub fn run_checked(count: i64, seed: u64, no_sort: bool, check: bool) -> WfgenRe
                     NxEvent::Person { .. } => v_person += 1,
                     NxEvent::Auction { .. } => v_auction += 1,
                     NxEvent::Bid { .. } => v_bid += 1,
+                }
+            }
+            // 跨事件规则：id 唯一 + 引用「最近 person/auction」（被引用实体已生成且
+            // dateTime <= 当前事件时间）。这锁定了 NEXMark 官方生成语义。
+            match ev {
+                NxEvent::Person { id, ns, .. } => {
+                    if !person_ids.insert(id) {
+                        ref_violations += 1;
+                    }
+                    person_time.insert(id, ns);
+                }
+                NxEvent::Auction { id, ns, seller, .. } => {
+                    if !auction_ids.insert(id) {
+                        ref_violations += 1;
+                    }
+                    match person_time.get(&seller) {
+                        Some(&seller_ns) if seller_ns <= ns => {}
+                        _ => ref_violations += 1,
+                    }
+                }
+                NxEvent::Bid {
+                    auc, ns, bidder, ..
+                } => {
+                    if !auction_ids.contains(&auc) {
+                        ref_violations += 1;
+                    }
+                    match person_time.get(&bidder) {
+                        Some(&bidder_ns) if bidder_ns <= ns => {}
+                        _ => ref_violations += 1,
+                    }
                 }
             }
             Ok(())
@@ -547,7 +614,6 @@ pub fn run_checked(count: i64, seed: u64, no_sort: bool, check: bool) -> WfgenRe
     let rows_ok = n_person == expect_person && n_auction == expect_auction && n_bid == expect_bid;
     let ns_ok = min_ns >= BASE_NS && max_ns <= BASE_NS + SPAN_NS;
     let total = n_person + n_auction + n_bid;
-    let oog_ok = max_oog_ns <= if no_sort { SPAN_NS } else { BUCKET_NS };
     eprintln!(
         "== gen-nexmark {} {} ==",
         fmt_num(count as u64),
@@ -576,12 +642,10 @@ pub fn run_checked(count: i64, seed: u64, no_sort: bool, check: bool) -> WfgenRe
         fmt_num(oog_count),
         100.0 * oog_count as f64 / total as f64,
         max_oog_ns as f64 / 1_000_000_000.0,
-        if no_sort {
-            "（phase-major 预期大，会破坏 over 驱逐）"
-        } else if oog_ok {
-            "✅ 桶内乱序 ≤ 30s 桶宽"
+        if oog_count == 0 {
+            "✅ 事件时间严格递增（对齐 NEXMark outOfOrderGroupSize=1）"
         } else {
-            "❌ 超过桶宽"
+            "❌ 出现乱序"
         }
     );
     if check {
@@ -592,6 +656,11 @@ pub fn run_checked(count: i64, seed: u64, no_sort: bool, check: bool) -> WfgenRe
             fmt_num(v_auction),
             fmt_num(v_bid),
             if violations == 0 { "✅" } else { "❌" }
+        );
+        eprintln!(
+            "  引用  {}（person/auction id 唯一 + seller/bidder 引用最近 person + bid 引用已存在 auction）{}",
+            fmt_num(ref_violations),
+            if ref_violations == 0 { "✅" } else { "❌" }
         );
         let fp = fingerprint
             .as_ref()
@@ -618,158 +687,59 @@ pub fn run_checked(count: i64, seed: u64, no_sort: bool, check: bool) -> WfgenRe
 mod tests {
     use super::*;
 
-    /// 回归测试：NxEvent 路径（当前 generate_events）必须与重构前的 json! 写法
-    /// 产出完全一致的事件流（rng 序列不变）。
-    ///
-    /// 背景：重构时把 emit 回调从 `json!` 值改为 `NxEvent` 结构体，导致
-    /// `random_range(10..=1000)` 的整数类型推断从 i32（无约束，serde to_value
-    /// 默认）变成 i64（结构体字段类型）。rand 对 i32/i64 范围采样结果不同，
-    /// auction/bid 序列整体偏移（person 因 city 用 usize 不受影响）。
-    /// 本测试用原版 json! 写法作为参照实现，逐事件断言一致性。
+    /// 回归：generate_events 是纯函数——同一 seed 重放产出字节一致的事件流。
+    /// 这是 ground truth 可对同一数据独立复算的前提（--check 阶段依赖同 seed 重放）。
     #[test]
-    fn nxevent_preserves_json_rng_sequence() {
+    fn generate_events_is_deterministic() {
         const COUNT: i64 = 2000;
         const SEED: u64 = 1;
 
-        // 参照实现：重构前（HEAD）generate_events 的 json! 写法，保持原版类型推断。
-        let mut rng = StdRng::seed_from_u64(SEED);
-        let num_person = (COUNT as f64 * 0.02) as i64;
-        let num_auction = (COUNT as f64 * 0.06) as i64;
-        let num_bid = COUNT - num_person - num_auction;
-
-        let persons: Vec<usize> = (0..PERSONS)
-            .map(|_| rng.random_range(0..STATES.len()))
-            .collect();
-        struct RefAuction {
-            seller: i64,
-            category: i64,
-            hot: bool,
-        }
-        let auctions: Vec<RefAuction> = (0..num_auction)
-            .map(|_| {
-                let hot = rng.random::<f64>() < 0.50;
-                let seller = if hot {
-                    rng.random_range(1..=HOT_SELLERS as i64)
-                } else {
-                    rng.random_range(1..=PERSONS as i64)
-                };
-                RefAuction {
-                    seller,
-                    category: rng.random_range(1..=26),
-                    hot,
-                }
-            })
-            .collect();
-
-        let mut ref_events: Vec<(String, i64, serde_json::Value)> = Vec::new();
-        for i in 0..num_person {
-            let pid = (i % PERSONS as i64) as usize;
-            let ns = BASE_NS + rng.random_range(0..=(SPAN_NS / 10));
-            ref_events.push((
-                "person_events".into(),
-                ns,
-                json!({
-                    "id": pid as i64 + 1,
-                    "name": format!("person_{}", pid + 1),
-                    "email": format!("person{}@example.com", pid + 1),
-                    "city": CITIES[rng.random_range(0..CITIES.len())],
-                    "state": STATES[persons[pid]],
-                    "dateTime": ns,
-                }),
-            ));
-        }
-        for i in 0..num_auction {
-            let a = &auctions[i as usize];
-            let ns = BASE_NS + rng.random_range((SPAN_NS / 10)..=SPAN_NS);
-            ref_events.push((
-                "auction_events".into(),
-                ns,
-                json!({
-                    "id": i + 1,
-                    "itemName": format!("item_{}", i),
-                    "description": format!("desc {}", i),
-                    "initialBid": rng.random_range(10..=1000),
-                    "reserve": rng.random_range(1000..=10000),
-                    "dateTime": ns,
-                    "expires": ns + rng.random_range(600_000_000_000..=1_800_000_000_000),
-                    "seller": a.seller,
-                    "category": a.category,
-                    "extra": "",
-                }),
-            ));
-        }
-        for _ in 0..num_bid {
-            let aidx = rng.random_range(0..auctions.len());
-            let a = &auctions[aidx];
-            let price = if a.hot {
-                rng.random_range(100..=500)
-            } else {
-                rng.random_range(10..=150)
-            };
-            let bidder = if rng.random::<f64>() < 0.5 {
-                rng.random_range(1..=HOT_BIDDERS as i64)
-            } else {
-                rng.random_range(1..=PERSONS as i64)
-            };
-            let ns = BASE_NS + rng.random_range((SPAN_NS / 5)..=SPAN_NS);
-            ref_events.push((
-                "bid_events".into(),
-                ns,
-                json!({
-                    "auction": aidx as i64 + 1,
-                    "bidder": bidder,
-                    "price": price,
-                    "channel": CHANNELS[rng.random_range(0..CHANNELS.len())],
-                    "url": format!("http://www.example.com/{}", rng.random_range(100..=999)),
-                    "dateTime": ns,
-                    "extra": "",
-                }),
-            ));
-        }
-
-        // 目标：当前生产路径。
-        let mut got: Vec<(String, i64, serde_json::Value)> = Vec::new();
+        let mut a: Vec<(String, i64, serde_json::Value)> = Vec::new();
         generate_events(COUNT, SEED, |ev| {
-            got.push((ev.stream().to_string(), ev.ns(), nx_to_value(&ev)));
+            a.push((ev.stream().to_string(), ev.ns(), nx_to_value(&ev)));
             Ok(())
         })
         .unwrap();
 
-        assert_eq!(got.len(), ref_events.len(), "事件数不一致");
-        for (idx, ((g_stream, g_ns, g_val), (r_stream, r_ns, r_val))) in
-            got.iter().zip(ref_events.iter()).enumerate()
-        {
-            assert_eq!(g_stream, r_stream, "event {idx}: stream 不一致");
-            assert_eq!(g_ns, r_ns, "event {idx}: ns 不一致");
-            assert_eq!(g_val, r_val, "event {idx}: 字段不一致（rng 序列被破坏）");
-        }
+        let mut b: Vec<(String, i64, serde_json::Value)> = Vec::new();
+        generate_events(COUNT, SEED, |ev| {
+            b.push((ev.stream().to_string(), ev.ns(), nx_to_value(&ev)));
+            Ok(())
+        })
+        .unwrap();
+
+        assert_eq!(a, b, "同一 seed 重放应产出完全一致的事件流");
     }
 
-    /// 回归：auction/bid 的 id/auc 值域须与生成语义一致（1..=count*0.06），
-    /// 曾误写 count/100，导致 2M 时 163 万条“假违规”。
+    /// 回归：id/auc/seller/bidder 值域须与生成语义一致——person/auction id 唯一
+    /// （FIRST_*_ID 起），seller/bidder 引用 person id，bid.auction 引用 auction id。
     #[test]
     fn check_event_bounds_match_generation_semantics() {
         let count = 10_000i64;
+        let num_person = (count as f64 * 0.02) as i64; // 200
         let num_auction = (count as f64 * 0.06) as i64; // 600
-        // 生成器产出的真实事件全部合法（边界值 id/auc = num_auction 合法）。
+        let person_hi = FIRST_PERSON_ID + num_person - 1; // 1199
+        let auction_hi = FIRST_AUCTION_ID + num_auction - 1; // 1599
+
+        // 边界值合法。
         assert!(!check_event(
             &NxEvent::Auction {
-                id: num_auction,
+                id: auction_hi,
                 ns: BASE_NS,
                 initial_bid: 10,
                 reserve: 1000,
                 expires: BASE_NS + 1_000_000_000,
-                seller: 1,
+                seller: FIRST_PERSON_ID,
                 category: 1,
             },
             count
         ));
         assert!(!check_event(
             &NxEvent::Bid {
-                auc: num_auction,
+                auc: auction_hi,
                 ns: BASE_NS,
                 price: 10,
-                bidder: 1000,
+                bidder: person_hi,
                 channel: 0,
                 url: 100,
             },
@@ -777,32 +747,33 @@ mod tests {
         ));
         assert!(!check_event(
             &NxEvent::Person {
-                id: 1000,
+                id: person_hi,
                 ns: BASE_NS,
                 city: CITIES.len() - 1,
                 state: STATES.len() - 1,
             },
             count
         ));
-        // 越界（num_auction+1 / 0 / 越界枚举）必须报违规。
+
+        // 越界必须报违规。
         assert!(check_event(
             &NxEvent::Auction {
-                id: num_auction + 1,
+                id: auction_hi + 1,
                 ns: BASE_NS,
                 initial_bid: 10,
                 reserve: 1000,
                 expires: BASE_NS + 1_000_000_000,
-                seller: 1,
+                seller: FIRST_PERSON_ID,
                 category: 1,
             },
             count
         ));
         assert!(check_event(
             &NxEvent::Bid {
-                auc: 0,
+                auc: FIRST_AUCTION_ID - 1, // 低于 auction id 下限
                 ns: BASE_NS,
                 price: 10,
-                bidder: 1000,
+                bidder: person_hi,
                 channel: 0,
                 url: 100,
             },
@@ -810,10 +781,10 @@ mod tests {
         ));
         assert!(check_event(
             &NxEvent::Bid {
-                auc: 1,
+                auc: auction_hi,
                 ns: BASE_NS,
                 price: 9, // < 10 下限
-                bidder: 1000,
+                bidder: person_hi,
                 channel: 0,
                 url: 100,
             },
@@ -821,7 +792,7 @@ mod tests {
         ));
         assert!(check_event(
             &NxEvent::Person {
-                id: 1001, // 超出 PERSONS
+                id: person_hi + 1, // 超出 person id 上限
                 ns: BASE_NS,
                 city: 0,
                 state: 0,
@@ -846,65 +817,114 @@ mod tests {
         assert_eq!(violations, 0, "生成事件不应触发自检违规");
     }
 
-    /// 性质测试：桶序输出流（桶间严格递增 + 桶内生成序）的乱序深度
-    /// 必须 ≤ BUCKET_NS（30s 桶宽）——这是 over 驱逐能工作的前提。
+    /// 性质测试：生成数据满足 NEXMark 官方引用规则——person/auction id 唯一，
+    /// seller/bidder 引用「dateTime <= 事件时间的已生成 person」，bid.auction 引用
+    /// 已生成 auction。这是 asof join O(1) 语义的数据前提。
     #[test]
-    fn sorted_emission_max_oog_within_bucket_ns() {
+    fn generated_events_pass_reference_rules() {
+        use std::collections::{HashMap, HashSet};
+
         let count = 50_000i64;
-        // 按桶收集（保持生成序），与 run 的 Sorted 输出路径一致。
-        let mut buckets: Vec<Vec<i64>> = vec![Vec::new(); TIME_BUCKETS];
+        let mut person_ids: HashSet<i64> = HashSet::new();
+        let mut person_time: HashMap<i64, i64> = HashMap::new();
+        let mut auction_ids: HashSet<i64> = HashSet::new();
+        let mut violations = 0u64;
+
         generate_events(count, 7, |ev| {
-            let ns = ev.ns();
-            let b = (((ns - BASE_NS).max(0)) / BUCKET_NS).min((TIME_BUCKETS - 1) as i64) as usize;
-            buckets[b].push(ns);
+            match ev {
+                NxEvent::Person { id, ns, .. } => {
+                    if !person_ids.insert(id) {
+                        violations += 1;
+                    }
+                    person_time.insert(id, ns);
+                }
+                NxEvent::Auction { id, ns, seller, .. } => {
+                    if !auction_ids.insert(id) {
+                        violations += 1;
+                    }
+                    match person_time.get(&seller) {
+                        Some(&seller_ns) if seller_ns <= ns => {}
+                        _ => violations += 1,
+                    }
+                }
+                NxEvent::Bid {
+                    auc, ns, bidder, ..
+                } => {
+                    if !auction_ids.contains(&auc) {
+                        violations += 1;
+                    }
+                    match person_time.get(&bidder) {
+                        Some(&bidder_ns) if bidder_ns <= ns => {}
+                        _ => violations += 1,
+                    }
+                }
+            }
             Ok(())
         })
         .unwrap();
-        // 摊平后直接统计乱序（输出流语义）。
-        let mut seq_max = i64::MIN;
-        let mut max_oog = 0i64;
-        let mut oog_count = 0u64;
-        for b in &buckets {
-            for &ns in b {
-                if ns < seq_max {
-                    oog_count += 1;
-                    max_oog = max_oog.max(seq_max - ns);
-                } else {
-                    seq_max = ns;
+
+        assert_eq!(violations, 0, "生成数据应满足 id 唯一 + 引用最近规则");
+    }
+
+    /// 性质测试：q22 的 asof join `within 60s` 命中率应接近 100%。
+    /// NEXMark 官方 bidder 引用「最近注册的 person」，其 dateTime 紧贴 bid 时间，
+    /// 因此每个 bid 都能在 60s 内命中对应 person——这是 O(1) asof join 的数据前提。
+    #[test]
+    fn asof_join_within_60s_hit_rate_is_near_100() {
+        use std::collections::HashMap;
+
+        const WITHIN_NS: i64 = 60_000_000_000;
+        let count = 100_000i64;
+        let mut person_time: HashMap<i64, i64> = HashMap::new();
+        let mut bids = 0u64;
+        let mut hits = 0u64;
+
+        generate_events(count, 7, |ev| {
+            match ev {
+                NxEvent::Person { id, ns, .. } => {
+                    person_time.insert(id, ns);
                 }
+                NxEvent::Bid { bidder, ns, .. } => {
+                    bids += 1;
+                    if let Some(&p_ns) = person_time.get(&bidder)
+                        && p_ns <= ns
+                        && p_ns >= ns - WITHIN_NS
+                    {
+                        hits += 1;
+                    }
+                }
+                _ => {}
             }
-        }
+            Ok(())
+        })
+        .unwrap();
+
+        let hit_rate = hits as f64 / bids as f64;
         assert!(
-            oog_count > 0,
-            "桶内应有乱序（桶内是生成序而非时间序），测试才有意义"
-        );
-        assert!(
-            max_oog <= BUCKET_NS,
-            "最大乱序 {:.1}s 超过桶宽 30s",
-            max_oog as f64 / 1e9
+            hit_rate > 0.99,
+            "asof within 60s 命中率应接近 100%，实际 {:.2}%",
+            hit_rate * 100.0
         );
     }
 
-    /// 性质测试：no-sort（phase-major）乱序远超桶宽——
-    /// 这是文档声称「no-sort 破坏 over 驱逐」的数字证据。
+    /// 性质测试：交错生成的事件时间严格递增（等价 NEXMark outOfOrderGroupSize=1），
+    /// 输出流无乱序——这是 person/auction 窗口 watermark 渐进推进、snapshot join 时序
+    /// 正确（不被 phase-major 提前推进 watermark 而破坏）的前提。
     #[test]
-    fn no_sort_emission_has_phase_major_oog() {
+    fn emission_is_time_ordered() {
         let count = 50_000i64;
         let mut seq_max = i64::MIN;
-        let mut max_oog = 0i64;
+        let mut oog_count = 0u64;
         generate_events(count, 7, |ev| {
             let ns = ev.ns();
             if ns < seq_max {
-                max_oog = max_oog.max(seq_max - ns);
+                oog_count += 1;
             } else {
                 seq_max = ns;
             }
             Ok(())
         })
         .unwrap();
-        assert!(
-            max_oog > BUCKET_NS,
-            "phase-major 乱序应远超桶宽（auction 段跨 10%-100% span）"
-        );
+        assert_eq!(oog_count, 0, "交错生成的事件时间应严格递增（无乱序）");
     }
 }

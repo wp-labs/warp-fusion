@@ -236,7 +236,37 @@ where
             // `on each`（无状态）：事件级评估一次（each 规则单 bind，
             // 任一 alias 命中即整体评估，避免逐 alias 重复计数）。
             if engine.each {
-                if let Ok(Some(record)) = engine.executor.execute_each(&core_event, event_nanos) {
+                // 先过 bind filter（events 块 filter，与 match 规则同路径
+                // event_matches_alias）——修复：此前直接 execute_each 只检查
+                // `on each` 的 where 子句，漏掉 events 块 filter，q2/q10 的
+                // MOD/子集过滤在 oracle 里被忽略，EMIT 虚高（对拍假一致）。
+                let any_bind_matches = bind_aliases
+                    .iter()
+                    .any(|a| engine.executor.event_matches_alias(a, &core_event, None));
+                if !any_bind_matches {
+                    continue;
+                }
+                // 有 join 的 on each 规则（如 q20：bid ⋈ auction + where
+                // category==10）必须走 with_joins 路径，否则 join 富化缺失、
+                // `where` 引用的 join 字段求值为 None → 全抑制或全放行（假对拍）。
+                if engine.has_joins {
+                    let lookup: &dyn WindowLookup = engine
+                        .lookup
+                        .as_ref()
+                        .map(|l| l as &dyn WindowLookup)
+                        .unwrap_or(&EmptyLookup);
+                    if let Ok(Some(record)) = engine.executor.execute_each_with_joins(
+                        &core_event,
+                        event_nanos,
+                        lookup,
+                        &[],
+                        event_nanos,
+                    ) {
+                        push_alert(record, &mut alerts);
+                    }
+                } else if let Ok(Some(record)) =
+                    engine.executor.execute_each(&core_event, event_nanos)
+                {
                     push_alert(record, &mut alerts);
                 }
                 continue;
@@ -286,21 +316,24 @@ where
         *scenario_start + chrono::Duration::from_std(*scenario_duration).unwrap_or_default();
     let eos_nanos = eos_time.timestamp_nanos_opt().unwrap_or(i64::MAX);
 
-    /// 引擎 replay 语义（close_at_eos = false）：流结束即止，不扫 EOS 过期、
-    /// 不 close_all——与引擎在 replay 收尾不再推进 watermark 的行为一致。
-    if close_at_eos {
-        for engine in &mut engines {
-            let expired = engine
-                .sm
-                .scan_expired_at_with_conv(eos_nanos, engine.conv_plan.as_ref());
-            collect_close_alerts(
-                &engine.executor,
-                expired,
-                engine.has_joins,
-                engine.lookup.as_ref().map(|l| l as &dyn WindowLookup),
-                &mut alerts,
-            );
+    /// 引擎 replay 语义（close_at_eos = false）：不 close_all 剩余实例；但引擎
+    /// replay 的 slice 水位会推进到数据末尾的 slice 边界（fixed 桶在数据末尾
+    /// 恰好到期时会收口——q5 实证：30m 数据 + 10m 桶引擎收 3 桶、oracle 只收
+    /// 2 桶），故 oracle 也扫一次 eos 水位（不含 close_all）模拟该行为。
+    /// close_at_eos = true（cmd_gen batch 语义）时另 close_all 剩余实例。
+    for engine in &mut engines {
+        let expired = engine
+            .sm
+            .scan_expired_at_with_conv(eos_nanos, engine.conv_plan.as_ref());
+        collect_close_alerts(
+            &engine.executor,
+            expired,
+            engine.has_joins,
+            engine.lookup.as_ref().map(|l| l as &dyn WindowLookup),
+            &mut alerts,
+        );
 
+        if close_at_eos {
             // End-of-scenario in datagen is also a finite replay boundary. After
             // the timeout sweep, close remaining active instances so `and close`
             // rules match batch/EOF execution semantics.

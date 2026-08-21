@@ -313,6 +313,14 @@ fn normalize_counts(
 ) -> (Vec<String>, Vec<String>, Vec<String>) {
     let known: &[(&str, &str)] = &[
         (
+            "q3_auction_seller",
+            "join 可见性：oracle 预加载完整 person 历史（含 seller lead 引用的未来/已驱逐 person），引擎 replay 只看到已 append+保留的行（30m 窗口覆盖 1/3 时差异 ~27%，10m 全覆盖 ~8%）；oracle 为语义参考值",
+        ),
+        (
+            "q20_expand_bid",
+            "join 可见性：bid⋈auction，oracle 预加载完整 auction 历史，引擎只看已 append+保留（与 q3 同源）",
+        ),
+        (
             "q6_avg_price_by_seller",
             "join 可见性：引擎 replay 的 append 超前/evictor sweep 时机非确定（oracle 为语义参考值）",
         ),
@@ -323,6 +331,10 @@ fn normalize_counts(
         (
             "q9_winning_bid",
             "fixed+close 收口预算/scan_timeouts 时钟相关，引擎可能丢尾部收口（oracle 理想值）",
+        ),
+        (
+            "q11_bidder_session",
+            "session+close 尾部会话收口依赖水位推进（快速 replay 末尾 10s gap 内会话引擎多收），oracle 事件时间到末尾即止",
         ),
         (
             "q4_avg_price_by_category",

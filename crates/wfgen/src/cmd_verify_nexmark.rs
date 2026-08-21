@@ -329,6 +329,10 @@ fn normalize_counts(
             "q16_sum_price_1000",
             "fixed+close 收口预算/scan_timeouts 时钟相关，引擎可能丢尾部收口（oracle 理想值）",
         ),
+        (
+            "q17_distinct_bidders_20",
+            "sliding 实例过期预算/时序非确定（10m 滑动窗高实例量下尾桶 fire 边界），oracle 为语义参考值",
+        ),
     ];
     let mut rules: Vec<&String> = oracle
         .keys()

@@ -172,8 +172,9 @@ pub enum NxEvent {
         price: i64,
         bidder: i64,
         channel: usize,
-        /// q21 的 channel_id：热通道 None（JSON 由官方 CASE 映射），cold 通道
-        /// Some(abs(Integer.reverse(i)))——生成时已知，等价官方 URL 的 channel_id 参数。
+        /// q21 的 channel_id：热通道 None（JSON 由官方 CASE 映射）；cold 通道
+        /// Some(abs(Integer.reverse(i))) = url 含 channel_id 参数，None = 官方
+        /// 10% 概率无 channel_id 参数（JSON 输出空串，q21 WHERE 过滤该行）。
         channel_id: Option<i64>,
         url: String,
         extra: String,
@@ -262,11 +263,13 @@ pub(crate) fn nx_to_value(ev: &NxEvent) -> serde_json::Value {
                 format!("channel-{}", *channel - HOT_CHANNEL_MAX)
             };
             // 官方 q21（Add channel id）的 channel_id：热通道按官方 CASE 映射
-            // （apple=0/google=1/facebook=2/baidu=3），cold 取生成时算好的
-            // abs(Integer.reverse(i))（与 URL 的 channel_id 参数一致）。
+            // （apple=0/google=1/facebook=2/baidu=3）；cold 取生成时算好的
+            // abs(Integer.reverse(i))（与 URL 的 channel_id 参数一致）；cold 且
+            // 官方 10% 概率无 channel_id 参数 → 输出空串（q21 的 WHERE 过滤）。
             let channel_id = match channel_id {
                 Some(id) => id.to_string(),
-                None => HOT_CHANNEL_IDS[*channel].to_string(),
+                None if *channel < HOT_CHANNEL_MAX => HOT_CHANNEL_IDS[*channel].to_string(),
+                None => String::new(),
             };
             json!({
                 "auction": auc,
@@ -373,7 +376,8 @@ fn next_exact_string(rng: &mut StdRng, len: usize) -> String {
 
 /// 官方 `StringsGenerator.nextExtra`：currentSize 未超 desiredAverageSize 时，
 /// 在目标附近 ±20% 随机抖动（delta = round((desired-current)*0.2)，
-/// desiredSize ∈ [minSize, minSize+2δ)），再生成精确长度的纯小写串。
+/// desiredSize = minSize + (delta==0 ? 0 : nextInt(2×delta))——**半开** [0, 2δ)，
+/// δ=0 时恒 0（官方源码逐行对照），再生成精确长度的纯小写串。
 fn next_extra(rng: &mut StdRng, current_size: usize, desired: usize) -> String {
     if current_size > desired {
         String::new()
@@ -381,8 +385,14 @@ fn next_extra(rng: &mut StdRng, current_size: usize, desired: usize) -> String {
         let remaining = desired - current_size;
         let delta = ((remaining as f64 * 0.2).round()) as usize;
         let min_size = remaining - delta;
-        // 官方 `random.nextInt(2 * delta + 1)`（闭区间 [0, 2δ]；δ=0 时恒为 0）。
-        let desired_size = min_size + rng.random_range(0..=2 * delta);
+        // 官方 `random.nextInt(2 * delta)` 半开区间；delta==0 时官方三元给 0
+        // （Rust `0..0` 是空区间会 panic，必须保留特判）。
+        let desired_size = min_size
+            + if delta == 0 {
+                0
+            } else {
+                rng.random_range(0..2 * delta)
+            };
         next_exact_string(rng, desired_size)
     }
 }
@@ -441,14 +451,20 @@ fn next_base0_auction_id(event_id: i64, rng: &mut StdRng) -> i64 {
     min_auc + n
 }
 
-/// 官方 `AuctionGenerator.nextAuctionLengthMs`：auction 有效期 = 1 + [0, 2×horizon) ms，
-/// horizon = 未来 `numInFlightAuctions` 个 auction 的生成间隔（事件时间口径）。
-/// 官方 timestampForEvent 为固定 100µs/事件 → horizon = 1666 × 100µs = 0.1666s 固定
-/// （与 count 无关；旧实现用 SPAN/count 使 horizon 随 count 漂移——REVIEW #1）。
-fn auction_length_ns(rng: &mut StdRng) -> i64 {
+/// 官方 horizonMs（毫秒）：timestampForEvent(n+1666) − timestampForEvent(n)，其中
+/// timestampForEvent(n) = baseTime + floor(n×100µs / 1ms)（官方 `(long)(n×100.0)/1000`
+/// 向下取整）→ 166/167ms 随 n mod 10 抖动（1666×0.1=166.6，floor 差依赖 n 的毫秒相位）。
+fn auction_horizon_ms(event_id: i64) -> i64 {
     let num_events_for_auctions = (NUM_IN_FLIGHT_AUCTIONS * TOTAL_PROPORTION) / AUCTION_PROPORTION; // 100×50/3 = 1666
-    let horizon_ns = num_events_for_auctions * INTER_EVENT_DELAY_NS; // 固定 0.1666s
-    let horizon_ms = (horizon_ns / 1_000_000).max(1);
+    let t_now_ms = (event_id * INTER_EVENT_DELAY_NS) / 1_000_000;
+    let t_future_ms = ((event_id + num_events_for_auctions) * INTER_EVENT_DELAY_NS) / 1_000_000;
+    (t_future_ms - t_now_ms).max(1)
+}
+
+/// 官方 `AuctionGenerator.nextAuctionLengthMs`：auction 有效期 = 1 + [0, 2×horizon) ms
+/// （官方 `1 + nextLong(max(horizonMs×2, 1))`，返回值毫秒；wfgen 换算纳秒）。
+fn auction_length_ns(event_id: i64, rng: &mut StdRng) -> i64 {
+    let horizon_ms = auction_horizon_ms(event_id);
     (1 + rng.random_range(0..(horizon_ms * 2).max(1))) * 1_000_000
 }
 
@@ -516,7 +532,7 @@ where
             } + FIRST_PERSON_ID;
             let category = FIRST_CATEGORY_ID + rng.random_range(0..NUM_CATEGORIES);
             let initial_bid = next_price(&mut rng);
-            let expires = ns + auction_length_ns(&mut rng);
+            let expires = ns + auction_length_ns(event_id, &mut rng);
             let item_name = next_string(&mut rng, 20, ' ');
             let description = next_string(&mut rng, 100, ' ');
             let reserve = initial_bid + next_price(&mut rng);
@@ -554,16 +570,22 @@ where
             } else {
                 // 官方 cold 通道：`random.nextInt(CHANNELS_NUMBER)` 均匀随机取通道
                 // （官方从 10000 条预生成缓存取；wfgen 用确定 rng 逐 bid 生成，分布一致），
-                // url 追加 `channel_id = abs(Integer.reverse(i))`（Java int 位反转）。
-                // wrapping_abs 复刻 Java Math.abs(Integer.MIN_VALUE) 溢出返回负值的行为
-                // （概率 1/2^32，官方亦如此）。
-                // （旧实现为顺序轮询计数器 + 原始 channel_id——REVIEW #5）
+                // 缓存创建时 `random.nextInt(10) > 0` → 90% 概率 url 追加
+                // `channel_id = abs(Integer.reverse(i))`（Java int 位反转），10% 无参数
+                // （q21 的 WHERE 会过滤无 channel_id 的 cold bid → 输出量 = 热 50% + cold
+                // 90%×50% = 95% 的 bid，与官方一致）。wrapping_abs 复刻 Java
+                // Math.abs(Integer.MIN_VALUE) 溢出返回负值的行为（概率 1/2^32）。
+                // （旧实现为顺序轮询 + 100% 追加——REVIEW #5 及 2026-08-22 复核修正）
                 let i = rng.random_range(0..CHANNELS_NUMBER);
-                let channel_id = (i as i32).reverse_bits().wrapping_abs() as i64;
+                let channel_id = if rng.random_range(0..10) > 0 {
+                    Some((i as i32).reverse_bits().wrapping_abs() as i64)
+                } else {
+                    None
+                };
                 (
                     HOT_CHANNEL_MAX + i as usize,
-                    Some(channel_id),
-                    next_url(&mut rng, Some(channel_id)),
+                    channel_id,
+                    next_url(&mut rng, channel_id),
                 )
             };
             let current_size = 8 + 8 + 8 + 8;
@@ -665,9 +687,13 @@ fn check_event(ev: &NxEvent, count: i64) -> bool {
                 // nextString(5,'_')），不影响 '/' 计数）
                 || url.split('/').count() < 7
                 || !url.starts_with("https://www.nexmark.com/")
-                // cold 通道的 channel_id 字段必须与 url 参数一致（官方 abs(Integer.reverse(i))）。
+                // cold 通道的 channel_id 字段必须与 url 参数一致（官方 abs(Integer.reverse(i))）：
+                // Some → url 必须含该参数；cold 且 None（官方 10% 无 channel_id）→ url 不得含。
                 || (channel_id.is_some()
                     && !url.contains(&format!("channel_id={}", channel_id.unwrap())))
+                || (channel_id.is_none()
+                    && *channel >= HOT_CHANNEL_MAX
+                    && url.contains("channel_id="))
         }
     }
 }
@@ -1316,5 +1342,208 @@ mod tests {
         })
         .unwrap();
         assert_eq!(oog_count, 0, "交错生成的事件时间应严格递增（无乱序）");
+    }
+
+    /// 官方 `nextExtra` 是半开区间：desiredSize = minSize + (delta==0 ? 0 : nextInt(2×delta))
+    /// ∈ [minSize, minSize+2δ)。2026-08-22 曾误写成闭区间（多一个最大值），回归锁死。
+    #[test]
+    fn next_extra_matches_official_half_open_range() {
+        // delta == 0（remaining 很小）：官方三元给 0 → 精确补齐，无抖动。
+        assert_eq!(next_extra(&mut StdRng::seed_from_u64(1), 30, 31).len(), 1);
+        assert_eq!(next_extra(&mut StdRng::seed_from_u64(1), 10, 10).len(), 0); // current==desired → ""
+        assert_eq!(next_extra(&mut StdRng::seed_from_u64(1), 11, 10).len(), 0); // current>desired → ""
+
+        // delta > 0：remaining=68 → delta=round(13.6)=14 → minSize=54，
+        // desiredSize ∈ [54, 54+27]（半开 [0,28)）。
+        let mut rng = StdRng::seed_from_u64(42);
+        let mut seen: Vec<usize> = Vec::new();
+        for _ in 0..50_000 {
+            let s = next_extra(&mut rng, 32, 100); // bid：current=32, desired=100
+            seen.push(s.len());
+            assert!(
+                s.chars().all(|c| c.is_ascii_lowercase()),
+                "nextExactString 应纯小写"
+            );
+        }
+        let min = *seen.iter().min().unwrap();
+        let max = *seen.iter().max().unwrap();
+        assert_eq!(min, 54, "desiredSize 下界 = minSize = remaining−delta");
+        assert_eq!(max, 81, "desiredSize 上界 = minSize+2δ−1（半开，不含 82）");
+    }
+
+    /// 官方 `nextString`：长度 = 3 + nextInt(maxLength−3) ∈ [3, maxLength−1]（半开上界），
+    /// 但 special=' '（默认）时 trim 会去掉首尾空格 → 输出长度可 <3（官方同行为，
+    /// 只能断言上界 ≤ maxLength−1 与字符集）。
+    #[test]
+    fn next_string_length_in_official_range() {
+        for max_len in [5usize, 7, 20, 100] {
+            let mut rng = StdRng::seed_from_u64(7);
+            for _ in 0..20_000 {
+                let s = next_string(&mut rng, max_len, ' ');
+                assert!(
+                    s.len() <= max_len - 1,
+                    "len={} 应 ≤ {max_len}−1（trim 后可更短）",
+                    s.len()
+                );
+                assert!(s.chars().all(|c| c == ' ' || c.is_ascii_lowercase()));
+            }
+        }
+        // special='_' 时 trim 无效（trim 只去空白），'_' 保留在串内；
+        // 无空白可去 → 长度恒 ∈ [3, max_len−1]。
+        let mut rng = StdRng::seed_from_u64(9);
+        for _ in 0..20_000 {
+            let s = next_string(&mut rng, 5, '_');
+            assert!(
+                (3..5).contains(&s.len()),
+                "special='_' 无 trim：len={} 应在 [3, 4]",
+                s.len()
+            );
+            assert!(s.chars().all(|c| c == '_' || c.is_ascii_lowercase()));
+        }
+    }
+
+    /// 官方 `createChannelUrlCache`：每条 cold 通道缓存 90% 概率追加 channel_id
+    /// （`random.nextInt(10) > 0`），10% 无参数。分布语义：cold bid 的 channel_id
+    /// 缺失率 ≈10%（q21 的 WHERE 会过滤这些行 → 输出量 = 热 50% + cold 90%×50% = 95%）。
+    #[test]
+    fn cold_channel_id_present_about_90pct() {
+        let count = 200_000i64;
+        let mut cold = 0u64;
+        let mut missing = 0u64;
+        generate_events(count, 7, |ev| {
+            if let NxEvent::Bid {
+                channel,
+                channel_id,
+                ..
+            } = ev
+            {
+                if channel >= HOT_CHANNEL_MAX {
+                    cold += 1;
+                    if channel_id.is_none() {
+                        missing += 1;
+                    }
+                }
+            }
+            Ok(())
+        })
+        .unwrap();
+        let rate = missing as f64 / cold as f64;
+        assert!(
+            (0.05..0.15).contains(&rate),
+            "cold channel_id 缺失率应 ≈10%，实际 {:.1}% ({missing}/{cold})",
+            rate * 100.0
+        );
+    }
+
+    /// 官方 `nextAuctionLengthMs` 的 horizonMs = floor((n+1666)×100µs/1ms) − floor(n×100µs/1ms)
+    /// → 166/167ms 随 n mod 10 抖动（1666×0.1=166.6 的毫秒相位）。wfgen 用整数除法复刻。
+    #[test]
+    fn auction_horizon_ms_matches_official_ms_rounding() {
+        assert_eq!(auction_horizon_ms(0), 166); // 0.0→0, 166.6→166
+        assert_eq!(auction_horizon_ms(9), 167); // 0.9→0, 167.5→167
+        assert_eq!(auction_horizon_ms(10), 166); // 1.0→1, 167.6→167
+        assert_eq!(auction_horizon_ms(5), 167); // 0.5→0, 167.1→167
+        // 有效期落在 [1, 2×horizon] ms 区间（官方 1 + nextLong(2×horizon)，含上界；返回纳秒）。
+        let mut rng = StdRng::seed_from_u64(3);
+        for _ in 0..10_000 {
+            let len = auction_length_ns(9, &mut rng);
+            assert!(
+                (1_000_000..=334_000_000).contains(&len),
+                "len={len} 应在 [1, 334]ms"
+            );
+        }
+    }
+
+    /// check_event 的 channel_id↔url 一致性：cold 且 channel_id=None（官方 10% 无参数）
+    /// 合法且 url 不得含 channel_id；Some 时 url 必须含该参数。
+    #[test]
+    fn check_event_cold_channel_id_consistency() {
+        let count = 10_000i64;
+        let ok_url = "https://www.nexmark.com/aaaaa/bbbbb/ccccc/item.htm?query=1".to_string();
+        // cold + None + url 无参数 → 合法（官方 10% 无 channel_id）。
+        assert!(!check_event(
+            &NxEvent::Bid {
+                auc: FIRST_AUCTION_ID + 1,
+                ns: BASE_NS,
+                price: 100,
+                bidder: FIRST_PERSON_ID + 1,
+                channel: HOT_CHANNEL_MAX + 5,
+                channel_id: None,
+                url: ok_url.clone(),
+                extra: String::new(),
+            },
+            count
+        ));
+        // cold + None + url 含 channel_id → 违规（字段与 url 矛盾）。
+        assert!(check_event(
+            &NxEvent::Bid {
+                auc: FIRST_AUCTION_ID + 1,
+                ns: BASE_NS,
+                price: 100,
+                bidder: FIRST_PERSON_ID + 1,
+                channel: HOT_CHANNEL_MAX + 5,
+                channel_id: None,
+                url: "https://www.nexmark.com/aaaaa/bbbbb/ccccc/item.htm?query=1&channel_id=123"
+                    .to_string(),
+                extra: String::new(),
+            },
+            count
+        ));
+        // cold + Some(123) + url 缺该参数 → 违规（沿用既有用例逻辑）。
+        assert!(check_event(
+            &NxEvent::Bid {
+                auc: FIRST_AUCTION_ID + 1,
+                ns: BASE_NS,
+                price: 100,
+                bidder: FIRST_PERSON_ID + 1,
+                channel: HOT_CHANNEL_MAX + 5,
+                channel_id: Some(123),
+                url: ok_url,
+                extra: String::new(),
+            },
+            count
+        ));
+    }
+
+    /// nx_to_value 的 channel_id 字段输出：热通道 → 官方 CASE 映射；cold Some → 位反转值；
+    /// cold None（10% 无参数）→ 空串（q21 的 WHERE 过滤依据）。
+    #[test]
+    fn nx_to_value_channel_id_output() {
+        // 热通道
+        let v = nx_to_value(&NxEvent::Bid {
+            auc: 1,
+            ns: BASE_NS,
+            price: 100,
+            bidder: 1,
+            channel: 0, // Google
+            channel_id: None,
+            url: "u".to_string(),
+            extra: String::new(),
+        });
+        assert_eq!(v["channel_id"], "1"); // HOT_CHANNEL_IDS[0]
+        // cold Some
+        let v = nx_to_value(&NxEvent::Bid {
+            auc: 1,
+            ns: BASE_NS,
+            price: 100,
+            bidder: 1,
+            channel: HOT_CHANNEL_MAX + 42,
+            channel_id: Some(99),
+            url: "u".to_string(),
+            extra: String::new(),
+        });
+        assert_eq!(v["channel_id"], "99");
+        // cold None → 空串
+        let v = nx_to_value(&NxEvent::Bid {
+            auc: 1,
+            ns: BASE_NS,
+            price: 100,
+            bidder: 1,
+            channel: HOT_CHANNEL_MAX + 42,
+            channel_id: None,
+            url: "u".to_string(),
+            extra: String::new(),
+        });
+        assert_eq!(v["channel_id"], "");
     }
 }

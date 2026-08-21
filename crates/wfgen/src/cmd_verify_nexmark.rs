@@ -24,7 +24,7 @@ use std::thread;
 use chrono::{DateTime, Utc};
 use serde_json::json;
 
-use crate::cmd_gen_nexmark::{NxEvent, generate_events, nx_to_value};
+use crate::cmd_gen_nexmark::{INTER_EVENT_DELAY_NS, NxEvent, generate_events, nx_to_value};
 use crate::cmd_helpers::{load_wfl_files, load_ws_files};
 use crate::datagen::stream_gen::GenEvent;
 use crate::error::{WfgenReason, WfgenResult};
@@ -32,7 +32,12 @@ use crate::oracle::run_oracle_events_full;
 
 const BASE_NS: i64 = 1767225600000000000; // 与 cmd_gen_nexmark::BASE_NS 一致（2026-01-01T00:00:00Z）
 const BUCKET_NS: i64 = 30_000_000_000;
-const BUCKETS: usize = 60;
+
+/// 30s 桶数随跨度动态（与 gen-nexmark 的 time_buckets 一致）：
+/// span = count × 100µs（官方固定速率），桶宽 30s → ~count/300k 个桶。
+fn time_buckets_for(count: i64) -> usize {
+    (((count * INTER_EVENT_DELAY_NS) / BUCKET_NS).max(1)) as usize
+}
 
 /// 与 `gen-nexmark` 相同的 30s 桶序：事件按桶收集（桶内生成序），再按桶序
 /// 喂规则引擎——与 daemon 收到的帧序一致。
@@ -44,7 +49,8 @@ struct NxData {
 }
 
 fn collect_buckets(count: i64, seed: u64) -> WfgenResult<NxData> {
-    let mut buckets: Vec<Vec<NxEvent>> = (0..BUCKETS).map(|_| Vec::new()).collect();
+    let buckets_n = time_buckets_for(count);
+    let mut buckets: Vec<Vec<NxEvent>> = (0..buckets_n).map(|_| Vec::new()).collect();
     let mut n_person = 0i64;
     let mut n_auction = 0i64;
     let mut n_bid = 0i64;
@@ -57,7 +63,7 @@ fn collect_buckets(count: i64, seed: u64) -> WfgenResult<NxData> {
             NxEvent::Auction { .. } => n_auction += 1,
             NxEvent::Bid { .. } => n_bid += 1,
         }
-        let b = (((ns - BASE_NS).max(0)) / BUCKET_NS).min((BUCKETS - 1) as i64) as usize;
+        let b = (((ns - BASE_NS).max(0)) / BUCKET_NS).min((buckets_n - 1) as i64) as usize;
         buckets[b].push(ev);
         Ok(())
     })?;
@@ -150,7 +156,9 @@ pub fn run(
     // 3) 并行：规则分组，各自流式跑真实规则引擎（共享分桶；同一桶序）
     let start =
         DateTime::<Utc>::from_timestamp(BASE_NS.div_euclid(1_000_000_000), 0).unwrap_or_default();
-    let duration = std::time::Duration::from_secs(30 * 60);
+    // eos 水位须覆盖数据末尾（span = count × 100µs，官方固定速率）才能模拟引擎 slice
+    // 收口；旧实现固定 30min 与新 span（30M → 50min / 100M → 167min）不匹配。
+    let duration = std::time::Duration::from_nanos((count * INTER_EVENT_DELAY_NS).max(1) as u64);
     let n_threads = thread::available_parallelism()
         .map(|n| n.get())
         .unwrap_or(4)

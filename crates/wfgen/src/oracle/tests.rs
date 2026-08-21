@@ -52,6 +52,7 @@ fn make_simple_rule_plan() -> RulePlan {
         },
         each_plan: None,
         joins: vec![],
+        r#where: None,
         entity_plan: EntityPlan {
             entity_type: "ip".to_string(),
             entity_id_expr: Expr::Field(FieldRef::Simple("sip".to_string())),
@@ -353,6 +354,7 @@ fn multi_alias_same_window_both_receive_events() {
         },
         each_plan: None,
         joins: vec![],
+        r#where: None,
         entity_plan: EntityPlan {
             entity_type: "ip".to_string(),
             entity_id_expr: Expr::Field(FieldRef::Simple("sip".to_string())),
@@ -519,6 +521,7 @@ fn conv_top_filters_non_qualifying() {
         },
         each_plan: None,
         joins: vec![],
+        r#where: None,
         entity_plan: EntityPlan {
             entity_type: "ip".to_string(),
             entity_id_expr: Expr::Field(FieldRef::Simple("sip".to_string())),
@@ -718,6 +721,7 @@ fn make_join_key_rule_plan() -> RulePlan {
                 right: FieldRef::Qualified("auction_events".into(), "id".into()),
             }],
         }],
+        r#where: None,
         entity_plan: EntityPlan {
             entity_type: "digit".to_string(),
             entity_id_expr: Expr::Field(FieldRef::Simple("category".to_string())),
@@ -758,14 +762,8 @@ fn make_auction_event(id: u64, category: u64, ts: &str) -> GenEvent {
 
 fn make_bid_event_with_price(auction: u64, price: u64, ts: &str) -> GenEvent {
     let mut fields = serde_json::Map::new();
-    fields.insert(
-        "auction".into(),
-        serde_json::Value::Number(auction.into()),
-    );
-    fields.insert(
-        "price".into(),
-        serde_json::Value::Number(price.into()),
-    );
+    fields.insert("auction".into(), serde_json::Value::Number(auction.into()));
+    fields.insert("price".into(), serde_json::Value::Number(price.into()));
     fields.insert(
         "timestamp".into(),
         serde_json::Value::String(ts.to_string()),

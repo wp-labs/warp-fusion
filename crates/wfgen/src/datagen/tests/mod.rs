@@ -100,6 +100,7 @@ fn make_brute_force_plan() -> RulePlan {
         },
         each_plan: None,
         joins: vec![],
+        r#where: None,
         entity_plan: EntityPlan {
             entity_type: "ip".to_string(),
             entity_id_expr: Expr::Field(FieldRef::Simple("src_ip".to_string())),
@@ -164,6 +165,7 @@ fn make_auth_fail_plan() -> RulePlan {
         },
         each_plan: None,
         joins: vec![],
+        r#where: None,
         entity_plan: EntityPlan {
             entity_type: "ip".to_string(),
             entity_id_expr: Expr::Field(FieldRef::Simple("src_ip".to_string())),
@@ -249,6 +251,7 @@ fn make_bool_chain_plan() -> RulePlan {
         },
         each_plan: None,
         joins: vec![],
+        r#where: None,
         entity_plan: EntityPlan {
             entity_type: "user".to_string(),
             entity_id_expr: Expr::Field(FieldRef::Simple("username".to_string())),
@@ -321,6 +324,7 @@ fn make_distinct_close_plan() -> RulePlan {
         },
         each_plan: None,
         joins: vec![],
+        r#where: None,
         entity_plan: EntityPlan {
             entity_type: "ip".to_string(),
             entity_id_expr: Expr::Field(FieldRef::Simple("src_ip".to_string())),
@@ -411,6 +415,7 @@ fn make_chain_attack_plan() -> RulePlan {
         },
         each_plan: None,
         joins: vec![],
+        r#where: None,
         entity_plan: EntityPlan {
             entity_type: "ip".to_string(),
             entity_id_expr: Expr::Field(FieldRef::Simple("src_ip".to_string())),

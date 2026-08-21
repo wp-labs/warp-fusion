@@ -20,17 +20,17 @@
 /// 与 Flink 官方严格对齐的项（✅），按生成器逻辑分组。
 const ALIGNED: &[&str] = &[
     "事件类型比例 2%/6%/92%（person/auction/bid）= Flink personProportion=1/auctionProportion=3/bidProportion=46（total=50）",
-    "事件时间 = 事件序号线性映射（Flink timestampForEvent = baseTime + n×interEventDelay；wfgen = BASE_NS + n×SPAN/count），等价固定速率",
+    "事件时间 = 事件序号线性映射（Flink timestampForEvent = baseTime + n×interEventDelay，interEventDelayUs=100 固定；wfgen = BASE_NS + n×100µs，与官方同式同值）",
     "事件流严格按事件时间递增、无乱序（Flink outOfOrderGroupSize=1 默认）",
     "person/auction id 各自从 1000 起、唯一、递增（FIRST_PERSON_ID/FIRST_AUCTION_ID=1000 同源同值）",
     "引用窗口 = 官方 lastBase0*/nextBase0* 公式：seller/bidder 75% 热点（最近 100 人批次第 1/2 人）+ 25% 最近 numActivePeople=1000 人 ±10 lead；bid.auction 50% 热点（最近 100 个批次第 1 个）+ 50% 最近 numInFlightAuctions=100 ±10 lead（lead 允许引用未来实体，官方语义）",
     "hot auction 占比 50%（hotAuctionRatio=2 → P=1-1/2=50%）；hot seller/bidder 占比 75%（hotSellers/BiddersRatio=4）",
     "价格对数均匀：initialBid/reserve/bid.price 均 = 官方 nextPrice = round(10^(6u)×100) ∈ [100, 1e8)，与 auction 冷热无关",
-    "auction 有效期 = 官方 nextAuctionLengthMs = 1 + [0, 2×horizon) ms，horizon = 未来 numInFlightAuctions=100 个 auction 的生成间隔",
+    "auction 有效期 = 官方 nextAuctionLengthMs = 1 + [0, 2×horizon) ms，horizon = 未来 numInFlightAuctions=100 个 auction 的生成间隔 = 1666×100µs 固定（随 count 不变）",
     "category ∈ 10..14（FIRST_CATEGORY_ID=10 + rand(NUM_CATEGORIES=5)）",
-    "channel：50% 热门 4 通道（Google/Facebook/Baidu/Apple，HOT_CHANNELS_RATIO=2）+ 50% channel-0..9999（cold 用官方递增计数器轮询）",
+    "channel：50% 热门 4 通道（Google/Facebook/Baidu/Apple，HOT_CHANNELS_RATIO=2）+ 50% 均匀随机 channel-0..9999（官方 random.nextInt(CHANNELS_NUMBER)），cold 的 channel_id = 官方 abs(Integer.reverse(i))",
     "city/state：官方 PersonGenerator 10 城 / 6 州（AZ,CA,ID,OR,WA,WY），独立随机",
-    "字符串字段：name/email 随机（官方 FIRST_NAMES×LAST_NAMES + nextString）、creditCard 4 组 4 位、itemName/description = nextString(20/100)、extra 补齐到 avgByteSize（200/500/100）",
+    "字符串字段：name/email 随机（官方 FIRST_NAMES×LAST_NAMES + nextString）、creditCard 4 组 4 位、itemName/description = nextString(20/100)、url 目录 = nextString(5,'_')（可含 '_'）、extra = 官方 nextExtra ±20% 体积抖动（nextExactString 纯小写）",
 ];
 
 /// 输出符合性报告（多行文本，stderr 用；不污染 stdout 数据流/对拍输出）。

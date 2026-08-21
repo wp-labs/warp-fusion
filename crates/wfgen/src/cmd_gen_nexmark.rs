@@ -22,8 +22,9 @@
 //!   numInFlightAuctions=100 个 auction 的生成间隔；category ∈ 10..14（FIRST_CATEGORY_ID=10
 //!   + rand(5)）；channel 50% 热门 4 通道 + 50% channel-0..9999。
 //!
-//! 与官方仅有的差异：name/email/itemName/description/url 为确定性模板（无查询引用，
-//! 官方为随机字符串）；不含 creditCard/extra 填充（本地 schema 裁剪）。
+//! 与官方仅有的差异：name/email/itemName/description/url/creditCard/extra 用确定 rng
+//! 生成（官方为静态 SplittableRandom，进程间不确定）——分布语义（长度/字符集/
+//! ±20% 体积抖动/热点比例）与官方逐项一致，且同 seed 字节级确定性可重放。
 //!
 //! Usage: `wfgen gen-nexmark <count> [--seed N] [--no-sort]`
 
@@ -40,7 +41,11 @@ use crate::error::{self, WfgenReason, WfgenResult};
 use crate::progress::fmt_num;
 
 const BASE_NS: i64 = 1767225600000000000; // 2026-01-01T00:00:00Z
-const SPAN_NS: i64 = 1_800_000_000_000; // 30 min event span
+// 官方 GeneratorConfig：interEventDelayUs = 1_000_000 / firstEventRate * numEventGenerators
+// = 1_000_000 / 10_000 * 1 = 100 µs；timestampForEvent = baseTime + eventNumber × 100µs。
+// 事件间隔固定 100µs（与总事件数无关），总跨度 = count × 100µs（随 count 线性增长）。
+// （旧实现固定 30min span、rate ∝ 1/count，与官方相反——REVIEW_WFGEN_DATA_GEN_DEVIATIONS #1）
+pub(crate) const INTER_EVENT_DELAY_NS: i64 = 100_000; // 100 µs/事件（纳秒）
 // NEXMark 官方 id 起始值（person/auction 分属不同命名空间，均可从 1000 起）。
 const FIRST_PERSON_ID: i64 = 1000;
 const FIRST_AUCTION_ID: i64 = 1000;
@@ -72,13 +77,13 @@ const AUCTION_ID_LEAD: i64 = 10;
 const HOT_CHANNELS_RATIO: i64 = 2;
 const CHANNELS_NUMBER: i64 = 10_000;
 
-/// 30-second time buckets over the 30-minute span: 60 temp files, each
+/// 30-second time buckets over the event span: `span / BUCKET_NS` temp files, each
 /// containing events whose `dateTime` falls in that bucket. Emitting buckets
 /// in order yields a globally event-time-sorted stream with bounded memory
 /// (one bucket is buffered at a time; a single bucket spans <= 30 s, which is
 /// negligible next to the 10-minute `over` eviction granularity).
+/// Bucket count is dynamic (span = count × 100µs): ~count/300k buckets.
 const BUCKET_NS: i64 = 30_000_000_000;
-const TIME_BUCKETS: usize = (SPAN_NS / BUCKET_NS) as usize; // 60
 
 // 官方 PersonGenerator：US_CITIES 10 城 / US_STATES 6 州（独立随机）。
 const CITIES: [&str; 10] = [
@@ -167,6 +172,9 @@ pub enum NxEvent {
         price: i64,
         bidder: i64,
         channel: usize,
+        /// q21 的 channel_id：热通道 None（JSON 由官方 CASE 映射），cold 通道
+        /// Some(abs(Integer.reverse(i)))——生成时已知，等价官方 URL 的 channel_id 参数。
+        channel_id: Option<i64>,
         url: String,
         extra: String,
     },
@@ -241,6 +249,7 @@ pub(crate) fn nx_to_value(ev: &NxEvent) -> serde_json::Value {
             price,
             bidder,
             channel,
+            channel_id,
             url,
             extra,
         } => {
@@ -253,12 +262,11 @@ pub(crate) fn nx_to_value(ev: &NxEvent) -> serde_json::Value {
                 format!("channel-{}", *channel - HOT_CHANNEL_MAX)
             };
             // 官方 q21（Add channel id）的 channel_id：热通道按官方 CASE 映射
-            // （apple=0/google=1/facebook=2/baidu=3），cold 取 url 的 channel_id=N
-            // （生成时已知，等价 SQL 计算值）。
-            let channel_id = if *channel < HOT_CHANNEL_MAX {
-                HOT_CHANNEL_IDS[*channel].to_string()
-            } else {
-                (*channel - HOT_CHANNEL_MAX).to_string()
+            // （apple=0/google=1/facebook=2/baidu=3），cold 取生成时算好的
+            // abs(Integer.reverse(i))（与 URL 的 channel_id 参数一致）。
+            let channel_id = match channel_id {
+                Some(id) => id.to_string(),
+                None => HOT_CHANNEL_IDS[*channel].to_string(),
             };
             json!({
                 "auction": auc,
@@ -282,6 +290,7 @@ fn write_event(
     stream: &str,
     fields: serde_json::Value,
     ns: i64,
+    time_buckets: usize,
 ) -> WfgenResult<()> {
     let mut m = fields.as_object().cloned().unwrap_or_default();
     m.insert("_stream".to_string(), json!(stream));
@@ -298,7 +307,7 @@ fn write_event(
         }
         BucketSink::Sorted { writers, .. } => {
             let bucket =
-                (((ns - BASE_NS).max(0)) / BUCKET_NS).min((TIME_BUCKETS - 1) as i64) as usize;
+                (((ns - BASE_NS).max(0)) / BUCKET_NS).min((time_buckets - 1) as i64) as usize;
             let w = writers[bucket]
                 .as_mut()
                 .expect("bucket writer must exist (see run)");
@@ -317,16 +326,16 @@ fn next_price(rng: &mut StdRng) -> i64 {
     (10f64.powf(rng.random::<f64>() * 6.0) * 100.0).round() as i64
 }
 
-/// 官方 `StringsGenerator.getBaseUrl`：3 段 5 字符目录 + 固定查询串
+/// 官方 `BidGenerator.getBaseUrl`：3 段目录 + 固定查询串
 /// （`https://www.nexmark.com/{s1}/{s2}/{s3}/item.htm?query=1`，cold 通道追加
-/// `&channel_id=`）。官方为静态缓存取值，wfgen 用确定 rng 逐 bid 生成，
-/// 目录结构与 split 语义一致（q22 URL Directories）。
+/// `&channel_id=`）。目录段 = 官方 `nextString(random, 5, '_')`：长度 3..5、
+/// 字符 a-z 且约 1/13 概率为 '_'（官方分隔符参数）。
 fn next_url(rng: &mut StdRng, channel_id: Option<i64>) -> String {
     let base = format!(
         "https://www.nexmark.com/{}/{}/{}/item.htm?query=1",
-        next_string(rng, 5),
-        next_string(rng, 5),
-        next_string(rng, 5)
+        next_string(rng, 5, '_'),
+        next_string(rng, 5, '_'),
+        next_string(rng, 5, '_')
     );
     match channel_id {
         Some(id) => format!("{base}&channel_id={id}"),
@@ -334,8 +343,27 @@ fn next_url(rng: &mut StdRng, channel_id: Option<i64>) -> String {
     }
 }
 
-/// 官方 `StringsGenerator.nextString(random, len)`：len 个小写字母。
-fn next_string(rng: &mut StdRng, len: usize) -> String {
+/// 官方 `StringsGenerator.nextString(random, maxLength, special)`：
+/// 长度 = 3 + random.nextInt(maxLength - 3)（∈ [3, maxLength]）；每字符
+/// 约 1/13 概率为 special（默认 ' '，URL 目录用 '_'），否则 a-z；末尾 trim
+/// （trim 仅去空白，special='_' 时无空白可去）。
+fn next_string(rng: &mut StdRng, max_len: usize, special: char) -> String {
+    let len = 3 + rng.random_range(0..max_len.saturating_sub(3).max(1));
+    let mut s = String::with_capacity(len);
+    for _ in 0..len {
+        if rng.random_range(0..13) == 0 {
+            s.push(special);
+        } else {
+            s.push((b'a' + rng.random_range(0u8..26)) as char);
+        }
+    }
+    s.trim().to_string()
+}
+
+/// 官方 `StringsGenerator.nextExactString(random, length)`：精确长度的纯小写串。
+/// 官方用预生成的 1MB 复用串截取（性能优化）；此处逐字符生成，分布一致
+/// （a-z 均匀；官方逐字符路径用 rnd 打包 6 字符/次，同为 a-z 均匀）。
+fn next_exact_string(rng: &mut StdRng, len: usize) -> String {
     let mut s = String::with_capacity(len);
     for _ in 0..len {
         s.push((b'a' + rng.random_range(0u8..26)) as char);
@@ -343,13 +371,19 @@ fn next_string(rng: &mut StdRng, len: usize) -> String {
     s
 }
 
-/// 官方 `StringsGenerator.nextExtra`：currentSize 未超 desiredAverageSize 时补齐为随机
-/// 小写串（事件体积对齐官方 avg*ByteSize 口径）。
+/// 官方 `StringsGenerator.nextExtra`：currentSize 未超 desiredAverageSize 时，
+/// 在目标附近 ±20% 随机抖动（delta = round((desired-current)*0.2)，
+/// desiredSize ∈ [minSize, minSize+2δ)），再生成精确长度的纯小写串。
 fn next_extra(rng: &mut StdRng, current_size: usize, desired: usize) -> String {
     if current_size > desired {
         String::new()
     } else {
-        next_string(rng, desired - current_size)
+        let remaining = desired - current_size;
+        let delta = ((remaining as f64 * 0.2).round()) as usize;
+        let min_size = remaining - delta;
+        // 官方 `random.nextInt(2 * delta + 1)`（闭区间 [0, 2δ]；δ=0 时恒为 0）。
+        let desired_size = min_size + rng.random_range(0..=2 * delta);
+        next_exact_string(rng, desired_size)
     }
 }
 
@@ -408,12 +442,13 @@ fn next_base0_auction_id(event_id: i64, rng: &mut StdRng) -> i64 {
 }
 
 /// 官方 `AuctionGenerator.nextAuctionLengthMs`：auction 有效期 = 1 + [0, 2×horizon) ms，
-/// horizon = 未来 `numInFlightAuctions` 个 auction 的生成间隔（事件时间口径）。返回纳秒偏移。
-fn auction_length_ns(event_id: i64, ns: i64, count: i64, rng: &mut StdRng) -> i64 {
+/// horizon = 未来 `numInFlightAuctions` 个 auction 的生成间隔（事件时间口径）。
+/// 官方 timestampForEvent 为固定 100µs/事件 → horizon = 1666 × 100µs = 0.1666s 固定
+/// （与 count 无关；旧实现用 SPAN/count 使 horizon 随 count 漂移——REVIEW #1）。
+fn auction_length_ns(rng: &mut StdRng) -> i64 {
     let num_events_for_auctions = (NUM_IN_FLIGHT_AUCTIONS * TOTAL_PROPORTION) / AUCTION_PROPORTION; // 100×50/3 = 1666
-    let future_ev = event_id + num_events_for_auctions;
-    let future_ns = BASE_NS + (future_ev as i128 * SPAN_NS as i128 / count as i128) as i64;
-    let horizon_ms = ((future_ns - ns) / 1_000_000).max(0);
+    let horizon_ns = num_events_for_auctions * INTER_EVENT_DELAY_NS; // 固定 0.1666s
+    let horizon_ms = (horizon_ns / 1_000_000).max(1);
     (1 + rng.random_range(0..(horizon_ms * 2).max(1))) * 1_000_000
 }
 
@@ -430,12 +465,11 @@ where
     // seller/bidder 的 person 驱逐，导致 snapshot join 时序错配（q3 EMIT 从 600k 崩到 ~23k）。
     // 字段生成顺序与 rng 消耗对齐官方 generator（RNG 算法不同，序列不等价，分布语义一致）。
 
-    // 官方 BidGenerator 的 channel-N 用递增计数器轮询（CHANNEL_URL_CACHE[nextChannelNumber()]）。
-    let mut channel_counter: i64 = 0;
-
     for event_id in 0..count {
         let rem = event_id % TOTAL_PROPORTION;
-        let ns = BASE_NS + (event_id as i128 * SPAN_NS as i128 / count as i128) as i64;
+        // 官方 timestampForEvent = baseTime + eventNumber × interEventDelayUs/1000
+        // = BASE_NS + event_id × 100µs（固定间隔，跨度随 count 线性增长）。
+        let ns = BASE_NS + event_id * INTER_EVENT_DELAY_NS;
 
         if rem < PERSON_PROPORTION {
             // person（官方 PersonGenerator.nextPerson，消耗顺序：姓名 → 邮箱 → 卡号
@@ -448,8 +482,8 @@ where
             );
             let email = format!(
                 "{}@{}.com",
-                next_string(&mut rng, 7),
-                next_string(&mut rng, 5)
+                next_string(&mut rng, 7, ' '),
+                next_string(&mut rng, 5, ' ')
             );
             let credit_card = next_credit_card(&mut rng);
             let city = rng.random_range(0..CITIES.len());
@@ -482,9 +516,9 @@ where
             } + FIRST_PERSON_ID;
             let category = FIRST_CATEGORY_ID + rng.random_range(0..NUM_CATEGORIES);
             let initial_bid = next_price(&mut rng);
-            let expires = ns + auction_length_ns(event_id, ns, count, &mut rng);
-            let item_name = next_string(&mut rng, 20);
-            let description = next_string(&mut rng, 100);
+            let expires = ns + auction_length_ns(&mut rng);
+            let item_name = next_string(&mut rng, 20, ' ');
+            let description = next_string(&mut rng, 100, ' ');
             let reserve = initial_bid + next_price(&mut rng);
             let current_size = 8 + item_name.len() + description.len() + 8 + 8 + 8 + 8 + 8;
             let extra = next_extra(&mut rng, current_size, AVG_AUCTION_BYTE_SIZE);
@@ -514,14 +548,23 @@ where
                 next_base0_person_id(event_id, &mut rng)
             } + FIRST_PERSON_ID;
             let price = next_price(&mut rng);
-            let (channel, url) = if rng.random_range(0..HOT_CHANNELS_RATIO) > 0 {
+            let (channel, channel_id, url) = if rng.random_range(0..HOT_CHANNELS_RATIO) > 0 {
                 let i = rng.random_range(0..HOT_CHANNELS.len());
-                (i, next_url(&mut rng, None))
+                (i, None, next_url(&mut rng, None))
             } else {
-                // 官方 cold 通道：递增计数器轮询（无 rng），url 追加 channel_id。
-                let i = channel_counter % CHANNELS_NUMBER;
-                channel_counter += 1;
-                (HOT_CHANNEL_MAX + i as usize, next_url(&mut rng, Some(i)))
+                // 官方 cold 通道：`random.nextInt(CHANNELS_NUMBER)` 均匀随机取通道
+                // （官方从 10000 条预生成缓存取；wfgen 用确定 rng 逐 bid 生成，分布一致），
+                // url 追加 `channel_id = abs(Integer.reverse(i))`（Java int 位反转）。
+                // wrapping_abs 复刻 Java Math.abs(Integer.MIN_VALUE) 溢出返回负值的行为
+                // （概率 1/2^32，官方亦如此）。
+                // （旧实现为顺序轮询计数器 + 原始 channel_id——REVIEW #5）
+                let i = rng.random_range(0..CHANNELS_NUMBER);
+                let channel_id = (i as i32).reverse_bits().wrapping_abs() as i64;
+                (
+                    HOT_CHANNEL_MAX + i as usize,
+                    Some(channel_id),
+                    next_url(&mut rng, Some(channel_id)),
+                )
             };
             let current_size = 8 + 8 + 8 + 8;
             let extra = next_extra(&mut rng, current_size, AVG_BID_BYTE_SIZE);
@@ -531,6 +574,7 @@ where
                 price,
                 bidder,
                 channel,
+                channel_id,
                 url,
                 extra,
             })?;
@@ -608,6 +652,7 @@ fn check_event(ev: &NxEvent, count: i64) -> bool {
             price,
             bidder,
             channel,
+            channel_id,
             url,
             ..
         } => {
@@ -616,9 +661,13 @@ fn check_event(ev: &NxEvent, count: i64) -> bool {
                 || *price < 100 // 官方 nextPrice 下界 100
                 || *channel >= CHANNEL_MAX
                 // url 官方格式：https://www.nexmark.com/{5}/{5}/{5}/item.htm?query=1[&channel_id=N]
-                // （q22 取 split('/') 索引 3/4/5，越界即违规）
+                // （q22 取 split('/') 索引 3/4/5，越界即违规；目录段可为 '_'（官方
+                // nextString(5,'_')），不影响 '/' 计数）
                 || url.split('/').count() < 7
                 || !url.starts_with("https://www.nexmark.com/")
+                // cold 通道的 channel_id 字段必须与 url 参数一致（官方 abs(Integer.reverse(i))）。
+                || (channel_id.is_some()
+                    && !url.contains(&format!("channel_id={}", channel_id.unwrap())))
         }
     }
 }
@@ -629,6 +678,9 @@ fn check_event(ev: &NxEvent, count: i64) -> bool {
 /// 报告写 stderr（stdout 是数据流）：默认输出简短质量报告（行数/时间/乱序），
 /// `--check` 追加值域违规与 md5 指纹。
 pub fn run_checked(count: i64, seed: u64, no_sort: bool, check: bool) -> WfgenResult<()> {
+    // 时间桶数随跨度动态：span = count × 100µs（官方固定速率），桶宽 30s。
+    let time_buckets = (((count * INTER_EVENT_DELAY_NS) / BUCKET_NS).max(1)) as usize;
+
     // 轻量统计（默认报告用，几乎零成本）：流计数 + 时间戳范围 + 乱序深度。
     let mut n_person: i64 = 0;
     let mut n_auction: i64 = 0;
@@ -638,7 +690,7 @@ pub fn run_checked(count: i64, seed: u64, no_sort: bool, check: bool) -> WfgenRe
     // 流序统计：桶序模式下输出 = 桶间严格递增 + 桶内乱序，故每桶独立 watermark
     // （等价于对实际输出流统计，零解析成本）；no-sort 模式用全局 watermark
     // （phase-major 乱序可达 ~27min，远超桶宽——这是它破坏 over 驱逐的机理）。
-    let mut seq_max_bucket: [i64; TIME_BUCKETS] = [i64::MIN; TIME_BUCKETS];
+    let mut seq_max_bucket: Vec<i64> = vec![i64::MIN; time_buckets];
     let mut seq_max_global: i64 = i64::MIN;
     let mut max_oog_ns: i64 = 0;
     let mut oog_count: u64 = 0;
@@ -658,7 +710,7 @@ pub fn run_checked(count: i64, seed: u64, no_sort: bool, check: bool) -> WfgenRe
         let _ = std::fs::remove_dir_all(&tmp_dir);
         std::fs::create_dir_all(&tmp_dir)
             .map_err(|e| error::error(WfgenReason::Io, format!("create bucket temp dir: {e}")))?;
-        let writers = (0..TIME_BUCKETS)
+        let writers = (0..time_buckets)
             .map(|i| {
                 let f = File::create(tmp_dir.join(format!("b{i:03}.jsonl"))).map_err(|e| {
                     error::error(WfgenReason::Io, format!("create bucket file: {e}"))
@@ -691,7 +743,7 @@ pub fn run_checked(count: i64, seed: u64, no_sort: bool, check: bool) -> WfgenRe
                 seq_max_global = ns;
             }
         } else {
-            let b = (((ns - BASE_NS).max(0)) / BUCKET_NS).min((TIME_BUCKETS - 1) as i64) as usize;
+            let b = (((ns - BASE_NS).max(0)) / BUCKET_NS).min((time_buckets - 1) as i64) as usize;
             if ns < seq_max_bucket[b] {
                 oog_count += 1;
                 max_oog_ns = max_oog_ns.max(seq_max_bucket[b] - ns);
@@ -699,7 +751,13 @@ pub fn run_checked(count: i64, seed: u64, no_sort: bool, check: bool) -> WfgenRe
                 seq_max_bucket[b] = ns;
             }
         }
-        write_event(&mut sink, ev.stream(), nx_to_value(&ev), ev.ns())
+        write_event(
+            &mut sink,
+            ev.stream(),
+            nx_to_value(&ev),
+            ev.ns(),
+            time_buckets,
+        )
     })?;
     pb.finish();
 
@@ -802,7 +860,7 @@ pub fn run_checked(count: i64, seed: u64, no_sort: bool, check: bool) -> WfgenRe
                 None => Box::new(stdout.lock()),
             };
             let mut out = std::io::BufWriter::with_capacity(1 << 20, inner);
-            for i in 0..TIME_BUCKETS {
+            for i in 0..time_buckets {
                 let path = tmp_dir.join(format!("b{i:03}.jsonl"));
                 let data = std::fs::read(&path)
                     .map_err(|e| error::error(WfgenReason::Io, format!("read bucket file: {e}")))?;
@@ -821,7 +879,8 @@ pub fn run_checked(count: i64, seed: u64, no_sort: bool, check: bool) -> WfgenRe
     let expect_auction = (count as f64 * 0.06) as i64;
     let expect_bid = count - expect_person - expect_auction;
     let rows_ok = n_person == expect_person && n_auction == expect_auction && n_bid == expect_bid;
-    let ns_ok = min_ns >= BASE_NS && max_ns <= BASE_NS + SPAN_NS;
+    let span_ns = count * INTER_EVENT_DELAY_NS;
+    let ns_ok = min_ns >= BASE_NS && max_ns <= BASE_NS + span_ns;
     let total = n_person + n_auction + n_bid;
     eprintln!(
         "== gen-nexmark {} {} ==",
@@ -841,9 +900,10 @@ pub fn run_checked(count: i64, seed: u64, no_sort: bool, check: bool) -> WfgenRe
         }
     );
     eprintln!(
-        "  时间  [{}s, {}s] / 30m span {}",
+        "  时间  [{}s, {}s] / {}s span {}（官方固定 100µs/事件，跨度 = count×100µs）",
         (min_ns - BASE_NS) / 1_000_000_000,
         (max_ns - BASE_NS) / 1_000_000_000,
+        span_ns / 1_000_000_000,
         if ns_ok { "✅" } else { "❌ 越界" }
     );
     eprintln!(
@@ -961,7 +1021,9 @@ mod tests {
                 price: 100,
                 bidder: person_hi,
                 channel: CHANNEL_MAX - 1,
-                url: "https://www.nexmark.com/aaaaa/bbbbb/ccccc/item.htm?query=1".to_string(),
+                channel_id: Some(123),
+                url: "https://www.nexmark.com/aaaaa/bbbbb/ccccc/item.htm?query=1&channel_id=123"
+                    .to_string(),
                 extra: String::new(),
             },
             count
@@ -1033,6 +1095,7 @@ mod tests {
                 price: 100,
                 bidder: person_hi,
                 channel: 0,
+                channel_id: None,
                 url: "https://www.nexmark.com/aaaaa/bbbbb/ccccc/item.htm?query=1".to_string(),
                 extra: String::new(),
             },
@@ -1045,6 +1108,7 @@ mod tests {
                 price: 99, // < 官方 nextPrice 下界 100
                 bidder: person_hi,
                 channel: 0,
+                channel_id: None,
                 url: "https://www.nexmark.com/aaaaa/bbbbb/ccccc/item.htm?query=1".to_string(),
                 extra: String::new(),
             },
@@ -1057,7 +1121,22 @@ mod tests {
                 price: 100,
                 bidder: person_hi,
                 channel: CHANNEL_MAX, // 越 channel 上限（4+10000）
+                channel_id: None,
                 url: "https://www.nexmark.com/aaaaa/bbbbb/ccccc/item.htm?query=1".to_string(),
+                extra: String::new(),
+            },
+            count
+        ));
+        assert!(check_event(
+            &NxEvent::Bid {
+                auc: auction_hi,
+                ns: BASE_NS,
+                price: 100,
+                bidder: person_hi,
+                channel: HOT_CHANNEL_MAX + 1, // cold 通道
+                channel_id: Some(99),         // 与 url 的 channel_id=123 不一致（q21 依赖该字段）
+                url: "https://www.nexmark.com/aaaaa/bbbbb/ccccc/item.htm?query=1&channel_id=123"
+                    .to_string(),
                 extra: String::new(),
             },
             count

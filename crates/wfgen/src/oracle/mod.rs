@@ -7,8 +7,8 @@ use std::time::Duration;
 
 use chrono::{DateTime, Utc};
 use wf_engine::match_engine::{
-    CepStateMachine, CloseOutput, CloseReason, EngineHashMap, Event, FieldSource, JoinRow,
-    RuleExecutor, StepResult, Value, WindowLookup,
+    CepStateMachine, CloseOutput, CloseReason, DeferredPending, EngineHashMap, Event, FieldSource,
+    JoinRow, RuleExecutor, StepResult, Value, WindowLookup,
 };
 use wf_lang::WindowSchema;
 use wf_lang::plan::{ConvPlan, RulePlan};
@@ -129,35 +129,55 @@ where
         return Ok(OracleResult { alerts: vec![] });
     }
 
-    // Build per-rule engines, filtering to injected rules only (SC7)
-    let mut engines: Vec<RuleEngine> = rule_plans
-        .iter()
-        .filter(|plan| {
-            injected_rules
-                .map(|set| set.contains(&plan.name))
-                .unwrap_or(true)
-        })
-        .map(|plan| {
-            let alias_map = build_window_alias_map(plan);
-            RuleEngine {
-                sm: CepStateMachine::new(plan.name.clone(), plan.match_plan.clone(), None),
-                executor: RuleExecutor::new(plan.clone()),
-                conv_plan: plan.conv_plan.clone(),
-                // `on each`（无状态）规则走事件级评估，不用状态机
-                each: plan.each_plan.is_some(),
-                has_joins: !plan.joins.is_empty(),
-                // fixed 窗口只在桶边界收口——桶内事件不可能触发收口，
-                // 跨桶边界事件才 scan（避免每事件全扫实例：q4 10m 162s → 秒级）
-                fixed_bucket_nanos: match plan.match_plan.window_spec {
-                    wf_lang::plan::WindowSpec::Fixed(dur) => Some(dur.as_nanos() as i64),
-                    _ => None,
-                },
-                last_scan_bucket: i64::MIN,
-                alias_map,
-                lookup: OracleLookup::build(plan, schemas),
-            }
-        })
-        .collect();
+    // Build per-rule engines, filtering to injected rules only (SC7).
+    // Stats（`stats<...>`）规则 oracle 尚不支持（StatsExecutor 是列式批执行器，
+    // oracle 逐事件无等价路径）——跳过并计数，调用方（verify）据此把 stats 规则
+    // 标记为「oracle 未覆盖」而不是 panic（Q19 stats top 曾除零崩溃）。
+    let mut skipped_stats = 0usize;
+    let mut engines: Vec<RuleEngine> = Vec::new();
+    for plan in rule_plans.iter().filter(|plan| {
+        injected_rules
+            .map(|set| set.contains(&plan.name))
+            .unwrap_or(true)
+    }) {
+        if plan.stats_plan.is_some() {
+            skipped_stats += 1;
+            continue;
+        }
+        let alias_map = build_window_alias_map(plan);
+        engines.push(RuleEngine {
+            sm: CepStateMachine::new(plan.name.clone(), plan.match_plan.clone(), None),
+            executor: RuleExecutor::new(plan.clone()),
+            conv_plan: plan.conv_plan.clone(),
+            // `on each`（无状态）规则走事件级评估，不用状态机
+            each: plan.each_plan.is_some(),
+            has_joins: !plan.joins.is_empty(),
+            // fixed 窗口只在桶边界收口——桶内事件不可能触发收口，
+            // 跨桶边界事件才 scan（避免每事件全扫实例：q4 10m 162s → 秒级）
+            fixed_bucket_nanos: match plan.match_plan.window_spec {
+                wf_lang::plan::WindowSpec::Fixed(dur) => Some(dur.as_nanos() as i64),
+                _ => None,
+            },
+            last_scan_bucket: i64::MIN,
+            alias_map,
+            lookup: OracleLookup::build(plan, schemas),
+            deferred: plan
+                .joins
+                .iter()
+                .position(|j| j.emit_at.is_some())
+                .map(|join_idx| DeferredState {
+                    join_idx,
+                    watermark: i64::MIN,
+                    pending: BTreeMap::new(),
+                }),
+        });
+    }
+    if skipped_stats > 0 {
+        eprintln!(
+            "oracle: 跳过 {} 个 stats 规则（StatsExecutor 暂未接入 oracle）",
+            skipped_stats
+        );
+    }
 
     // P2 (Path A): 预加载 join 目标窗口的全部行。引擎 replay 的窗口 actor
     // append 超前于规则任务消费（pull/push 解耦），join_lookup 因此能看到
@@ -246,6 +266,41 @@ where
                 if !any_bind_matches {
                     continue;
                 }
+                // P3：deferred join（`emit at`）——驱动事件挂起（expiry = emit at），
+                // 不即时输出；到期评估在水位推进后 pop_due（镜像引擎批次尾 scan）。
+                if engine.deferred.is_some() {
+                    let (due, join_idx, watermark) = {
+                        let deferred = engine.deferred.as_mut().expect("checked");
+                        deferred.watermark = deferred.watermark.max(event_nanos);
+                        let join_idx = deferred.join_idx;
+                        if let Some(p) =
+                            engine
+                                .executor
+                                .deferred_pending_for(join_idx, &core_event, event_nanos)
+                        {
+                            deferred.pending.entry(p.expiry_nanos).or_default().push(p);
+                        }
+                        (
+                            deferred.pop_due(deferred.watermark),
+                            join_idx,
+                            deferred.watermark,
+                        )
+                    };
+                    let windows: &dyn WindowLookup = engine
+                        .lookup
+                        .as_ref()
+                        .map(|l| l as &dyn WindowLookup)
+                        .unwrap_or(&EmptyLookup);
+                    for p in due {
+                        if let Ok(Some(record)) = engine
+                            .executor
+                            .execute_deferred_join(join_idx, &p, windows, watermark)
+                        {
+                            push_alert(record, &mut alerts);
+                        }
+                    }
+                    continue;
+                }
                 // 有 join 的 on each 规则（如 q20：bid ⋈ auction + where
                 // category==10）必须走 with_joins 路径，否则 join 富化缺失、
                 // `where` 引用的 join 字段求值为 None → 全抑制或全放行（假对拍）。
@@ -321,6 +376,9 @@ where
     /// 恰好到期时会收口——q5 实证：30m 数据 + 10m 桶引擎收 3 桶、oracle 只收
     /// 2 桶），故 oracle 也扫一次 eos 水位（不含 close_all）模拟该行为。
     /// close_at_eos = true（cmd_gen batch 语义）时另 close_all 剩余实例。
+    /// P3：deferred join 同源——引擎水位到 slice 边界会使尾部 expiry 恰好位于
+    /// [数据末尾, slice 边界] 的挂起实例到期（Q8 实证 10M 差 185 条尾部桶），
+    /// oracle 也按 eos 水位 pop_due；close_at_eos 时才 flush 全部剩余（i64::MAX）。
     for engine in &mut engines {
         let expired = engine
             .sm
@@ -332,6 +390,35 @@ where
             engine.lookup.as_ref().map(|l| l as &dyn WindowLookup),
             &mut alerts,
         );
+
+        // P3：deferred join —— EOS 水位扫（两种模式都做：镜像引擎 slice 边界
+        // 水位，只到期不 flush）。
+        // ⚠ 2026-08-22 修正：deferred 的 watermark 语义是**最后驱动事件时间**
+        // （rule_task `deferred.watermark` 只随驱动事件更新），**不是** fixed
+        // 窗口的 slice 边界水位——按 eos_nanos（= slice 边界）sweep 会把尾部
+        // 未到期的实例错误输出（Q8 实证：引擎 82446 vs 按 eos 扫 83274，多
+        // 828 条尾部 10s 桶）；主遍逐事件 pop_due 已覆盖全部到期实例，EOS
+        // 无需再扫。close_at_eos=true（cmd_gen batch 语义）才 flush 全部剩余。
+        if close_at_eos && engine.deferred.is_some() {
+            // P3：deferred join —— EOS 关闭触发全部剩余挂起实例（引擎 flush 语义）。
+            let (due, join_idx) = {
+                let deferred = engine.deferred.as_mut().expect("checked");
+                (deferred.pop_due(i64::MAX), deferred.join_idx)
+            };
+            let windows: &dyn WindowLookup = engine
+                .lookup
+                .as_ref()
+                .map(|l| l as &dyn WindowLookup)
+                .unwrap_or(&EmptyLookup);
+            for p in due {
+                if let Ok(Some(record)) = engine
+                    .executor
+                    .execute_deferred_join(join_idx, &p, windows, eos_nanos)
+                {
+                    push_alert(record, &mut alerts);
+                }
+            }
+        }
 
         if close_at_eos {
             // End-of-scenario in datagen is also a finite replay boundary. After
@@ -347,6 +434,26 @@ where
                 engine.lookup.as_ref().map(|l| l as &dyn WindowLookup),
                 &mut alerts,
             );
+            // P3：deferred join —— EOS 关闭触发全部剩余挂起实例（引擎 flush 语义）。
+            if engine.deferred.is_some() {
+                let (due, join_idx) = {
+                    let deferred = engine.deferred.as_mut().expect("checked");
+                    (deferred.pop_due(i64::MAX), deferred.join_idx)
+                };
+                let windows: &dyn WindowLookup = engine
+                    .lookup
+                    .as_ref()
+                    .map(|l| l as &dyn WindowLookup)
+                    .unwrap_or(&EmptyLookup);
+                for p in due {
+                    if let Ok(Some(record)) = engine
+                        .executor
+                        .execute_deferred_join(join_idx, &p, windows, eos_nanos)
+                    {
+                        push_alert(record, &mut alerts);
+                    }
+                }
+            }
         }
     }
 
@@ -373,6 +480,37 @@ struct RuleEngine {
     alias_map: HashMap<String, Vec<String>>,
     /// P2: join 目标窗口状态（join-then-key / match 时 join 评估）；无 join 规则为 None
     lookup: Option<OracleLookup>,
+    /// P3: deferred join（`emit at`）挂起队列；无 emit_at 规则为 None
+    deferred: Option<DeferredState>,
+}
+
+/// P3: deferred join 运行时状态——挂起队列（按 expiry 排序）+ 事件时间 watermark。
+///
+/// 镜像引擎 rule_task 的 DeferredRuntime（join-family-design §5.2）：驱动事件到达时
+/// `deferred_pending_for` 挂起（expiry = `emit at` 求值）；watermark 推进后
+/// `pop_due` 取出所有 `expiry <= watermark` 的实例并评估。右窗行由
+/// [`OracleLookup`] 预加载（append 超前镜像），到期评估时候选已全量可见。
+struct DeferredState {
+    /// 规则内第一个带 `emit at` 的 join（v1 单 deferred join）。
+    join_idx: usize,
+    /// 事件时间 watermark（驱动事件 max 事件时间——与引擎一致，右窗事件不推进）。
+    watermark: i64,
+    /// expiry_nanos → 挂起实例（BTreeMap 按到期时间排序，pop 摊还 O(log n)）。
+    pending: BTreeMap<i64, Vec<DeferredPending>>,
+}
+
+impl DeferredState {
+    /// 取出所有 `expiry <= wm` 的实例（顺序按 expiry 升序）。
+    fn pop_due(&mut self, wm: i64) -> Vec<DeferredPending> {
+        let keys: Vec<i64> = self.pending.range(..=wm).map(|(k, _)| *k).collect();
+        let mut due = Vec::new();
+        for k in keys {
+            if let Some(mut bucket) = self.pending.remove(&k) {
+                due.append(&mut bucket);
+            }
+        }
+        due
+    }
 }
 
 /// Join lookup with no state — every join misses. Used when a rule has joins
@@ -402,8 +540,11 @@ impl WindowLookup for EmptyLookup {
 /// Mirrors the engine window registry's retention: rows are indexed by the
 /// rule's join-condition right-side key field and expire when
 /// `ts + over <= watermark` (sliding `over`). Only windows targeted by the
-/// rule's joins are tracked. A row is keyed by its join-key value; duplicate
-/// keys keep the latest row (auction/person ids are unique in NEXMark).
+/// rule's joins are tracked.
+///
+/// **每键多行**：join 目标可能是 bid（key=auction 不唯一，Q9 生命周期内同 auction
+/// 多 bid 都要参与 reduce）——`rows` 按 key 存 `Vec<(ts, Event)>`（插入序），
+/// 而不是单行覆盖。唯一键窗口（auction/person 表）每键恰 1 行，行为不变。
 struct OracleLookup {
     windows: HashMap<String, OracleWindow>,
 }
@@ -411,8 +552,8 @@ struct OracleLookup {
 struct OracleWindow {
     /// Index key field (join condition's right side, e.g. `id`).
     key_field: String,
-    /// key repr → (event timestamp nanos, event).
-    rows: HashMap<String, (i64, Event)>,
+    /// key repr → 该键的全部行（插入序）。
+    rows: HashMap<String, Vec<(i64, Event)>>,
     /// ts → keys of rows inserted at that ts. Monotonic watermark expiry pops
     /// from the front in amortized O(1) per event — a full `retain` scan per
     /// event would be O(window rows) × O(events) = quadratic (the 18m hang).
@@ -477,7 +618,10 @@ impl OracleLookup {
             .field_value(&win.key_field)
             .and_then(|v| value_key_repr(&v))
         {
-            win.rows.insert(key.clone(), (ts_nanos, event.clone()));
+            win.rows
+                .entry(key.clone())
+                .or_default()
+                .push((ts_nanos, event.clone()));
             win.by_ts.entry(ts_nanos).or_default().push(key);
         }
     }
@@ -487,7 +631,10 @@ impl OracleLookup {
         Some(
             win.rows
                 .values()
-                .map(|(_, ev)| JoinRow::Event(Arc::new(ev.clone())))
+                .flat_map(|rows| {
+                    rows.iter()
+                        .map(|(_, ev)| JoinRow::Event(Arc::new(ev.clone())))
+                })
                 .collect(),
         )
     }
@@ -497,7 +644,10 @@ impl OracleLookup {
         Some(
             win.rows
                 .values()
-                .map(|(ts, ev)| (*ts, JoinRow::Event(Arc::new(ev.clone()))))
+                .flat_map(|rows| {
+                    rows.iter()
+                        .map(|(ts, ev)| (*ts, JoinRow::Event(Arc::new(ev.clone()))))
+                })
                 .collect(),
         )
     }
@@ -508,9 +658,32 @@ impl OracleLookup {
             return None;
         }
         let key_repr = value_key_repr(key)?;
-        win.rows
-            .get(&key_repr)
-            .map(|(_, ev)| vec![JoinRow::Event(Arc::new(ev.clone()))])
+        win.rows.get(&key_repr).map(|rows| {
+            rows.iter()
+                .map(|(_, ev)| JoinRow::Event(Arc::new(ev.clone())))
+                .collect()
+        })
+    }
+
+    /// P3：deferred join 到期候选——该 key 的全部 (ts, row)。显式实现以
+    /// 避免 trait 默认的全窗 `snapshot_with_timestamps` + 线性过滤（每次到期
+    /// 评估 O(右窗全行)：Q8/Q9 对拍会退化到 O(评估次数 × 全窗) 卡死）。
+    fn asof_candidates(
+        &self,
+        window: &str,
+        key_field: &str,
+        key: &Value,
+    ) -> Option<Vec<(i64, JoinRow)>> {
+        let win = self.windows.get(window)?;
+        if win.key_field != key_field {
+            return None;
+        }
+        let key_repr = value_key_repr(key)?;
+        win.rows.get(&key_repr).map(|rows| {
+            rows.iter()
+                .map(|(ts, ev)| (*ts, JoinRow::Event(Arc::new(ev.clone()))))
+                .collect()
+        })
     }
 }
 
@@ -532,7 +705,12 @@ impl OracleWindow {
             }
         }
         for key in expired {
-            self.rows.remove(&key);
+            if let Some(rows) = self.rows.get_mut(&key) {
+                rows.retain(|(ts, _)| *ts > cutoff);
+                if rows.is_empty() {
+                    self.rows.remove(&key);
+                }
+            }
         }
     }
 }
@@ -556,6 +734,15 @@ impl WindowLookup for OracleLookup {
 
     fn join_lookup(&self, window: &str, key_field: &str, key: &Value) -> Option<Vec<JoinRow>> {
         self.join_lookup(window, key_field, key)
+    }
+
+    fn asof_candidates(
+        &self,
+        window: &str,
+        key_field: &str,
+        key: &Value,
+    ) -> Option<Vec<(i64, JoinRow)>> {
+        self.asof_candidates(window, key_field, key)
     }
 }
 

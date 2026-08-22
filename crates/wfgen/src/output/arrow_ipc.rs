@@ -171,7 +171,30 @@ pub fn events_to_typed_batches(
         }
     }
 
+    // 跨流时间序：帧内各 stream 的 batch 按**最小事件时间**排序写入——
+    // HashMap 分组迭代序随机，会导致高流量流（bid 92%）的 batch 随机排后，
+    // receiver 按帧序 commit 时 bid 窗口 append 滞后 → 驱动=低流量流
+    // （person/auction）的 join 在右窗行到达前评估 → snapshot miss（Q3 差
+    // 45%、Q9 差 24% 的跨流顺序根因，2026-08-22 实测）。
+    batches.sort_by_key(|(_, batch)| batch_min_ts(batch));
+
     Ok(batches)
+}
+
+/// 批次的最小事件时间（排序键）：取常见时间列（dateTime/event_time/ts）首行。
+fn batch_min_ts(batch: &RecordBatch) -> i64 {
+    for name in ["dateTime", "event_time", "timestamp", "ts"] {
+        if let Ok(idx) = batch.schema().index_of(name)
+            && let Some(arr) = batch
+                .column(idx)
+                .as_any()
+                .downcast_ref::<TimestampNanosecondArray>()
+            && arr.len() > 0
+        {
+            return arr.value(0);
+        }
+    }
+    i64::MAX
 }
 
 /// Build one typed Arrow RecordBatch from a frame of events and push it.

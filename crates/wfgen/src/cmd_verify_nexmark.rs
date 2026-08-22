@@ -320,41 +320,21 @@ fn normalize_counts(
     engine: &HashMap<String, u64>,
 ) -> (Vec<String>, Vec<String>, Vec<String>) {
     let known: &[(&str, &str)] = &[
-        (
-            "q3_auction_seller",
-            "join 可见性：oracle 预加载完整 person 历史（含 seller lead 引用的未来/已驱逐 person），引擎 replay 只看到已 append+保留的行（30m 窗口覆盖 1/3 时差异 ~27%，10m 全覆盖 ~8%）；oracle 为语义参考值",
-        ),
-        (
-            "q20_expand_bid",
-            "join 可见性：bid⋈auction，oracle 预加载完整 auction 历史，引擎只看已 append+保留（与 q3 同源）",
-        ),
-        (
-            "q6_avg_price_by_seller",
-            "join 可见性：引擎 replay 的 append 超前/evictor sweep 时机非确定（oracle 为语义参考值）",
-        ),
+        // 2026-08-22 对齐后清理：q3/q6/q9/q20 的 join 可见性差异已随
+        // 「over 调大 1h + 帧内跨流时间序排序」修复（10M 对拍完全一致），
+        // q4 一致；旧规则名（q16_sum_price_1000/q17_distinct_bidders_20）
+        // 已不存在于当前 wfl——全部移出 known 列表。
         (
             "q12_bidder_10s_window_count",
-            "fixed+close 收口预算/scan_timeouts 时钟相关，引擎可能丢尾部收口（oracle 理想值）",
-        ),
-        (
-            "q9_winning_bid",
-            "fixed+close 收口预算/scan_timeouts 时钟相关，引擎可能丢尾部收口（oracle 理想值）",
+            "fixed+close 收口（固定窗口 10s 桶）引擎多收尾部桶（10M 实测 oracle=102400 引擎=282514，多 ~176%）——fixed 收口预算/scan_timeouts 墙钟推进，oracle 事件时间到末尾即止；oracle 为理想值",
         ),
         (
             "q11_bidder_session",
-            "session+close 尾部会话收口依赖水位推进（快速 replay 末尾 10s gap 内会话引擎多收），oracle 事件时间到末尾即止",
+            "session+close 尾部会话收口依赖水位推进（快速 replay 末尾 10s gap 内会话引擎多收 204/197095≈0.1%），oracle 事件时间到末尾即止",
         ),
         (
-            "q4_avg_price_by_category",
-            "fixed+close 收口预算/scan_timeouts 时钟相关（另叠加 join 可见性），引擎可能丢尾部收口（oracle 理想值）",
-        ),
-        (
-            "q16_sum_price_1000",
-            "fixed+close 收口预算/scan_timeouts 时钟相关，引擎可能丢尾部收口（oracle 理想值）",
-        ),
-        (
-            "q17_distinct_bidders_20",
-            "sliding 实例过期预算/时序非确定（10m 滑动窗高实例量下尾桶 fire 边界），oracle 为语义参考值",
+            "q19_auction_top10_stats",
+            "stats 规则（StatsExecutor 列式批执行器）暂未接入 oracle（逐事件无等价路径）——引擎输出为实测值，对拍待 oracle stats 支持",
         ),
     ];
     let mut rules: Vec<&String> = oracle

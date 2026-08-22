@@ -117,6 +117,7 @@ fn make_brute_force_plan() -> RulePlan {
         conv_plan: None,
         limits_plan: None,
         conv_window: None,
+        stats_plan: None,
     }
 }
 
@@ -182,6 +183,7 @@ fn make_auth_fail_plan() -> RulePlan {
         conv_plan: None,
         limits_plan: None,
         conv_window: None,
+        stats_plan: None,
     }
 }
 
@@ -268,6 +270,7 @@ fn make_bool_chain_plan() -> RulePlan {
         conv_plan: None,
         limits_plan: None,
         conv_window: None,
+        stats_plan: None,
     }
 }
 
@@ -341,6 +344,7 @@ fn make_distinct_close_plan() -> RulePlan {
         conv_plan: None,
         limits_plan: None,
         conv_window: None,
+        stats_plan: None,
     }
 }
 
@@ -432,5 +436,6 @@ fn make_chain_attack_plan() -> RulePlan {
         conv_plan: None,
         limits_plan: None,
         conv_window: None,
+        stats_plan: None,
     }
 }

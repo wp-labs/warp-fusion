@@ -35,3 +35,6 @@ examples/wp-pipeline/data/
 
 # MoJu drafts are temporary; keep the reviewed model committed
 moju/draft/
+-e 
+# LLVM coverage profraw（profile-cov / PROFILE 跑批散落产物）
+*.profraw

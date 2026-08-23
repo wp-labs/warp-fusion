@@ -344,6 +344,33 @@ enum Commands {
         #[arg(long, default_value = "1000")]
         slice_ms: u64,
     },
+    /// 性能诊断驱动（sentinel 漂流瓶协议，与 daemon 读同一份 perf-diag.toml）
+    PerfDiag {
+        /// 诊断配置（--diag conf/perf-diag.toml；[[points]] 列表 = 轮数）
+        #[arg(long)]
+        diag: PathBuf,
+        /// 预编码帧文件（wfgen dump-frames 产物，数据部分）
+        #[arg(long)]
+        frames: PathBuf,
+        /// TCP 数据端口
+        #[arg(long, default_value = "127.0.0.1:9800")]
+        addr: String,
+        /// 数据量列表（"100k,1m,3m"；缺省 = 帧文件全部行）
+        #[arg(long)]
+        n_list: Option<String>,
+        /// 每点轮数（取 max，降负载噪声）
+        #[arg(long, default_value = "1")]
+        rounds: usize,
+        /// 哨兵记录文件（默认 data/perf_sentinel.ndjson）
+        #[arg(long)]
+        sentinels: Option<PathBuf>,
+        /// 墙表输出文件（默认 data/perf_diag_wall.txt）
+        #[arg(long)]
+        output: Option<PathBuf>,
+        /// 单次等待（切换/哨兵记录）超时秒数
+        #[arg(long, default_value = "60")]
+        timeout_secs: u64,
+    },
 }
 
 #[tokio::main]
@@ -482,6 +509,28 @@ async fn run_cli() -> WfgenResult<()> {
             rate,
             slice_ms,
         } => wfgen::cmd_stream::run(scenario_dir, ws, wfl, addr, interval, rate, slice_ms).await,
+        Commands::PerfDiag {
+            diag,
+            frames,
+            addr,
+            n_list,
+            rounds,
+            sentinels,
+            output,
+            timeout_secs,
+        } => {
+            wfgen::cmd_perf_diag::run_perf_diag(wfgen::cmd_perf_diag::PerfDiagArgs {
+                diag,
+                frames,
+                addr,
+                n_list,
+                rounds,
+                sentinels,
+                output,
+                timeout_secs,
+            })
+            .await
+        }
     }
 }
 

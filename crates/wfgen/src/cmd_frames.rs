@@ -82,7 +82,7 @@ pub async fn dump_frames(
         Box::new(BufReader::new(file))
     };
 
-    let mut events: Vec<crate::datagen::stream_gen::GenEvent> = Vec::new();
+    let mut events: Vec<crate::datagen::stream_gen::GenEvent>;
     let mut total_events = 0usize;
     let mut total_frames = 0usize;
     let mut total_bytes = 0usize;

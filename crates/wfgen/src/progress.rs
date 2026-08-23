@@ -17,7 +17,6 @@ pub struct ProgressBar {
     done: Arc<AtomicU64>,
     total: u64,
     label: String,
-    enabled: bool,
     start: std::time::Instant,
     handle: Option<JoinHandle<()>>,
 }
@@ -34,7 +33,6 @@ impl ProgressBar {
                 done: Arc::new(AtomicU64::new(0)),
                 total,
                 label,
-                enabled,
                 start,
                 handle: None,
             };
@@ -58,7 +56,6 @@ impl ProgressBar {
             done,
             total,
             label,
-            enabled: true,
             start,
             handle: Some(handle),
         }

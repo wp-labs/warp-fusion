@@ -10,6 +10,7 @@ mod register;
 
 use clap::{Parser, Subcommand};
 use orion_error::report::DiagnosticReport;
+use std::path::PathBuf;
 
 use cli_config::{ConfigLoadArgs, run_engine_command};
 use error::CliResult;
@@ -49,6 +50,9 @@ enum Commands {
         metrics_interval: Option<String>,
         #[arg(long)]
         metrics_listen: Option<String>,
+        /// 性能诊断模式配置（--perf-diag conf/perf-diag.toml）；不带 = 全关
+        #[arg(long)]
+        perf_diag: Option<PathBuf>,
     },
     /// Start engine in batch mode (replay input files, exit when done)
     Batch {
@@ -60,6 +64,8 @@ enum Commands {
         metrics_interval: Option<String>,
         #[arg(long)]
         metrics_listen: Option<String>,
+        #[arg(long)]
+        perf_diag: Option<PathBuf>,
     },
     /// Print version or check version requirement
     Version {
@@ -90,6 +96,7 @@ async fn run_cli() -> CliResult<()> {
             metrics,
             metrics_interval,
             metrics_listen,
+            perf_diag,
         } => {
             run_engine_command(
                 load,
@@ -97,6 +104,7 @@ async fn run_cli() -> CliResult<()> {
                 metrics,
                 metrics_interval,
                 metrics_listen,
+                perf_diag,
             )
             .await?
         }
@@ -105,6 +113,7 @@ async fn run_cli() -> CliResult<()> {
             metrics,
             metrics_interval,
             metrics_listen,
+            perf_diag,
         } => {
             run_engine_command(
                 load,
@@ -112,6 +121,7 @@ async fn run_cli() -> CliResult<()> {
                 metrics,
                 metrics_interval,
                 metrics_listen,
+                perf_diag,
             )
             .await?
         }

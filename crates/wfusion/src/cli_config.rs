@@ -197,8 +197,20 @@ async fn run_engine_inner(
     if let Some(diag_path) = perf_diag {
         let diag_config = PerfConfig::load(&diag_path).conv_err()?;
         wf_runtime::perf_diag::init_perf_diag(&diag_config);
+        tracing::info!(
+            domain = "sys",
+            diag = diag_config.diag,
+            points = diag_config.points.len(),
+            initial_gates = format!(
+                "cut_rules={} cut_output={}",
+                wf_runtime::perf_diag::perf_cut_rules(),
+                wf_runtime::perf_diag::perf_cut_output()
+            ),
+            "perf-diag 诊断模式"
+        );
     } else {
         wf_runtime::perf_diag::init_perf_diag(&PerfConfig::default());
+        tracing::info!(domain = "sys", "perf-diag 未启用（无 --perf-diag）——哨兵帧将按未知流 window miss 丢弃");
     }
     let reactor = match Reactor::start(fusion_config, raw, &resolved.runtime_base_dir).await {
         Ok(reactor) => reactor,

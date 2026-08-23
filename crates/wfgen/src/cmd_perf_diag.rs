@@ -292,7 +292,9 @@ pub async fn wait_for_point(path: &Path, k: usize, timeout: Duration) -> WfgenRe
             return Err(error::error(
                 WfgenReason::Network,
                 format!(
-                    "timeout waiting for point{{current={k}}} in {} (engine 未完成切换?)",
+                    "timeout waiting for point{{current={k}}} in {} \
+                     （最常见根因：daemon 未带 --perf-diag 启动——非诊断模式哨兵帧走 \
+                     window miss 丢弃，不会落盘；其次：哨兵文件在 daemon 启动后被清空）",
                     path.display()
                 ),
             ));
@@ -324,7 +326,9 @@ pub async fn wait_for_sentinel(
             return Err(error::error(
                 WfgenReason::Network,
                 format!(
-                    "timeout waiting for sentinel{{round={round}, n={n}}} #{occurrence} in {}",
+                    "timeout waiting for sentinel{{round={round}, n={n}}} #{occurrence} in {} \
+                     （引擎未收到/未落盘哨兵记录——检查 daemon 是否带 --perf-diag 启动、\
+                     哨兵文件是否在 daemon 启动后被清空）",
                     path.display()
                 ),
             ));

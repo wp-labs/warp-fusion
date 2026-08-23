@@ -193,13 +193,13 @@ async fn run_engine_inner(
     // has a reload baseline to diff against.
     let raw = loader.load_raw().conv_err()?;
     // perf-diag 诊断模式：`--perf-diag conf/perf-diag.toml` 加载诊断配置并初始化
-    // 引擎侧全局门控/哨兵（不带参数 = 全关，生产零污染）。
+    // 引擎侧全局门控/哨兵（不带参数 = 全关，生产零污染）。入口即参数本身，
+    // 配置文件只承载 [[points]]。
     if let Some(diag_path) = perf_diag {
         let diag_config = PerfConfig::load(&diag_path).conv_err()?;
         wf_runtime::perf_diag::init_perf_diag(&diag_config);
         tracing::info!(
             domain = "sys",
-            diag = diag_config.diag,
             points = diag_config.points.len(),
             initial_gates = format!(
                 "cut_rules={} cut_output={}",
@@ -209,7 +209,7 @@ async fn run_engine_inner(
             "perf-diag 诊断模式"
         );
     } else {
-        wf_runtime::perf_diag::init_perf_diag(&PerfConfig::default());
+        wf_runtime::perf_diag::reset_perf_diag();
         tracing::info!(domain = "sys", "perf-diag 未启用（无 --perf-diag）——哨兵帧将按未知流 window miss 丢弃");
     }
     let reactor = match Reactor::start(fusion_config, raw, &resolved.runtime_base_dir).await {

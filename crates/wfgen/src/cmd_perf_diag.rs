@@ -349,15 +349,6 @@ pub async fn run_perf_diag(args: PerfDiagArgs) -> WfgenResult<()> {
             format!("load {}: {e}", args.diag.display()),
         )
     })?;
-    if !config.diag {
-        return Err(error::error(
-            WfgenReason::Validation,
-            format!(
-                "{} 未开启诊断（diag = false）——daemon 也需带 --perf-diag 启动",
-                args.diag.display()
-            ),
-        ));
-    }
     let points = config.points;
     if points.is_empty() {
         return Err(error::error(
@@ -713,27 +704,6 @@ rules = ""
         let table = std::fs::read_to_string(&wall).unwrap();
         assert!(table.contains("floor  eps="), "{table}");
         assert!(table.contains("full  eps="), "{table}");
-    }
-
-    #[tokio::test]
-    async fn driver_rejects_diag_disabled_config() {
-        let dir = tempfile::tempdir().unwrap();
-        let diag_path = dir.path().join("perf-diag.toml");
-        std::fs::write(&diag_path, "diag = false\n").unwrap();
-        let frames_path = dir.path().join("data.frames");
-        make_frames_file(&frames_path, 2);
-        let args = PerfDiagArgs {
-            diag: diag_path,
-            frames: frames_path,
-            addr: "127.0.0.1:1".into(),
-            n_list: Some("2".into()),
-            rounds: 1,
-            sentinels: None,
-            output: None,
-            timeout_secs: 2,
-        };
-        let err = run_perf_diag(args).await.unwrap_err();
-        assert!(err.to_string().contains("未开启诊断"));
     }
 
     #[tokio::test]

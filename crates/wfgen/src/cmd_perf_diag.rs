@@ -4,7 +4,7 @@
 //!
 //! 1. 轮询 `perf_sentinel.ndjson` 直到 `point{current=k}`（引擎已切换好点 k）；
 //! 2. `T0 = now()`；发预编码帧前缀（覆盖 N 行）+ 帧尾追加
-//!    `__perf_sentinel{round=k, n=n_k, start_ns=T0}` 帧（同连接同 seq 尾部）；
+//!    `__wf_sentinel{round=k, n=n_k, start_ns=T0}` 帧（同连接同 seq 尾部）；
 //! 3. 轮询哨兵文件直到 `sentinel{round=k, n=n_k}`（含引擎补的 `emit_ns`）；
 //! 4. `EPS = n_k / (emit_ns − start_ns)`（全程无外部记账）。
 //!
@@ -188,7 +188,7 @@ pub fn compute_eps(n: i64, start_ns: i64, emit_ns: i64) -> Option<f64> {
     Some(n as f64 * 1e9 / dt as f64)
 }
 
-/// 构建哨兵帧（`<len> <encode_ipc("__perf_sentinel", {round,n,start_ns})>`）。
+/// 构建哨兵帧（`<len> <encode_ipc("__wf_sentinel", {round,n,start_ns})>`）。
 pub fn build_sentinel_frame(round: i64, n: i64, start_ns: i64) -> WfgenResult<Vec<u8>> {
     let schema = Arc::new(Schema::new(vec![
         Field::new("round", DataType::Int64, false),
@@ -204,7 +204,7 @@ pub fn build_sentinel_frame(round: i64, n: i64, start_ns: i64) -> WfgenResult<Ve
         ],
     )
     .map_err(|e| error::error(WfgenReason::Serialization, format!("sentinel batch: {e}")))?;
-    let payload = wp_arrow::ipc::encode_ipc("__perf_sentinel", &batch)
+    let payload = wp_arrow::ipc::encode_ipc("__wf_sentinel", &batch)
         .map_err(|e| error::error(WfgenReason::Serialization, format!("sentinel encode: {e}")))?;
     let mut frame = format!("{} ", payload.len()).into_bytes();
     frame.extend_from_slice(&payload);
@@ -621,9 +621,9 @@ mod tests {
                 let _ = sock.read_to_end(&mut buf).await.unwrap();
                 // 载荷必须含哨兵帧 tag（原始字节搜索，Arrow IPC 含非 UTF8）。
                 assert!(
-                    buf.windows(b"__perf_sentinel".len())
-                        .any(|w| w == b"__perf_sentinel"),
-                    "载荷必须含哨兵帧（tag=__perf_sentinel）"
+                    buf.windows(b"__wf_sentinel".len())
+                        .any(|w| w == b"__wf_sentinel"),
+                    "载荷必须含哨兵帧（tag=__wf_sentinel）"
                 );
                 // 模拟引擎处理：落盘 sentinel{round=k, n=2} + 切换信号 point{current=k+1}。
                 tokio::time::sleep(Duration::from_millis(30)).await;
@@ -867,13 +867,13 @@ rules = ""
     #[test]
     fn sentinel_frame_roundtrips() {
         let frame = build_sentinel_frame(3, 500, 1_722_000_000_000_000_000).unwrap();
-        // 帧 = `<len> <payload>`；payload 含 tag `__perf_sentinel`。
+        // 帧 = `<len> <payload>`；payload 含 tag `__wf_sentinel`。
         let sp = frame.iter().position(|&b| b == b' ').unwrap();
         let len: usize = std::str::from_utf8(&frame[..sp]).unwrap().parse().unwrap();
         let payload = &frame[sp + 1..];
         assert_eq!(payload.len(), len);
         let decoded = wp_arrow::ipc::decode_ipc(payload).unwrap();
-        assert_eq!(decoded.tag, "__perf_sentinel");
+        assert_eq!(decoded.tag, "__wf_sentinel");
         assert_eq!(decoded.batch.num_rows(), 1);
         let col = decoded
             .batch

@@ -505,10 +505,325 @@ mod tests {
         assert_eq!(parse_n_list("").unwrap(), Vec::<u64>::new());
     }
 
+    fn make_frames_file(path: &Path, rows: i64) -> Vec<u8> {
+        // 单帧：`<len> <encode_ipc("events", batch)>`，rows 行。
+        let schema = Arc::new(Schema::new(vec![Field::new("x", DataType::Int64, false)]));
+        let batch = RecordBatch::try_new(
+            schema,
+            vec![Arc::new(Int64Array::from((0..rows).collect::<Vec<_>>()))],
+        )
+        .unwrap();
+        let payload = wp_arrow::ipc::encode_ipc("events", &batch).unwrap();
+        let mut body = format!("{} ", payload.len()).into_bytes();
+        body.extend_from_slice(&payload);
+        std::fs::write(path, &body).unwrap();
+        body
+    }
+
     #[test]
-    fn n_list_rejects_garbage() {
-        assert!(parse_n_list("abc").is_err());
-        assert!(parse_n_list("1x").is_err());
+    fn scan_frames_rejects_bad_prefixes() {
+        let dir = std::env::temp_dir();
+        // 非 ascii 长度前缀。
+        let path = dir.join(format!("wfgen_scan_bad_utf8_{}.frames", std::process::id()));
+        std::fs::write(&path, [0xffu8, 0xfe, b' ', 0u8]).unwrap();
+        let err = scan_frames(&path).unwrap_err();
+        assert!(err.to_string().contains("not ascii"));
+        let _ = std::fs::remove_file(&path);
+        // 非法数字长度前缀。
+        let path = dir.join(format!("wfgen_scan_bad_len_{}.frames", std::process::id()));
+        std::fs::write(&path, b"abc payload").unwrap();
+        let err = scan_frames(&path).unwrap_err();
+        assert!(err.to_string().contains("invalid frame length"));
+        let _ = std::fs::remove_file(&path);
+        // 长度合法但载荷不可解码。
+        let path = dir.join(format!("wfgen_scan_bad_payload_{}.frames", std::process::id()));
+        std::fs::write(&path, b"4 junk").unwrap();
+        let err = scan_frames(&path).unwrap_err();
+        assert!(err.to_string().contains("decode frame"));
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn scan_frames_missing_file_errors() {
+        let path = std::env::temp_dir().join("wfgen_scan_missing.frames");
+        let err = scan_frames(&path).unwrap_err();
+        assert!(err.to_string().contains("opening"));
+    }
+
+    #[test]
+    fn read_sentinel_file_unreadable_path_errors() {
+        // 目录路径 → 读取报错。
+        let dir = std::env::temp_dir().join(format!("wfgen_sentinel_dir_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let err = read_sentinel_file(&dir).unwrap_err();
+        assert!(err.to_string().contains("reading"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn read_sentinel_file_skips_blank_and_bad_record_type_lines() {
+        let dir = std::env::temp_dir();
+        let path = dir.join(format!("wfgen_sentinel_blank_{}.ndjson", std::process::id()));
+        std::fs::write(
+            &path,
+            "\n\n{\"record_type\":\"point\",\"current\":0}\n\n",
+        )
+        .unwrap();
+        let records = read_sentinel_file(&path).unwrap();
+        let _ = std::fs::remove_file(&path);
+        assert_eq!(records.len(), 1, "空行跳过");
+        assert!(records[0].is_point(0));
+    }
+
+    #[tokio::test]
+    async fn wait_for_sentinel_times_out() {
+        let dir = std::env::temp_dir();
+        let path = dir.join(format!("wfgen_wait_sent_timeout_{}.ndjson", std::process::id()));
+        let _ = std::fs::remove_file(&path);
+        std::fs::write(&path, r#"{"record_type":"point","current":0}"#.to_string() + "\n")
+            .unwrap();
+        let err = wait_for_sentinel(&path, 9, 99, 0, Duration::from_millis(150))
+            .await
+            .unwrap_err();
+        assert!(err.to_string().contains("timeout"));
+        let _ = std::fs::remove_file(&path);
+    }
+
+    // -- 驱动端到端（mock TCP 服务器模拟引擎）--------------------------------
+
+    /// mock 引擎：逐连接接收载荷（含哨兵帧），按 sentinel 驱动模拟状态机——
+    /// 收到 round=k 哨兵后写 `sentinel{round=k,n=N}` + `point{current=k+1}`。
+    /// 返回 (TempDir, sentinel 路径, wall 路径)——TempDir 保持存活到断言结束。
+    async fn run_driver_with_mock_engine(
+        points_toml: &str,
+        n_list: &str,
+        points: usize,
+    ) -> (tempfile::TempDir, PathBuf, PathBuf) {
+        let dir = tempfile::tempdir().unwrap();
+        let diag_path = dir.path().join("perf-diag.toml");
+        std::fs::write(&diag_path, points_toml).unwrap();
+        let frames_path = dir.path().join("data.frames");
+        make_frames_file(&frames_path, 2); // 2 行
+        let sentinel_path = dir.path().join("perf_sentinel.ndjson");
+        let wall_path = dir.path().join("wall.txt");
+        // 启动信号：point{current=0} 预先存在（模拟 daemon 启动即写）。
+        std::fs::write(&sentinel_path, r#"{"record_type":"point","current":0}"#.to_string() + "\n")
+            .unwrap();
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap().to_string();
+        let sentinel_path2 = sentinel_path.clone();
+        let server = tokio::spawn(async move {
+            use tokio::io::AsyncReadExt;
+            for k in 0..points {
+                let (mut sock, _) = listener.accept().await.unwrap();
+                let mut buf = Vec::new();
+                let _ = sock.read_to_end(&mut buf).await.unwrap();
+                // 载荷必须含哨兵帧 tag（原始字节搜索，Arrow IPC 含非 UTF8）。
+                assert!(
+                    buf.windows(b"__perf_sentinel".len())
+                        .any(|w| w == b"__perf_sentinel"),
+                    "载荷必须含哨兵帧（tag=__perf_sentinel）"
+                );
+                // 模拟引擎处理：落盘 sentinel{round=k, n=2} + 切换信号 point{current=k+1}。
+                tokio::time::sleep(Duration::from_millis(30)).await;
+                let mut rec = std::fs::read_to_string(&sentinel_path2).unwrap();
+                rec.push_str(&format!(
+                    r#"{{"record_type":"sentinel","round":{k},"n":2,"start_ns":"1000000000","emit_ns":"1100000000"}}"#
+                ));
+                rec.push('\n');
+                rec.push_str(&format!(
+                    r#"{{"record_type":"point","current":{}}}"#,
+                    k + 1
+                ));
+                rec.push('\n');
+                std::fs::write(&sentinel_path2, rec).unwrap();
+            }
+        });
+
+        let args = PerfDiagArgs {
+            diag: diag_path,
+            frames: frames_path,
+            addr,
+            n_list: Some(n_list.to_string()),
+            rounds: 1,
+            sentinels: Some(sentinel_path.clone()),
+            output: Some(wall_path.clone()),
+            timeout_secs: 10,
+        };
+        run_perf_diag(args).await.unwrap();
+        server.await.unwrap();
+        assert_eq!(
+            points,
+            read_sentinel_file(&sentinel_path)
+                .unwrap()
+                .iter()
+                .filter(|r| r.record_type == "sentinel")
+                .count(),
+            "每点一条 sentinel 记录"
+        );
+        (dir, sentinel_path, wall_path)
+    }
+
+    #[tokio::test]
+    async fn driver_end_to_end_single_point_writes_wall_table() {
+        let (_dir, _sent, wall) = run_driver_with_mock_engine(
+            r#"
+diag = true
+[[points]]
+name = "floor"
+cut_rules = true
+cut_output = true
+rules = ""
+"#,
+            "2",
+            1,
+        )
+        .await;
+        let table = std::fs::read_to_string(&wall).unwrap();
+        assert!(
+            table.contains("floor  eps="),
+            "墙表必须含 floor 行: {table}"
+        );
+        // EPS = 2 / (1.1s − 1.0s) = 20。
+        assert!(table.contains("eps=20"), "墙表 EPS 应可算: {table}");
+        assert!(table.contains("n=2"), "墙表应记发送量: {table}");
+    }
+
+    #[tokio::test]
+    async fn driver_end_to_end_two_points_produce_two_wall_rows() {
+        let (_dir, _sent, wall) = run_driver_with_mock_engine(
+            r#"
+diag = true
+[[points]]
+name = "floor"
+cut_rules = true
+cut_output = true
+rules = ""
+[[points]]
+name = "full"
+cut_rules = false
+cut_output = false
+rules = ""
+"#,
+            "2",
+            2,
+        )
+        .await;
+        let table = std::fs::read_to_string(&wall).unwrap();
+        assert!(table.contains("floor  eps="), "{table}");
+        assert!(table.contains("full  eps="), "{table}");
+    }
+
+    #[tokio::test]
+    async fn driver_rejects_diag_disabled_config() {
+        let dir = tempfile::tempdir().unwrap();
+        let diag_path = dir.path().join("perf-diag.toml");
+        std::fs::write(&diag_path, "diag = false\n").unwrap();
+        let frames_path = dir.path().join("data.frames");
+        make_frames_file(&frames_path, 2);
+        let args = PerfDiagArgs {
+            diag: diag_path,
+            frames: frames_path,
+            addr: "127.0.0.1:1".into(),
+            n_list: Some("2".into()),
+            rounds: 1,
+            sentinels: None,
+            output: None,
+            timeout_secs: 2,
+        };
+        let err = run_perf_diag(args).await.unwrap_err();
+        assert!(err.to_string().contains("未开启诊断"));
+    }
+
+    #[tokio::test]
+    async fn driver_rejects_empty_points_and_over_budget_n() {
+        // 空 points。
+        let dir = tempfile::tempdir().unwrap();
+        let diag_path = dir.path().join("perf-diag.toml");
+        std::fs::write(&diag_path, "diag = true\n").unwrap();
+        let frames_path = dir.path().join("data.frames");
+        make_frames_file(&frames_path, 2);
+        let args = PerfDiagArgs {
+            diag: diag_path.clone(),
+            frames: frames_path.clone(),
+            addr: "127.0.0.1:1".into(),
+            n_list: Some("2".into()),
+            rounds: 1,
+            sentinels: None,
+            output: None,
+            timeout_secs: 2,
+        };
+        let err = run_perf_diag(args).await.unwrap_err();
+        assert!(err.to_string().contains("至少一个 [[points]]"));
+        // n 超过帧行数。
+        std::fs::write(
+            &diag_path,
+            "diag = true\n[[points]]\nname = \"floor\"\n",
+        )
+        .unwrap();
+        let args = PerfDiagArgs {
+            diag: diag_path,
+            frames: frames_path,
+            addr: "127.0.0.1:1".into(),
+            n_list: Some("99".into()), // 帧仅 2 行
+            rounds: 1,
+            sentinels: None,
+            output: None,
+            timeout_secs: 2,
+        };
+        let err = run_perf_diag(args).await.unwrap_err();
+        assert!(err.to_string().contains("帧文件仅 2 行"));
+    }
+
+    #[tokio::test]
+    async fn driver_send_failure_is_reported() {
+        // 无服务器监听 → send_payload 连接失败。
+        let dir = tempfile::tempdir().unwrap();
+        let diag_path = dir.path().join("perf-diag.toml");
+        std::fs::write(
+            &diag_path,
+            "diag = true\n[[points]]\nname = \"floor\"\n",
+        )
+        .unwrap();
+        let frames_path = dir.path().join("data.frames");
+        make_frames_file(&frames_path, 2);
+        let sentinel_path = dir.path().join("perf_sentinel.ndjson");
+        std::fs::write(&sentinel_path, r#"{"record_type":"point","current":0}"#.to_string() + "\n")
+            .unwrap();
+        // 找一个肯定没监听的端口。
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap().to_string();
+        drop(listener);
+        let args = PerfDiagArgs {
+            diag: diag_path,
+            frames: frames_path,
+            addr,
+            n_list: Some("2".into()),
+            rounds: 1,
+            sentinels: Some(sentinel_path),
+            output: None,
+            timeout_secs: 2,
+        };
+        let err = run_perf_diag(args).await.unwrap_err();
+        assert!(err.to_string().contains("connecting to runtime"), "{err}");
+    }
+
+    #[test]
+    fn n_list_skips_empty_entries_but_requires_one_count() {
+        // 空条目（逗号间）跳过；全空/无有效条目 → 报错。
+        assert_eq!(parse_n_list("1k,,2k").unwrap(), vec![1_000, 2_000]);
+        assert!(parse_n_list(" , ").is_err(), "全部条目为空 → 报错");
+        assert!(parse_n_list(",").is_err());
+    }
+
+    #[test]
+    fn now_nanos_is_positive_and_advances() {
+        let a = now_nanos();
+        std::thread::sleep(Duration::from_millis(2));
+        let b = now_nanos();
+        assert!(a > 0);
+        assert!(b > a);
     }
 
     #[test]

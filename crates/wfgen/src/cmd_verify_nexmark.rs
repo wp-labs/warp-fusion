@@ -324,13 +324,14 @@ fn normalize_counts(
         // 「over 调大 1h + 帧内跨流时间序排序」修复（10M 对拍完全一致），
         // q4 一致；旧规则名（q16_sum_price_1000/q17_distinct_bidders_20）
         // 已不存在于当前 wfl——全部移出 known 列表。
+        // 2026-08-23 q11 修复后真一致（197,095 = 197,095）并移出 known：
+        // ① close_all 对 session 尾部未超时会话（last_event+gap > wm）不发射；
+        // ② scan_timeouts 对 session 不叠加墙钟（事件时间语义）；
+        // ③ flush 先用窗口 raw max_event_time（全局末尾）补扫，解决分片
+        //    shard 水位落后全局末尾导致的尾部会话误判（10M 少 1 条）。
         (
             "q12_bidder_10s_window_count",
             "fixed+close 收口（固定窗口 10s 桶）引擎多收尾部桶（10M 实测 oracle=102400 引擎=282514，多 ~176%）——fixed 收口预算/scan_timeouts 墙钟推进，oracle 事件时间到末尾即止；oracle 为理想值",
-        ),
-        (
-            "q11_bidder_session",
-            "session+close 尾部会话收口依赖水位推进（快速 replay 末尾 10s gap 内会话引擎多收 204/197095≈0.1%），oracle 事件时间到末尾即止",
         ),
         (
             "q19_auction_top10_stats",

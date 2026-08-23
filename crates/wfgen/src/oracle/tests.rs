@@ -179,7 +179,10 @@ fn hop_oracle_closes_every_covered_window() {
         make_event("s1", "LoginWindow", "10.0.0.1", "2024-01-01T00:00:08Z"),
     ];
     let result = run_oracle(&events, &[plan], &start, &duration, None).unwrap();
-    assert_eq!(result.alerts.len(), 9, "9 个覆盖窗口（k=-4..4）各输出一条");
+    // 2026-08-23 close_all 对齐 oracle/Flink 后：eos close_all 只收口**完整**
+    // 窗口（w_end ≤ 最终事件时间 8s）——尾部 3 个未完整窗口（末 14/16/18s）
+    // 释放实例但不发射（q5 修复同源）；仅 6 个在 slide 边界收口的完整窗口输出。
+    assert_eq!(result.alerts.len(), 6, "6 个完整覆盖窗口各输出一条");
 }
 
 #[test]

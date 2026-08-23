@@ -6,6 +6,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use chrono::{DateTime, Utc};
+use wf_engine::alert::OutputRecord;
 use wf_engine::match_engine::{
     CepStateMachine, CloseOutput, CloseReason, DeferredPending, EngineHashMap, Event, FieldSource,
     JoinRow, RuleExecutor, StepResult, Value, WindowLookup,
@@ -211,11 +212,39 @@ where
 
     let mut alerts = Vec::new();
 
+    // 中间管道（2026-08-23 q13 双规则链）：被 bind 的 yield target 是中间窗口——
+    // 上游规则输出到它时，既计数（与引擎 emitted_total 含中间一致）又作为事件
+    // feed 给 bind 该窗口的下游规则（on-each 无状态路径；match 下游的 expiry
+    // scan 由驱动事件主遍负责，中间 feed 只做状态推进，q13 场景为 each 规则）。
+    let consumed_windows: std::collections::HashSet<&str> = rule_plans
+        .iter()
+        .filter(|plan| {
+            injected_rules
+                .map(|set| set.contains(&plan.name))
+                .unwrap_or(true)
+        })
+        .flat_map(|plan| plan.binds.iter().map(|b| b.window.as_str()))
+        .collect();
+    let intermediate_windows: std::collections::HashSet<String> = rule_plans
+        .iter()
+        .filter(|plan| {
+            injected_rules
+                .map(|set| set.contains(&plan.name))
+                .unwrap_or(true)
+        })
+        .map(|plan| plan.yield_plan.target.as_str())
+        .filter(|target| consumed_windows.contains(target))
+        .map(String::from)
+        .collect();
+
     // Process events in order (caller should have sorted by timestamp)
     for event in events {
         let event_nanos = event.timestamp.timestamp_nanos_opt().unwrap_or(0);
 
         let core_event = gen_event_to_core(&event);
+
+        // 本事件的中间输出：既 push_alert（计数）又入队 feed 下游。
+        let mut feed_queue: Vec<(String, Event, i64)> = Vec::new();
 
         for engine in &mut engines {
             // P2 (Path A): maintain join-window rows ahead of this event so
@@ -337,12 +366,12 @@ where
                         &[],
                         event_nanos,
                     ) {
-                        push_alert(record, &mut alerts);
+                        record_output(record, &mut alerts, &intermediate_windows, &mut feed_queue);
                     }
                 } else if let Ok(Some(record)) =
                     engine.executor.execute_each(&core_event, event_nanos)
                 {
-                    push_alert(record, &mut alerts);
+                    record_output(record, &mut alerts, &intermediate_windows, &mut feed_queue);
                 }
                 continue;
             }
@@ -380,8 +409,26 @@ where
                         engine.executor.execute_match(&ctx).map(Some)
                     };
                     if let Ok(Some(alert_record)) = alert_record {
-                        push_alert(alert_record, &mut alerts);
+                        record_output(
+                            alert_record,
+                            &mut alerts,
+                            &intermediate_windows,
+                            &mut feed_queue,
+                        );
                     }
+                }
+            }
+        }
+
+        // 中间管道 feed：本事件所有引擎处理完的中间输出 → 作为事件喂给 bind
+        // 该窗口的下游规则（同一事件序；输出若又是中间则继续入队，支持多级）。
+        let mut feed_index = 0usize;
+        while feed_index < feed_queue.len() {
+            let (window, ev, ts) = feed_queue[feed_index].clone();
+            feed_index += 1;
+            for engine in &mut engines {
+                if let Some(record) = process_engine_event(engine, &window, &ev, ts) {
+                    record_output(record, &mut alerts, &intermediate_windows, &mut feed_queue);
                 }
             }
         }
@@ -798,6 +845,90 @@ fn push_alert(alert_record: wf_engine::alert::OutputRecord, alerts: &mut Vec<Ora
         origin: alert_record.origin.as_str().to_string(),
         emit_time: alert_record.fired_at.clone(),
     });
+}
+
+/// 输出分派（2026-08-23 q13 双规则链中间管道）：sink 输出只计数；中间输出
+/// （yield target 被下游 bind）计数（对齐引擎 emitted_total 含中间，q4a 修复
+/// 同口径）**并**入队 feed 队列（转 Event 喂给下游规则）。
+fn record_output(
+    record: OutputRecord,
+    alerts: &mut Vec<OracleAlert>,
+    intermediate: &std::collections::HashSet<String>,
+    feed: &mut Vec<(String, Event, i64)>,
+) {
+    if intermediate.contains(&*record.yield_target) {
+        let ts = record.event_time_nanos;
+        feed.push((
+            record.yield_target.to_string(),
+            record_to_event(&record),
+            ts,
+        ));
+    }
+    push_alert(record, alerts);
+}
+
+/// OutputRecord → Event（中间管道 feed）：yield 字段作为事件字段。
+fn record_to_event(record: &OutputRecord) -> Event {
+    let mut fields = EngineHashMap::default();
+    for (name, value) in &record.yield_fields {
+        fields.insert(name.to_string().into(), value.clone());
+    }
+    Event { fields }
+}
+
+/// 处理一个事件对单个引擎（each 或 match），返回输出记录（可能为 None）。
+/// 复用主循环的 each/match 求值路径——中间管道 feed 与主循环同一条语义。
+fn process_engine_event(
+    engine: &mut RuleEngine,
+    window: &str,
+    ev: &Event,
+    ts_nanos: i64,
+) -> Option<OutputRecord> {
+    let bind_aliases = engine.alias_map.get(window)?;
+    if engine.each {
+        let any_bind_matches = bind_aliases
+            .iter()
+            .any(|a| engine.executor.event_matches_alias(a, ev, None));
+        if !any_bind_matches {
+            return None;
+        }
+        if engine.has_joins {
+            let lookup: &dyn WindowLookup = engine
+                .lookup
+                .as_ref()
+                .map(|l| l as &dyn WindowLookup)
+                .unwrap_or(&EmptyLookup);
+            engine
+                .executor
+                .execute_each_with_joins(ev, ts_nanos, lookup, &[], ts_nanos)
+                .ok()
+                .flatten()
+        } else {
+            engine.executor.execute_each(ev, ts_nanos).ok().flatten()
+        }
+    } else {
+        for bind_alias in bind_aliases {
+            if !engine.executor.event_matches_alias(bind_alias, ev, None) {
+                continue;
+            }
+            let windows = engine.lookup.as_ref().map(|l| l as &dyn WindowLookup);
+            let result = engine
+                .sm
+                .advance_at_with_masks(bind_alias, ev, ts_nanos, windows, 0, None);
+            if let StepResult::Matched(ctx) = result {
+                let record = if engine.has_joins {
+                    let lookup: &dyn WindowLookup = windows.unwrap_or(&EmptyLookup);
+                    engine.executor.execute_match_with_joins(&ctx, lookup)
+                } else {
+                    engine.executor.execute_match(&ctx).map(Some)
+                };
+                if let Ok(Some(rec)) = record {
+                    return Some(rec);
+                }
+            }
+        }
+        None
+    }
 }
 
 fn collect_close_alerts(

@@ -169,12 +169,45 @@ pub fn run(
     let buckets = Arc::new(data.buckets);
     let schemas_arc = Arc::new(schemas_list);
     let alerts = thread::scope(|scope| {
-        let chunk = (rule_plans.len() + n_threads - 1) / n_threads;
-        let handles: Vec<_> = rule_plans
-            .chunks(chunk)
+        // 中间管道依赖（2026-08-23 q13 双规则链）：bind 的窗口被其它规则
+        // yield（如 q13a→bid_mod→q13b、q4a→auction_finals→q4b）时，两个
+        // 规则必须同组——oracle 的中间 feed 是组内（单实例）事件流转，跨组
+        // 实例断裂（q13a/q13b 拆组则 q13b 收不到 bid_mod 事件，EMIT=0）。
+        // 用并查集把 yield-bind 依赖链合并为组，每组一个线程。
+        fn find(group_of: &mut Vec<usize>, mut i: usize) -> usize {
+            while group_of[i] != i {
+                group_of[i] = group_of[group_of[i]];
+                i = group_of[i];
+            }
+            i
+        }
+        let mut group_of: Vec<usize> = (0..rule_plans.len()).collect();
+        let yield_idx: std::collections::HashMap<&str, usize> = rule_plans
+            .iter()
             .enumerate()
-            .map(|(i, group)| {
-                let plans: Vec<_> = group.to_vec();
+            .map(|(i, p)| (p.yield_plan.target.as_str(), i))
+            .collect();
+        for (i, plan) in rule_plans.iter().enumerate() {
+            for bind in &plan.binds {
+                if let Some(&j) = yield_idx.get(bind.window.as_str()) {
+                    let ri = find(&mut group_of, i);
+                    let rj = find(&mut group_of, j);
+                    group_of[ri] = rj;
+                }
+            }
+        }
+        let mut groups: std::collections::BTreeMap<usize, Vec<usize>> =
+            std::collections::BTreeMap::new();
+        let rule_count = group_of.len();
+        for i in 0..rule_count {
+            let r = find(&mut group_of, i);
+            groups.entry(r).or_default().push(i);
+        }
+        let handles: Vec<_> = groups
+            .into_values()
+            .enumerate()
+            .map(|(i, idxs)| {
+                let plans: Vec<_> = idxs.iter().map(|&i| rule_plans[i].clone()).collect();
                 let buckets = Arc::clone(&buckets);
                 let counter = Arc::clone(&counter);
                 let schemas = Arc::clone(&schemas_arc);

@@ -145,6 +145,44 @@ fn make_action_event(alias: &str, window: &str, sip: &str, action: &str, ts: &st
 }
 
 #[test]
+fn hop_oracle_closes_every_covered_window() {
+    // hop(10s, 2s) + `and close` count：每覆盖窗口收口输出一条。
+    // 事件 t=0/4/8s → 覆盖窗口并集 k=-4..4（9 个）；6 个在 eos 前 slide 边界
+    // 收口（末 2..12s）+ 3 个由 eos close_all 收口（末 14..18s）。
+    let mut plan = make_simple_rule_plan();
+    // 默认 on-event 阈值为 3，改为 1（单事件即达标）。
+    plan.match_plan.event_steps[0].branches[0].agg.threshold = Expr::Number(1.0);
+    plan.match_plan.window_spec = WindowSpec::Hop {
+        size: Duration::from_secs(10),
+        slide: Duration::from_secs(2),
+    };
+    plan.match_plan.close_steps = vec![StepPlan {
+        branches: vec![BranchPlan {
+            label: Some("n".to_string()),
+            source: "fail".to_string(),
+            field: None,
+            guard: None,
+            agg: AggPlan {
+                transforms: vec![],
+                measure: Measure::Count,
+                cmp: CmpOp::Ge,
+                threshold: Expr::Number(1.0),
+            },
+        }],
+    }];
+    plan.match_plan.close_mode = CloseMode::And;
+    let start: chrono::DateTime<Utc> = "2024-01-01T00:00:00Z".parse().unwrap();
+    let duration = Duration::from_secs(12);
+    let events = vec![
+        make_event("s1", "LoginWindow", "10.0.0.1", "2024-01-01T00:00:00Z"),
+        make_event("s1", "LoginWindow", "10.0.0.1", "2024-01-01T00:00:04Z"),
+        make_event("s1", "LoginWindow", "10.0.0.1", "2024-01-01T00:00:08Z"),
+    ];
+    let result = run_oracle(&events, &[plan], &start, &duration, None).unwrap();
+    assert_eq!(result.alerts.len(), 9, "9 个覆盖窗口（k=-4..4）各输出一条");
+}
+
+#[test]
 fn hit_cluster_triggers_alert() {
     let plan = make_simple_rule_plan();
     let start: chrono::DateTime<Utc> = "2024-01-01T00:00:00Z".parse().unwrap();

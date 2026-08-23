@@ -153,11 +153,19 @@ where
             each: plan.each_plan.is_some(),
             has_joins: !plan.joins.is_empty(),
             // fixed 窗口只在桶边界收口——桶内事件不可能触发收口，
-            // 跨桶边界事件才 scan（避免每事件全扫实例：q4 10m 162s → 秒级）
+            // 跨桶边界事件才 scan（避免每事件全扫实例：q4 10m 162s → 秒级）。
+            // Hop 窗口在 slide 对齐时刻收口（expire = w_start + size 亦为 slide
+            // 边界），跨 slide 边界才 scan 同样安全。
             fixed_bucket_nanos: match plan.match_plan.window_spec {
                 wf_lang::plan::WindowSpec::Fixed(dur) => Some(dur.as_nanos() as i64),
+                wf_lang::plan::WindowSpec::Hop { slide, .. } => Some(slide.as_nanos() as i64),
                 _ => None,
             },
+            // Hop 扫描用无界预算（每 slide 边界恰一个窗口到期，收口原子）。
+            hop_unbounded: matches!(
+                plan.match_plan.window_spec,
+                wf_lang::plan::WindowSpec::Hop { .. }
+            ),
             last_scan_bucket: i64::MIN,
             alias_map,
             lookup: OracleLookup::build(plan, schemas),
@@ -235,9 +243,21 @@ where
                 None => true,
             };
             if should_scan {
-                let expired = engine
-                    .sm
-                    .scan_expired_at_with_conv(event_nanos, engine.conv_plan.as_ref());
+                // Hop 窗口：每 slide 边界恰一个窗口到期，用无界预算一次性收口
+                // （1024 预算会把同一窗口关闭拆多批，inline conv 逐批 top-1 重复
+                // EMIT）；fixed/sliding/session 保持预算扫描（对齐引擎行为）。
+                let expired = if engine.hop_unbounded {
+                    engine
+                        .sm
+                        .scan_expired_at_with_conv_skip_non_alerting_unbounded(
+                            event_nanos,
+                            engine.conv_plan.as_ref(),
+                        )
+                } else {
+                    engine
+                        .sm
+                        .scan_expired_at_with_conv(event_nanos, engine.conv_plan.as_ref())
+                };
                 collect_close_alerts(
                     &engine.executor,
                     expired,
@@ -380,9 +400,18 @@ where
     /// [数据末尾, slice 边界] 的挂起实例到期（Q8 实证 10M 差 185 条尾部桶），
     /// oracle 也按 eos 水位 pop_due；close_at_eos 时才 flush 全部剩余（i64::MAX）。
     for engine in &mut engines {
-        let expired = engine
-            .sm
-            .scan_expired_at_with_conv(eos_nanos, engine.conv_plan.as_ref());
+        let expired = if engine.hop_unbounded {
+            engine
+                .sm
+                .scan_expired_at_with_conv_skip_non_alerting_unbounded(
+                    eos_nanos,
+                    engine.conv_plan.as_ref(),
+                )
+        } else {
+            engine
+                .sm
+                .scan_expired_at_with_conv(eos_nanos, engine.conv_plan.as_ref())
+        };
         collect_close_alerts(
             &engine.executor,
             expired,
@@ -474,6 +503,8 @@ struct RuleEngine {
     has_joins: bool,
     /// fixed 窗口的桶长（oracle 桶边界扫描优化）；None = sliding/session/each
     fixed_bucket_nanos: Option<i64>,
+    /// Hop 规则：扫描用无界预算（每 slide 边界恰一个窗口到期，原子收口）
+    hop_unbounded: bool,
     /// 上一次 scan 的桶号（fixed 窗口）
     last_scan_bucket: i64,
     /// window_name → Vec<bind_alias> for routing events to all matching aliases

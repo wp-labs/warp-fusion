@@ -213,4 +213,3 @@ pub(crate) async fn send_payload(addr: &str, payload: &[u8]) -> WfgenResult<()> 
         .source_err(WfgenReason::Network, "tcp shutdown")?;
     Ok(())
 }
-

@@ -1,7 +1,6 @@
 #[cfg(test)]
 mod tests;
 
-
 /// An oracle alert produced by the reference evaluator.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct OracleAlert {
@@ -472,9 +471,7 @@ where
         // 未到期的实例错误输出（Q8 实证：引擎 82446 vs 按 eos 扫 83274，多
         // 828 条尾部 10s 桶）；主遍逐事件 pop_due 已覆盖全部到期实例，EOS
         // 无需再扫。close_at_eos=true（cmd_gen batch 语义）才 flush 全部剩余。
-        if close_at_eos
-            && let Some(deferred) = &mut engine.deferred
-        {
+        if close_at_eos && let Some(deferred) = &mut engine.deferred {
             // P3：deferred join —— EOS 关闭触发全部剩余挂起实例（引擎 flush 语义）。
             let (due, join_idx) = (deferred.pop_due(i64::MAX), deferred.join_idx);
             let windows: &dyn WindowLookup = engine

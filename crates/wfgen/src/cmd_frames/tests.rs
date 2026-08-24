@@ -131,8 +131,7 @@ async fn shard_frames_preserves_tags_and_rows() {
     }
     // 键闭包:同一 auction 只出现在按 fnv1a % shards 计算的那一个分片。
     // 逐值验证:预期分片 = fnv1a(auction.to_le_bytes()) % 4
-    let mut shard_of: std::collections::HashMap<i64, Vec<usize>> =
-        std::collections::HashMap::new();
+    let mut shard_of: std::collections::HashMap<i64, Vec<usize>> = std::collections::HashMap::new();
     for i in 0..4 {
         let path = format!("{}.s{i}.frames", prefix.display());
         let mut pos = 0usize;

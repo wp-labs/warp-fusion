@@ -4,8 +4,8 @@ use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use rand::rngs::StdRng;
 use wf_lang::{BaseType, FieldType, WindowSchema};
 
-use crate::datagen::inject_gen::structures::{InjectUseStepOverrides, StepInfo};
 use crate::datagen::field_gen::generate_field_value;
+use crate::datagen::inject_gen::structures::{InjectUseStepOverrides, StepInfo};
 use crate::datagen::stream_gen::GenEvent;
 use crate::error::{self, WfgenReason, WfgenResult};
 use crate::wfg_ast::StreamBlock;

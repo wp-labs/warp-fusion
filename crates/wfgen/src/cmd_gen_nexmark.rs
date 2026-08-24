@@ -13,10 +13,10 @@ use std::sync::Arc;
 use crate::error::{self, WfgenReason, WfgenResult};
 use crate::progress::fmt_num;
 
+use crate::nexmark::{AUCTION_ID_LEAD, FIRST_AUCTION_ID, FIRST_PERSON_ID, NUM_ACTIVE_PEOPLE};
 use crate::nexmark::{
     BASE_NS, BUCKET_NS, INTER_EVENT_DELAY_NS, NxEvent, check_event, generate_events, nx_to_value,
 };
-use crate::nexmark::{AUCTION_ID_LEAD, FIRST_AUCTION_ID, FIRST_PERSON_ID, NUM_ACTIVE_PEOPLE};
 use crate::nexmark::{NUM_IN_FLIGHT_AUCTIONS, PERSON_ID_LEAD};
 
 /// ISO UTC with the same literal `.000Z` millis as the Python generator.

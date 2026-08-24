@@ -12,9 +12,6 @@ use wf_lang::plan::{
 use crate::datagen::stream_gen::GenEvent;
 use crate::oracle::run_oracle;
 
-
-
-
 fn make_simple_rule_plan() -> RulePlan {
     RulePlan {
         name: "brute_force".to_string(),
@@ -176,5 +173,5 @@ fn bid_events_schema() -> wf_lang::WindowSchema {
 
 mod basic;
 mod conv;
-mod join;
 mod deferred;
+mod join;

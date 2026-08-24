@@ -1,6 +1,5 @@
 use super::*;
 
-
 #[test]
 fn test_syntax_extra_use_step_fails_when_rule_has_no_matching_step() {
     let input = r#"
@@ -261,7 +260,6 @@ scenario inject_targets<seed=42> {
         "unexpected error: {rendered}"
     );
 }
-
 
 #[test]
 fn test_syntax_near_miss_uses_explicit_use_step_count() {

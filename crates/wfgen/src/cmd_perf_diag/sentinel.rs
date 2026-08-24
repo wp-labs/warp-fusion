@@ -7,7 +7,6 @@ use std::time::Duration;
 use crate::error;
 use crate::error::{WfgenReason, WfgenResult};
 
-
 /// 文件里的一条记录（JSONL）。
 #[derive(Debug, Clone, PartialEq)]
 pub struct SentinelFileRecord {

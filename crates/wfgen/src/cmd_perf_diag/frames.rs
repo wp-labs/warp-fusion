@@ -15,7 +15,6 @@ use orion_error::conversion::SourceErr;
 use crate::error;
 use crate::error::{WfgenReason, WfgenResult};
 
-
 /// 解析 `--n-list`："100k,1m,3m" → [100_000, 1_000_000, 3_000_000]。
 /// 支持 `k`（千）/`m`（百万）/`g`（十亿）后缀；纯数字 = 原值。空串 → 空。
 pub fn parse_n_list(spec: &str) -> WfgenResult<Vec<u64>> {

@@ -7,7 +7,6 @@ use arrow::array::Int64Array;
 use arrow::datatypes::{DataType, Field, Schema};
 use arrow::record_batch::RecordBatch;
 
-
 #[test]
 fn n_list_parses_suffixes() {
     assert_eq!(

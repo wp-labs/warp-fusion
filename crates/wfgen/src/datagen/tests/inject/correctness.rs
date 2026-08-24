@@ -1,6 +1,5 @@
 use super::*;
 
-
 #[test]
 fn test_inject_hit_cluster_correctness() {
     let input = r#"
@@ -287,7 +286,6 @@ scenario inject_step_scope<seed=42> {
     }
 }
 
-
 #[test]
 fn test_inject_near_miss_no_trigger() {
     // near-miss events should produce N-1 events per cluster (not enough to trigger)
@@ -326,7 +324,6 @@ scenario inject_nm<seed=42> {
         "near-miss clusters should not trigger any alerts"
     );
 }
-
 
 #[test]
 fn test_inject_hit_triggers_oracle() {

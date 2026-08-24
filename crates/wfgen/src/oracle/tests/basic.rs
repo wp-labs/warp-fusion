@@ -330,4 +330,3 @@ fn sc7_uninjected_rule_skipped() {
     let result = run_oracle(&events, &[plan], &start, &duration, Some(&other)).unwrap();
     assert_eq!(result.alerts.len(), 0);
 }
-

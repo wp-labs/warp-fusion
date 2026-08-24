@@ -4,7 +4,6 @@ use wf_lang::{BaseType, FieldDef, FieldType, WindowSchema};
 
 use crate::oracle::run_oracle_events_full;
 
-
 fn bid_window_schema() -> WindowSchema {
     WindowSchema {
         name: "bid_events".to_string(),
@@ -325,4 +324,3 @@ fn oracle_fixed_close_fires_once_per_bucket_boundary() {
         );
     }
 }
-

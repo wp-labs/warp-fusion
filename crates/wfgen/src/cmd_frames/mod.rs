@@ -141,7 +141,6 @@ pub struct ShardFramesArgs {
     pub output_prefix: PathBuf,
 }
 
-
 /// `wfgen dump-frames`: read JSONL once and write the pre-encoded Arrow frames
 /// (the byte-identical payloads `wfgen send` produces) to `output`.
 ///
@@ -259,7 +258,6 @@ pub async fn dump_frames(args: DumpFramesArgs) -> WfgenResult<()> {
     );
     Ok(())
 }
-
 
 /// `wfgen send-arrow`: replay pre-encoded frame bytes over one TCP connection.
 ///

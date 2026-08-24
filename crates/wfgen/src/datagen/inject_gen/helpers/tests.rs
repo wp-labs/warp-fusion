@@ -14,10 +14,7 @@ fn matched_use_predicates_are_capped_to_step_event_count() {
         window_name: "LoginWindow".to_string(),
         measure: Measure::Count,
         threshold: 5,
-        filter_overrides: HashMap::from([(
-            "success".to_string(),
-            serde_json::Value::Bool(false),
-        )]),
+        filter_overrides: HashMap::from([("success".to_string(), serde_json::Value::Bool(false))]),
     }];
     let use_steps = vec![InjectUseStepOverrides {
         count: 1_000,
@@ -33,9 +30,9 @@ fn matched_use_predicates_are_capped_to_step_event_count() {
         "matched filter predicates must not allocate beyond generated event count"
     );
     assert!(
-        mapped[0].iter().all(
-            |predicates| predicates.get("success") == Some(&serde_json::Value::Bool(false))
-        )
+        mapped[0]
+            .iter()
+            .all(|predicates| predicates.get("success") == Some(&serde_json::Value::Bool(false)))
     );
 }
 
@@ -77,10 +74,7 @@ fn planned_use_steps_bind_by_declaration_order() {
     let use_steps = vec![
         InjectUseStepOverrides {
             count: 1,
-            predicates: HashMap::from([(
-                "success".to_string(),
-                serde_json::Value::Bool(false),
-            )]),
+            predicates: HashMap::from([("success".to_string(), serde_json::Value::Bool(false))]),
         },
         InjectUseStepOverrides {
             count: 1,
@@ -143,18 +137,12 @@ fn extra_use_step_errors_when_rule_steps_exhausted() {
         window_name: "LoginWindow".to_string(),
         measure: Measure::Count,
         threshold: 5,
-        filter_overrides: HashMap::from([(
-            "success".to_string(),
-            serde_json::Value::Bool(false),
-        )]),
+        filter_overrides: HashMap::from([("success".to_string(), serde_json::Value::Bool(false))]),
     }];
     let use_steps = vec![
         InjectUseStepOverrides {
             count: 5,
-            predicates: HashMap::from([(
-                "success".to_string(),
-                serde_json::Value::Bool(false),
-            )]),
+            predicates: HashMap::from([("success".to_string(), serde_json::Value::Bool(false))]),
         },
         InjectUseStepOverrides {
             count: 1,
@@ -203,10 +191,7 @@ fn conflicting_use_step_predicates_error() {
         window_name: "LoginWindow".to_string(),
         measure: Measure::Count,
         threshold: 5,
-        filter_overrides: HashMap::from([(
-            "success".to_string(),
-            serde_json::Value::Bool(false),
-        )]),
+        filter_overrides: HashMap::from([("success".to_string(), serde_json::Value::Bool(false))]),
     }];
     let use_steps = vec![InjectUseStepOverrides {
         count: 5,
@@ -231,10 +216,7 @@ fn near_miss_use_steps_drop_events_after_near_miss_step() {
             window_name: "LoginWindow".to_string(),
             measure: Measure::Count,
             threshold: 1,
-            filter_overrides: HashMap::from([(
-                "stage".to_string(),
-                serde_json::json!("first"),
-            )]),
+            filter_overrides: HashMap::from([("stage".to_string(), serde_json::json!("first"))]),
         },
         StepInfo {
             bind_alias: "step1".to_string(),
@@ -250,10 +232,7 @@ fn near_miss_use_steps_drop_events_after_near_miss_step() {
             window_name: "LoginWindow".to_string(),
             measure: Measure::Count,
             threshold: 1,
-            filter_overrides: HashMap::from([(
-                "stage".to_string(),
-                serde_json::json!("after"),
-            )]),
+            filter_overrides: HashMap::from([("stage".to_string(), serde_json::json!("after"))]),
         },
     ];
     let overrides = InjectOverrides {

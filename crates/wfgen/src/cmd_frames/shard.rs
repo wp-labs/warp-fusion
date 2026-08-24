@@ -10,7 +10,12 @@ use crate::error::{WfgenReason, WfgenResult};
 use crate::output::arrow_ipc::events_to_typed_batches;
 
 /// 发一条分连接哨兵帧（round=连接号）。
-pub(crate) async fn send_conn_sentinel(addr: &str, round: usize, n: u64, start_ns: i64) -> WfgenResult<()> {
+pub(crate) async fn send_conn_sentinel(
+    addr: &str,
+    round: usize,
+    n: u64,
+    start_ns: i64,
+) -> WfgenResult<()> {
     let frame = crate::cmd_perf_diag::build_sentinel_frame(round as i64, n as i64, start_ns)?;
     crate::cmd_perf_diag::send_payload(addr, &frame).await?;
     println!("Sentinel sent (conn {round} n={n}) — EPS 以 data/perf_sentinel.ndjson 为准");
@@ -156,7 +161,11 @@ pub(crate) async fn send_arrow_copy_files(
 /// `tokio::io::copy` 用固定 8 KiB 内部缓冲——100M 数据(7.76GB)约 100 万次
 /// 文件读,每次都是 syscall + `tokio::fs` 的 spawn_blocking 线程池交接,把注入
 /// 卡在 ~20M EPS;1 MiB 缓冲把迭代降到 ~8k 次,恢复磁盘/网络级吞吐。
-pub(crate) async fn copy_tcp<R, W>(reader: &mut R, writer: &mut W, rate_bytes: u64) -> WfgenResult<u64>
+pub(crate) async fn copy_tcp<R, W>(
+    reader: &mut R,
+    writer: &mut W,
+    rate_bytes: u64,
+) -> WfgenResult<u64>
 where
     R: tokio::io::AsyncRead + Unpin,
     W: tokio::io::AsyncWrite + Unpin,
@@ -206,7 +215,10 @@ pub(crate) struct ShardPending {
 
 /// 把攒批的行 concat 成一帧写入分片文件,并清空积累器。
 /// 帧 tag 必须沿用原流 tag——引擎按 tag 路由,改写标签会导致整帧行被丢弃。
-pub(crate) fn flush_pending(writer: &mut impl std::io::Write, pending: &mut ShardPending) -> WfgenResult<()> {
+pub(crate) fn flush_pending(
+    writer: &mut impl std::io::Write,
+    pending: &mut ShardPending,
+) -> WfgenResult<()> {
     if pending.batches.is_empty() {
         return Ok(());
     }

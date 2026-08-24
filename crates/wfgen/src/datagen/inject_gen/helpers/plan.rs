@@ -4,7 +4,6 @@ use std::time::Duration;
 use crate::datagen::inject_gen::structures::{InjectOverrides, InjectUseStepOverrides, StepInfo};
 use crate::error::{self, WfgenReason, WfgenResult};
 
-
 pub(crate) struct UseStepPlan {
     pub(crate) rule_step_idx: usize,
     pub(crate) count: u64,

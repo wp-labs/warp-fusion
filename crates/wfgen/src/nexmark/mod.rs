@@ -603,6 +603,5 @@ pub(crate) fn check_event(ev: &NxEvent, count: i64) -> bool {
     }
 }
 
-
 #[cfg(test)]
 mod tests;

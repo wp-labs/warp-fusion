@@ -438,14 +438,14 @@ where
         *scenario_start + chrono::Duration::from_std(*scenario_duration).unwrap_or_default();
     let eos_nanos = eos_time.timestamp_nanos_opt().unwrap_or(i64::MAX);
 
-    /// 引擎 replay 语义（close_at_eos = false）：不 close_all 剩余实例；但引擎
-    /// replay 的 slice 水位会推进到数据末尾的 slice 边界（fixed 桶在数据末尾
-    /// 恰好到期时会收口——q5 实证：30m 数据 + 10m 桶引擎收 3 桶、oracle 只收
-    /// 2 桶），故 oracle 也扫一次 eos 水位（不含 close_all）模拟该行为。
-    /// close_at_eos = true（cmd_gen batch 语义）时另 close_all 剩余实例。
-    /// P3：deferred join 同源——引擎水位到 slice 边界会使尾部 expiry 恰好位于
-    /// [数据末尾, slice 边界] 的挂起实例到期（Q8 实证 10M 差 185 条尾部桶），
-    /// oracle 也按 eos 水位 pop_due；close_at_eos 时才 flush 全部剩余（i64::MAX）。
+    // 引擎 replay 语义（close_at_eos = false）：不 close_all 剩余实例；但引擎
+    // replay 的 slice 水位会推进到数据末尾的 slice 边界（fixed 桶在数据末尾
+    // 恰好到期时会收口——q5 实证：30m 数据 + 10m 桶引擎收 3 桶、oracle 只收
+    // 2 桶），故 oracle 也扫一次 eos 水位（不含 close_all）模拟该行为。
+    // close_at_eos = true（cmd_gen batch 语义）时另 close_all 剩余实例。
+    // P3：deferred join 同源——引擎水位到 slice 边界会使尾部 expiry 恰好位于
+    // [数据末尾, slice 边界] 的挂起实例到期（Q8 实证 10M 差 185 条尾部桶），
+    // oracle 也按 eos 水位 pop_due；close_at_eos 时才 flush 全部剩余（i64::MAX）。
     for engine in &mut engines {
         let expired = if engine.hop_unbounded {
             engine

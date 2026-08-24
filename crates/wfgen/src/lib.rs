@@ -5,6 +5,7 @@ pub mod cmd_gen;
 pub mod cmd_gen_nexmark;
 pub mod cmd_helpers;
 pub mod cmd_lint;
+pub mod cmd_perf_diag;
 pub mod cmd_send;
 pub mod cmd_stream;
 pub mod cmd_verify;

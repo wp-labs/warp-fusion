@@ -268,10 +268,13 @@ enum Commands {
         #[arg(long, default_value_t = 0)]
         rate_bytes: u64,
 
-        /// After replaying all data, send a `__wf_sentinel` completion frame
-        /// with n=<this value> (round=0, start_ns = replay start). The engine
-        /// writes the {round,n,start_ns,emit_ns} tuple to perf_sentinel.ndjson
-        /// once the data windows are fully drained — precise EPS for bench.
+        /// Enable per-connection `__wf_sentinel` completion frames: each
+        /// connection sends one after its data (round=conn id, n=that conn's
+        /// actual rows, start_ns=conn start). Single connection = one frame
+        /// (round=0). The engine writes {round,n,start_ns,emit_ns} tuples to
+        /// perf_sentinel.ndjson once data windows drain — precise EPS for bench
+        /// (multi-conn aggregate: Σn/(max emit − min start)). The value is a
+        /// switch; per-conn row counts come from frame scanning.
         #[arg(long)]
         sentinel: Option<i64>,
     },
@@ -526,8 +529,17 @@ async fn run_cli() -> WfgenResult<()> {
             slice_ms,
             sentinel,
         } => {
-            wfgen::cmd_stream::run(scenario_dir, ws, wfl, addr, interval, rate, slice_ms, sentinel)
-                .await
+            wfgen::cmd_stream::run(wfgen::cmd_stream::StreamOptions {
+                scenario_dir,
+                ws,
+                wfl,
+                addr,
+                interval_secs: interval,
+                rate_eps_override: rate,
+                slice_ms,
+                sentinel_n: sentinel,
+            })
+            .await
         }
         Commands::PerfDiag {
             diag,

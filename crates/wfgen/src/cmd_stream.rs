@@ -49,22 +49,25 @@ struct LoadedScenario {
     rule_plans: Vec<wf_lang::plan::RulePlan>,
 }
 
-pub async fn run(
-    scenario_dir: PathBuf,
-    ws: Vec<PathBuf>,
-    wfl: Vec<PathBuf>,
-    addr: String,
-    interval_secs: u64,
-    rate_eps_override: u64,
-    slice_ms: u64,
-    sentinel_n: Option<u64>,
-) -> WfgenResult<()> {
+/// `wfgen stream` 发送参数（CLI 直通；参数超 7 个 clippy 阈值，封装为 struct）。
+pub struct StreamOptions {
+    pub scenario_dir: PathBuf,
+    pub ws: Vec<PathBuf>,
+    pub wfl: Vec<PathBuf>,
+    pub addr: String,
+    pub interval_secs: u64,
+    pub rate_eps_override: u64,
+    pub slice_ms: u64,
+    pub sentinel_n: Option<u64>,
+}
+
+pub async fn run(opts: StreamOptions) -> WfgenResult<()> {
     // 1. Load schemas
     let mut schemas: Vec<WindowSchema> = Vec::new();
-    schemas.extend(load_ws_files(&ws)?);
+    schemas.extend(load_ws_files(&opts.ws)?);
 
     // 2. Compile WFL rules (for inject_gen hit/near_miss/miss)
-    let wfl_files_loaded = load_wfl_files(&wfl)?;
+    let wfl_files_loaded = load_wfl_files(&opts.wfl)?;
     let mut all_rule_plans = Vec::new();
     for wfl_file in &wfl_files_loaded {
         match wf_lang::compile_wfl(wfl_file, &schemas) {
@@ -76,7 +79,7 @@ pub async fn run(
     }
 
     // 3. Load all .wfg scenarios from directory
-    let scenarios = load_scenarios(&scenario_dir, &schemas, &all_rule_plans)?;
+    let scenarios = load_scenarios(&opts.scenario_dir, &schemas, &all_rule_plans)?;
     if scenarios.is_empty() {
         return error::fail(WfgenReason::Io, "no .wfg scenarios found in directory");
     }
@@ -84,20 +87,20 @@ pub async fn run(
     eprintln!(
         "Loaded {} scenarios from {}",
         scenarios.len(),
-        scenario_dir.display()
+        opts.scenario_dir.display()
     );
     eprintln!(
         "Rate: override={} | slice={}ms | scenario interval={}s",
-        rate_eps_override, slice_ms, interval_secs
+        opts.rate_eps_override, opts.slice_ms, opts.interval_secs
     );
-    eprintln!("Target: {}", addr);
+    eprintln!("Target: {}", opts.addr);
 
     // 4. Connect to wfusion TCP via wp_core_connectors NetWriter (async)
-    let mut writer = connect_sender(&addr).await?;
-    eprintln!("Connected to {}", addr);
+    let mut writer = connect_sender(&opts.addr).await?;
+    eprintln!("Connected to {}", opts.addr);
 
     // 5. Cycle through scenarios forever
-    let scenario_dur = Duration::from_secs(interval_secs);
+    let scenario_dur = Duration::from_secs(opts.interval_secs);
     let mut idx = 0usize;
     let mut total_events: u64 = 0;
     let mut total_frames: u64 = 0;
@@ -116,7 +119,7 @@ pub async fn run(
             .iter()
             .map(|s| s.rate.events_per_second())
             .sum();
-        if base_rate <= 0.0 && rate_eps_override == 0 {
+        if base_rate <= 0.0 && opts.rate_eps_override == 0 {
             return error::fail(
                 WfgenReason::Validation,
                 format!(
@@ -125,8 +128,8 @@ pub async fn run(
                 ),
             );
         }
-        let rate: f64 = if rate_eps_override > 0 {
-            rate_eps_override as f64
+        let rate: f64 = if opts.rate_eps_override > 0 {
+            opts.rate_eps_override as f64
         } else {
             base_rate
         };
@@ -168,8 +171,8 @@ pub async fn run(
             // --sentinel 预算模式下截断到剩余预算（batch_total ≤ 预算余量，
             // 保证最后一批发满即停、不超发）。
             let rate_batch =
-                ((rate * slice_ms as f64 / 1000.0).round() as u64).clamp(1, MAX_BATCH);
-            let batch_total = match sentinel_n {
+                ((rate * opts.slice_ms as f64 / 1000.0).round() as u64).clamp(1, MAX_BATCH);
+            let batch_total = match opts.sentinel_n {
                 Some(budget) => rate_batch.min(budget.saturating_sub(total_events).max(1)),
                 None => rate_batch,
             };
@@ -222,7 +225,7 @@ pub async fn run(
 
             // --sentinel <n> 事件预算模式：发满 n 条后结束（stream bench 有限发送，
             // 末尾追加哨兵帧作完成信号）。不传则保持无限循环（原行为）。
-            if sentinel_n.is_some_and(|budget| total_events >= budget) {
+            if opts.sentinel_n.is_some_and(|budget| total_events >= budget) {
                 break;
             }
         }
@@ -245,17 +248,17 @@ pub async fn run(
         );
 
         idx = (idx + 1) % scenarios.len();
-        if sentinel_n.is_some_and(|budget| total_events >= budget) {
+        if opts.sentinel_n.is_some_and(|budget| total_events >= budget) {
             break;
         }
     }
 
     // 预算模式：末尾追加哨兵帧 `{round=0, n=total_events, start_ns}`——引擎哨兵任务
     // 等**数据窗排空**后写 `perf_sentinel.ndjson` 四元组，EPS 精确可算。
-    if sentinel_n.is_some() {
+    if opts.sentinel_n.is_some() {
         let frame =
             crate::cmd_perf_diag::build_sentinel_frame(0, total_events as i64, sentinel_start_ns)?;
-        crate::cmd_perf_diag::send_payload(&addr, &frame).await?;
+        crate::cmd_perf_diag::send_payload(&opts.addr, &frame).await?;
         eprintln!(
             "[sentinel] round=0 n={total_events} sent — EPS 以 data/perf_sentinel.ndjson 为准"
         );

@@ -346,7 +346,7 @@ enum Commands {
     },
     /// 性能诊断驱动（sentinel 漂流瓶协议，与 daemon 读同一份 perf-diag.toml）
     PerfDiag {
-        /// 诊断配置（--diag conf/perf-diag.toml；[[points]] 列表 = 轮数）
+        /// 诊断配置（--diag conf/perf-diag.toml；[[stages]] 列表 = 轮数）
         #[arg(long)]
         diag: PathBuf,
         /// 预编码帧文件（wfgen dump-frames 产物，数据部分）

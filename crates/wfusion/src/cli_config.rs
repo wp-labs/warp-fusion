@@ -194,13 +194,13 @@ async fn run_engine_inner(
     let raw = loader.load_raw().conv_err()?;
     // perf-diag 诊断模式：`--perf-diag conf/perf-diag.toml` 加载诊断配置并初始化
     // 引擎侧全局门控/哨兵（不带参数 = 全关，生产零污染）。入口即参数本身，
-    // 配置文件只承载 [[points]]。
+    // 配置文件只承载 [[stages]]。
     if let Some(diag_path) = perf_diag {
         let diag_config = PerfConfig::load(&diag_path).conv_err()?;
         wf_runtime::perf_diag::init_perf_diag(&diag_config);
         tracing::info!(
             domain = "sys",
-            points = diag_config.points.len(),
+            stages = diag_config.stages.len(),
             initial_gates = format!(
                 "cut_rules={} cut_output={}",
                 wf_runtime::perf_diag::perf_cut_rules(),

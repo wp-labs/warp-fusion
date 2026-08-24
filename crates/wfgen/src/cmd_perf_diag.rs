@@ -1,8 +1,8 @@
 //! `wfgen perf-diag` — 性能诊断驱动（sentinel 漂流瓶协议）。
 //!
-//! 与 daemon 读同一份 `perf-diag.toml`（诊断点列表 = 轮数）。对每个诊断点 k：
+//! 与 daemon 读同一份 `perf-diag.toml`（诊断档列表 = 轮数）。对每个诊断档 k：
 //!
-//! 1. 轮询 `perf_sentinel.ndjson` 直到 `point{current=k}`（引擎已切换好点 k）；
+//! 1. 轮询 `perf_sentinel.ndjson` 直到 `stage{current=k}`（引擎已切换好档 k）；
 //! 2. `T0 = now()`；发预编码帧前缀（覆盖 N 行）+ 帧尾追加
 //!    `__wf_sentinel{round=k, n=n_k, start_ns=T0}` 帧（同连接同 seq 尾部）；
 //! 3. 轮询哨兵文件直到 `sentinel{round=k, n=n_k}`（含引擎补的 `emit_ns`）；
@@ -36,7 +36,7 @@ use crate::error;
 /// `wfgen perf-diag` 命令行参数（main.rs 内定义，这里集中解释）。
 #[derive(Debug, Clone)]
 pub struct PerfDiagArgs {
-    /// 诊断配置（与 daemon 同一份；`[[points]]` 列表 = 轮数）。
+    /// 诊断配置（与 daemon 同一份；`[[stages]]` 列表 = 轮数）。
     pub diag: PathBuf,
     /// 预编码帧文件（数据部分；`wfgen dump-frames` 产物）。
     pub frames: PathBuf,
@@ -44,7 +44,7 @@ pub struct PerfDiagArgs {
     pub addr: String,
     /// 数据量列表（`"100k,1m,3m"`）；缺省 = 帧文件全部行。
     pub n_list: Option<String>,
-    /// 每点轮数（取 max，降负载噪声）。
+    /// 每档轮数（取 max，降负载噪声）。
     pub rounds: usize,
     /// 哨兵记录文件（默认 `data/perf_sentinel.ndjson`）。
     pub sentinels: Option<PathBuf>,
@@ -218,9 +218,9 @@ pub fn build_sentinel_frame(round: i64, n: i64, start_ns: i64) -> WfgenResult<Ve
 /// 文件里的一条记录（JSONL）。
 #[derive(Debug, Clone, PartialEq)]
 pub struct SentinelFileRecord {
-    /// `"point"`（切换完成信号）或 `"sentinel"`（测量记录）。
+    /// `"stage"`（切换完成信号）或 `"sentinel"`（测量记录）。
     pub record_type: String,
-    /// point 记录：已生效诊断点下标。
+    /// stage 记录：已生效诊断档下标。
     pub current: Option<i64>,
     /// sentinel 记录：轮次 / 发送量 / 开始与完成时刻。
     pub round: Option<i64>,
@@ -230,9 +230,9 @@ pub struct SentinelFileRecord {
 }
 
 impl SentinelFileRecord {
-    /// 是否为 `point{current=k}` 记录。
-    pub fn is_point(&self, k: usize) -> bool {
-        self.record_type == "point" && self.current == Some(k as i64)
+    /// 是否为 `stage{current=k}` 记录。
+    pub fn is_stage(&self, k: usize) -> bool {
+        self.record_type == "stage" && self.current == Some(k as i64)
     }
 
     /// 是否为 `sentinel{round=k, n=N}` 记录。
@@ -280,19 +280,19 @@ pub fn read_sentinel_file(path: &Path) -> WfgenResult<Vec<SentinelFileRecord>> {
     Ok(out)
 }
 
-/// 等待文件出现 `point{current=k}`（引擎完成点 k 切换，含 reload）。
-pub async fn wait_for_point(path: &Path, k: usize, timeout: Duration) -> WfgenResult<()> {
+/// 等待文件出现 `stage{current=k}`（引擎完成档 k 切换，含 reload）。
+pub async fn wait_for_stage(path: &Path, k: usize, timeout: Duration) -> WfgenResult<()> {
     let deadline = std::time::Instant::now() + timeout;
     loop {
         let records = read_sentinel_file(path)?;
-        if records.iter().any(|r| r.is_point(k)) {
+        if records.iter().any(|r| r.is_stage(k)) {
             return Ok(());
         }
         if std::time::Instant::now() >= deadline {
             return Err(error::error(
                 WfgenReason::Network,
                 format!(
-                    "timeout waiting for point{{current={k}}} in {} \
+                    "timeout waiting for stage{{current={k}}} in {} \
                      （最常见根因：daemon 未带 --perf-diag 启动——非诊断模式哨兵帧走 \
                      window miss 丢弃，不会落盘；其次：哨兵文件在 daemon 启动后被清空）",
                     path.display()
@@ -341,7 +341,7 @@ pub async fn wait_for_sentinel(
 // 驱动
 // ---------------------------------------------------------------------------
 
-/// 执行一轮诊断：切点 → 发帧+哨兵 → 读完成信号 → 算 EPS。
+/// 执行一轮诊断：切档 → 发帧+哨兵 → 读完成信号 → 算 EPS。
 pub async fn run_perf_diag(args: PerfDiagArgs) -> WfgenResult<()> {
     let config = PerfConfig::load(&args.diag).map_err(|e| {
         error::error(
@@ -349,11 +349,11 @@ pub async fn run_perf_diag(args: PerfDiagArgs) -> WfgenResult<()> {
             format!("load {}: {e}", args.diag.display()),
         )
     })?;
-    let points = config.points;
-    if points.is_empty() {
+    let stages = config.stages;
+    if stages.is_empty() {
         return Err(error::error(
             WfgenReason::Validation,
-            format!("{} 需至少一个 [[points]]", args.diag.display()),
+            format!("{} 需至少一个 [[stages]]", args.diag.display()),
         ));
     }
     let rounds = args.rounds.max(1);
@@ -397,8 +397,8 @@ pub async fn run_perf_diag(args: PerfDiagArgs) -> WfgenResult<()> {
     let timeout = Duration::from_secs(args.timeout_secs.max(1));
 
     println!(
-        "== perf-diag: points={} n-list={:?} rounds={} frames={} total_rows={} ==",
-        points.len(),
+        "== perf-diag: stages={} n-list={:?} rounds={} frames={} total_rows={} ==",
+        stages.len(),
         n_list,
         rounds,
         frames.len(),
@@ -406,10 +406,10 @@ pub async fn run_perf_diag(args: PerfDiagArgs) -> WfgenResult<()> {
     );
 
     let mut wall_lines: Vec<String> = Vec::new();
-    for (k, point) in points.iter().enumerate() {
-        // 1. 等引擎切到点 k（启动即 points[0]，后续 sentinel 驱动）。
-        wait_for_point(&sentinels, k, timeout).await?;
-        println!("== point {k} [{}] applied — sending ==", point.name);
+    for (k, stage) in stages.iter().enumerate() {
+        // 1. 等引擎切到档 k（启动即 stages[0]，后续 sentinel 驱动）。
+        wait_for_stage(&sentinels, k, timeout).await?;
+        println!("== stage {k} [{}] applied — sending ==", stage.name);
         for &n_target in &n_list {
             let mut best_eps = 0.0f64;
             for r in 0..rounds {
@@ -437,7 +437,7 @@ pub async fn run_perf_diag(args: PerfDiagArgs) -> WfgenResult<()> {
                 best_eps = best_eps.max(eps);
                 println!(
                     "  {}/{}: sent {} rows in {:?} → eps={:.0}",
-                    point.name,
+                    stage.name,
                     r + 1,
                     sent_n,
                     Duration::from_nanos((rec.emit_ns.unwrap() - rec.start_ns.unwrap()) as u64),
@@ -446,7 +446,7 @@ pub async fn run_perf_diag(args: PerfDiagArgs) -> WfgenResult<()> {
             }
             wall_lines.push(format!(
                 "{}  eps={:.0} n={} rounds={}",
-                point.name, best_eps, n_target, rounds
+                stage.name, best_eps, n_target, rounds
             ));
         }
     }
@@ -557,13 +557,13 @@ mod tests {
         let path = dir.join(format!("wfgen_sentinel_blank_{}.ndjson", std::process::id()));
         std::fs::write(
             &path,
-            "\n\n{\"record_type\":\"point\",\"current\":0}\n\n",
+            "\n\n{\"record_type\":\"stage\",\"current\":0}\n\n",
         )
         .unwrap();
         let records = read_sentinel_file(&path).unwrap();
         let _ = std::fs::remove_file(&path);
         assert_eq!(records.len(), 1, "空行跳过");
-        assert!(records[0].is_point(0));
+        assert!(records[0].is_stage(0));
     }
 
     #[tokio::test]
@@ -571,7 +571,7 @@ mod tests {
         let dir = std::env::temp_dir();
         let path = dir.join(format!("wfgen_wait_sent_timeout_{}.ndjson", std::process::id()));
         let _ = std::fs::remove_file(&path);
-        std::fs::write(&path, r#"{"record_type":"point","current":0}"#.to_string() + "\n")
+        std::fs::write(&path, r#"{"record_type":"stage","current":0}"#.to_string() + "\n")
             .unwrap();
         let err = wait_for_sentinel(&path, 9, 99, 0, Duration::from_millis(150))
             .await
@@ -583,22 +583,22 @@ mod tests {
     // -- 驱动端到端（mock TCP 服务器模拟引擎）--------------------------------
 
     /// mock 引擎：逐连接接收载荷（含哨兵帧），按 sentinel 驱动模拟状态机——
-    /// 收到 round=k 哨兵后写 `sentinel{round=k,n=N}` + `point{current=k+1}`。
+    /// 收到 round=k 哨兵后写 `sentinel{round=k,n=N}` + `stage{current=k+1}`。
     /// 返回 (TempDir, sentinel 路径, wall 路径)——TempDir 保持存活到断言结束。
     async fn run_driver_with_mock_engine(
-        points_toml: &str,
+        stages_toml: &str,
         n_list: &str,
-        points: usize,
+        stages: usize,
     ) -> (tempfile::TempDir, PathBuf, PathBuf) {
         let dir = tempfile::tempdir().unwrap();
         let diag_path = dir.path().join("perf-diag.toml");
-        std::fs::write(&diag_path, points_toml).unwrap();
+        std::fs::write(&diag_path, stages_toml).unwrap();
         let frames_path = dir.path().join("data.frames");
         make_frames_file(&frames_path, 2); // 2 行
         let sentinel_path = dir.path().join("perf_sentinel.ndjson");
         let wall_path = dir.path().join("wall.txt");
-        // 启动信号：point{current=0} 预先存在（模拟 daemon 启动即写）。
-        std::fs::write(&sentinel_path, r#"{"record_type":"point","current":0}"#.to_string() + "\n")
+        // 启动信号：stage{current=0} 预先存在（模拟 daemon 启动即写）。
+        std::fs::write(&sentinel_path, r#"{"record_type":"stage","current":0}"#.to_string() + "\n")
             .unwrap();
 
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -606,7 +606,7 @@ mod tests {
         let sentinel_path2 = sentinel_path.clone();
         let server = tokio::spawn(async move {
             use tokio::io::AsyncReadExt;
-            for k in 0..points {
+            for k in 0..stages {
                 let (mut sock, _) = listener.accept().await.unwrap();
                 let mut buf = Vec::new();
                 let _ = sock.read_to_end(&mut buf).await.unwrap();
@@ -616,7 +616,7 @@ mod tests {
                         .any(|w| w == b"__wf_sentinel"),
                     "载荷必须含哨兵帧（tag=__wf_sentinel）"
                 );
-                // 模拟引擎处理：落盘 sentinel{round=k, n=2} + 切换信号 point{current=k+1}。
+                // 模拟引擎处理：落盘 sentinel{round=k, n=2} + 切换信号 stage{current=k+1}。
                 tokio::time::sleep(Duration::from_millis(30)).await;
                 let mut rec = std::fs::read_to_string(&sentinel_path2).unwrap();
                 rec.push_str(&format!(
@@ -624,7 +624,7 @@ mod tests {
                 ));
                 rec.push('\n');
                 rec.push_str(&format!(
-                    r#"{{"record_type":"point","current":{}}}"#,
+                    r#"{{"record_type":"stage","current":{}}}"#,
                     k + 1
                 ));
                 rec.push('\n');
@@ -645,23 +645,23 @@ mod tests {
         run_perf_diag(args).await.unwrap();
         server.await.unwrap();
         assert_eq!(
-            points,
+            stages,
             read_sentinel_file(&sentinel_path)
                 .unwrap()
                 .iter()
                 .filter(|r| r.record_type == "sentinel")
                 .count(),
-            "每点一条 sentinel 记录"
+            "每档一条 sentinel 记录"
         );
         (dir, sentinel_path, wall_path)
     }
 
     #[tokio::test]
-    async fn driver_end_to_end_single_point_writes_wall_table() {
+    async fn driver_end_to_end_single_stage_writes_wall_table() {
         let (_dir, _sent, wall) = run_driver_with_mock_engine(
             r#"
-diag = true
-[[points]]
+
+[[stages]]
 name = "floor"
 cut_rules = true
 cut_output = true
@@ -682,16 +682,16 @@ rules = ""
     }
 
     #[tokio::test]
-    async fn driver_end_to_end_two_points_produce_two_wall_rows() {
+    async fn driver_end_to_end_two_stages_produce_two_wall_rows() {
         let (_dir, _sent, wall) = run_driver_with_mock_engine(
             r#"
-diag = true
-[[points]]
+
+[[stages]]
 name = "floor"
 cut_rules = true
 cut_output = true
 rules = ""
-[[points]]
+[[stages]]
 name = "full"
 cut_rules = false
 cut_output = false
@@ -707,11 +707,11 @@ rules = ""
     }
 
     #[tokio::test]
-    async fn driver_rejects_empty_points_and_over_budget_n() {
-        // 空 points。
+    async fn driver_rejects_empty_stages_and_over_budget_n() {
+        // 空 stages。
         let dir = tempfile::tempdir().unwrap();
         let diag_path = dir.path().join("perf-diag.toml");
-        std::fs::write(&diag_path, "diag = true\n").unwrap();
+        std::fs::write(&diag_path, "").unwrap();
         let frames_path = dir.path().join("data.frames");
         make_frames_file(&frames_path, 2);
         let args = PerfDiagArgs {
@@ -725,11 +725,11 @@ rules = ""
             timeout_secs: 2,
         };
         let err = run_perf_diag(args).await.unwrap_err();
-        assert!(err.to_string().contains("至少一个 [[points]]"));
+        assert!(err.to_string().contains("至少一个 [[stages]]"));
         // n 超过帧行数。
         std::fs::write(
             &diag_path,
-            "diag = true\n[[points]]\nname = \"floor\"\n",
+            "[[stages]]\nname = \"floor\"\n",
         )
         .unwrap();
         let args = PerfDiagArgs {
@@ -753,13 +753,13 @@ rules = ""
         let diag_path = dir.path().join("perf-diag.toml");
         std::fs::write(
             &diag_path,
-            "diag = true\n[[points]]\nname = \"floor\"\n",
+            "[[stages]]\nname = \"floor\"\n",
         )
         .unwrap();
         let frames_path = dir.path().join("data.frames");
         make_frames_file(&frames_path, 2);
         let sentinel_path = dir.path().join("perf_sentinel.ndjson");
-        std::fs::write(&sentinel_path, r#"{"record_type":"point","current":0}"#.to_string() + "\n")
+        std::fs::write(&sentinel_path, r#"{"record_type":"stage","current":0}"#.to_string() + "\n")
             .unwrap();
         // 找一个肯定没监听的端口。
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -921,13 +921,13 @@ rules = ""
     }
 
     #[test]
-    fn read_sentinel_file_parses_point_and_sentinel_lines() {
+    fn read_sentinel_file_parses_stage_and_sentinel_lines() {
         let dir = std::env::temp_dir();
         let path = dir.join(format!("wfgen_sentinel_{}.ndjson", std::process::id()));
         write_records(
             &path,
             &[
-                r#"{"record_type":"point","current":0,"wfx_id":"perf-point-0"}"#,
+                r#"{"record_type":"stage","current":0,"wfx_id":"perf-stage-0"}"#,
                 r#"{"record_type":"sentinel","round":0,"n":100000,"start_ns":"1722000000000000000","emit_ns":"1722000000100000000"}"#,
                 r#"{"record_type":"sentinel","round":0,"n":100000,"start_ns":1722000000000000000,"emit_ns":1722000000100000000}"#,
                 r#"not-json"#,
@@ -937,8 +937,8 @@ rules = ""
         let _ = std::fs::remove_file(&path);
 
         assert_eq!(records.len(), 3, "非 JSON 行跳过");
-        assert!(records[0].is_point(0));
-        assert!(!records[0].is_point(1));
+        assert!(records[0].is_stage(0));
+        assert!(!records[0].is_stage(1));
         assert!(records[1].is_sentinel(0, 100_000));
         assert!(!records[1].is_sentinel(1, 100_000));
         // start_ns/emit_ns 字符串与数字两种形态都解析为 i64。
@@ -965,9 +965,9 @@ rules = ""
     }
 
     #[tokio::test]
-    async fn wait_for_point_returns_when_record_appears() {
+    async fn wait_for_stage_returns_when_record_appears() {
         let dir = std::env::temp_dir();
-        let path = dir.join(format!("wfgen_wait_point_{}.ndjson", std::process::id()));
+        let path = dir.join(format!("wfgen_wait_stage_{}.ndjson", std::process::id()));
         let _ = std::fs::remove_file(&path);
         let writer = tokio::spawn({
             let path = path.clone();
@@ -975,22 +975,22 @@ rules = ""
                 tokio::time::sleep(Duration::from_millis(100)).await;
                 std::fs::write(
                     &path,
-                    r#"{"record_type":"point","current":1}"#.to_string() + "\n",
+                    r#"{"record_type":"stage","current":1}"#.to_string() + "\n",
                 )
                 .unwrap();
             }
         });
-        wait_for_point(&path, 1, Duration::from_secs(5)).await.unwrap();
+        wait_for_stage(&path, 1, Duration::from_secs(5)).await.unwrap();
         writer.await.unwrap();
         let _ = std::fs::remove_file(&path);
     }
 
     #[tokio::test]
-    async fn wait_for_point_times_out() {
+    async fn wait_for_stage_times_out() {
         let dir = std::env::temp_dir();
-        let path = dir.join(format!("wfgen_wait_point_timeout_{}.ndjson", std::process::id()));
+        let path = dir.join(format!("wfgen_wait_stage_timeout_{}.ndjson", std::process::id()));
         let _ = std::fs::remove_file(&path);
-        let err = wait_for_point(&path, 2, Duration::from_millis(150))
+        let err = wait_for_stage(&path, 2, Duration::from_millis(150))
             .await
             .unwrap_err();
         assert!(err.to_string().contains("timeout"));

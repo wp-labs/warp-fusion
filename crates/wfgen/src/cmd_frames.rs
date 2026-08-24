@@ -167,8 +167,11 @@ pub async fn send_arrow(
     shard_keys: Option<String>,
     shard_files: Option<String>,
     rate_bytes: u64,
+    sentinel_n: Option<i64>,
 ) -> WfgenResult<()> {
     let connections = connections.max(1);
+    // 哨兵 start_ns = 数据开始发送时刻（与引擎 emit_ns 同机时钟可比）。
+    let start_ns = crate::cmd_perf_diag::now_nanos();
 
     // 分片文件模式:数据已按 key 分区(生成/切分阶段),每条连接纯 copy 一个文件,
     // 发送零解析(恢复 19.8M 级)——C-UCP × 键闭包的最优注入形态。
@@ -184,7 +187,8 @@ pub async fn send_arrow(
                 "--shard-files must list at least one file",
             ));
         }
-        return send_arrow_copy_files(files, addr, rate_bytes).await;
+        send_arrow_copy_files(files, addr.clone(), rate_bytes).await?;
+        return finish_send_arrow_sentinel(&addr, sentinel_n, start_ns).await;
     }
 
     // --shard-keys "bid_events:auction,auction_events:id,person_events:id"
@@ -193,11 +197,33 @@ pub async fn send_arrow(
 
     if key_by_stream.is_empty() {
         // 原样回放(raw copy):纯字节零解析;多连接时每条连接推完整文件
-        send_arrow_raw(input, addr, connections, rate_bytes).await
+        send_arrow_raw(input, addr.clone(), connections, rate_bytes).await?;
     } else {
         // 发送时按 key 分区(动态 decode;适合无预分片文件的临时注入)
-        send_arrow_sharded(input, addr, connections, key_by_stream, rate_bytes).await
+        send_arrow_sharded(input, addr.clone(), connections, key_by_stream, rate_bytes).await?;
     }
+    finish_send_arrow_sentinel(&addr, sentinel_n, start_ns).await
+}
+
+/// 数据全部推完后，若指定 `--sentinel <n>`：单独连接追加哨兵帧
+/// `{round=0, n, start_ns}`——引擎哨兵任务等**数据窗排空**后写
+/// `perf_sentinel.ndjson` 四元组，EPS = n/(emit_ns − start_ns) 精确可算
+/// （替代轮询 metrics append/acked_lag 的 ±200ms 近似）。
+async fn finish_send_arrow_sentinel(
+    addr: &str,
+    sentinel_n: Option<i64>,
+    start_ns: i64,
+) -> WfgenResult<()> {
+    let Some(n) = sentinel_n else {
+        return Ok(());
+    };
+    if n <= 0 {
+        return Ok(());
+    }
+    let frame = crate::cmd_perf_diag::build_sentinel_frame(0, n, start_ns)?;
+    crate::cmd_perf_diag::send_payload(addr, &frame).await?;
+    println!("Sentinel sent (round=0 n={n}) — EPS 以 data/perf_sentinel.ndjson 为准");
+    Ok(())
 }
 
 /// 解析 --shard-keys "stream:field,..." 为 {流 → key 字段}。

@@ -57,6 +57,7 @@ pub async fn run(
     interval_secs: u64,
     rate_eps_override: u64,
     slice_ms: u64,
+    sentinel_n: Option<u64>,
 ) -> WfgenResult<()> {
     // 1. Load schemas
     let mut schemas: Vec<WindowSchema> = Vec::new();
@@ -101,6 +102,8 @@ pub async fn run(
     let mut total_events: u64 = 0;
     let mut total_frames: u64 = 0;
     let wall_start = Instant::now();
+    // 哨兵 start_ns = 流开始时刻（与引擎 emit_ns 同机时钟可比）。
+    let sentinel_start_ns = crate::cmd_perf_diag::now_nanos();
 
     loop {
         let scenario = &scenarios[idx];
@@ -162,8 +165,14 @@ pub async fn run(
 
         while phase_start.elapsed() < scenario_dur {
             // Batch = rate × slice, bounded to keep wfgen memory in check.
-            let batch_total =
+            // --sentinel 预算模式下截断到剩余预算（batch_total ≤ 预算余量，
+            // 保证最后一批发满即停、不超发）。
+            let rate_batch =
                 ((rate * slice_ms as f64 / 1000.0).round() as u64).clamp(1, MAX_BATCH);
+            let batch_total = match sentinel_n {
+                Some(budget) => rate_batch.min(budget.saturating_sub(total_events).max(1)),
+                None => rate_batch,
+            };
             // Actual event-time span for this batch (seconds).
             let slice_secs = batch_total as f64 / rate;
             let slice_nanos = (slice_secs * 1e9).max(1.0) as u64;
@@ -210,6 +219,12 @@ pub async fn run(
             total_frames += gen_frames;
             phase_events += event_count;
             phase_frames += gen_frames;
+
+            // --sentinel <n> 事件预算模式：发满 n 条后结束（stream bench 有限发送，
+            // 末尾追加哨兵帧作完成信号）。不传则保持无限循环（原行为）。
+            if sentinel_n.is_some_and(|budget| total_events >= budget) {
+                break;
+            }
         }
 
         let elapsed = wall_start.elapsed().as_secs_f64();
@@ -230,7 +245,22 @@ pub async fn run(
         );
 
         idx = (idx + 1) % scenarios.len();
+        if sentinel_n.is_some_and(|budget| total_events >= budget) {
+            break;
+        }
     }
+
+    // 预算模式：末尾追加哨兵帧 `{round=0, n=total_events, start_ns}`——引擎哨兵任务
+    // 等**数据窗排空**后写 `perf_sentinel.ndjson` 四元组，EPS 精确可算。
+    if sentinel_n.is_some() {
+        let frame =
+            crate::cmd_perf_diag::build_sentinel_frame(0, total_events as i64, sentinel_start_ns)?;
+        crate::cmd_perf_diag::send_payload(&addr, &frame).await?;
+        eprintln!(
+            "[sentinel] round=0 n={total_events} sent — EPS 以 data/perf_sentinel.ndjson 为准"
+        );
+    }
+    Ok(())
 }
 
 /// Load all .wfg files from a directory.

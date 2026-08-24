@@ -461,7 +461,7 @@ pub async fn run_perf_diag(args: PerfDiagArgs) -> WfgenResult<()> {
 }
 
 /// 单连接发送载荷（字节复制，零解析）并 shutdown。
-async fn send_payload(addr: &str, payload: &[u8]) -> WfgenResult<()> {
+pub(crate) async fn send_payload(addr: &str, payload: &[u8]) -> WfgenResult<()> {
     let stream = tokio::net::TcpStream::connect(&addr)
         .await
         .source_err(WfgenReason::Network, format!("connecting to runtime: {addr}"))?;

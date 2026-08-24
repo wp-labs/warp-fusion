@@ -267,6 +267,13 @@ enum Commands {
         /// burst that swamps its steady-state capacity.
         #[arg(long, default_value_t = 0)]
         rate_bytes: u64,
+
+        /// After replaying all data, send a `__wf_sentinel` completion frame
+        /// with n=<this value> (round=0, start_ns = replay start). The engine
+        /// writes the {round,n,start_ns,emit_ns} tuple to perf_sentinel.ndjson
+        /// once the data windows are fully drained — precise EPS for bench.
+        #[arg(long)]
+        sentinel: Option<i64>,
     },
     /// Split a frame file into N key-sharded frame files (one per shard;
     /// same key always lands in the same file). Send them later with
@@ -343,6 +350,13 @@ enum Commands {
         /// Event-time slice per batch (ms). Batch size = rate × slice, capped for bounded memory
         #[arg(long, default_value = "1000")]
         slice_ms: u64,
+
+        /// Event budget: stop after sending n events and append a `__wf_sentinel`
+        /// completion frame (round=0, n=sent, start_ns=stream start). Engine
+        /// writes {round,n,start_ns,emit_ns} to perf_sentinel.ndjson once data
+        /// windows drain — precise EPS for bench. Omit = keep cycling forever.
+        #[arg(long)]
+        sentinel: Option<u64>,
     },
     /// 性能诊断驱动（sentinel 漂流瓶协议，与 daemon 读同一份 perf-diag.toml）
     PerfDiag {
@@ -475,6 +489,7 @@ async fn run_cli() -> WfgenResult<()> {
             shard_keys,
             shard_files,
             rate_bytes,
+            sentinel,
         } => {
             wfgen::cmd_frames::send_arrow(
                 input,
@@ -483,6 +498,7 @@ async fn run_cli() -> WfgenResult<()> {
                 shard_keys,
                 shard_files,
                 rate_bytes,
+                sentinel,
             )
             .await
         }
@@ -508,7 +524,11 @@ async fn run_cli() -> WfgenResult<()> {
             interval,
             rate,
             slice_ms,
-        } => wfgen::cmd_stream::run(scenario_dir, ws, wfl, addr, interval, rate, slice_ms).await,
+            sentinel,
+        } => {
+            wfgen::cmd_stream::run(scenario_dir, ws, wfl, addr, interval, rate, slice_ms, sentinel)
+                .await
+        }
         Commands::PerfDiag {
             diag,
             frames,

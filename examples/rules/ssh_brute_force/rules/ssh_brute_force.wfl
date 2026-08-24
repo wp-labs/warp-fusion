@@ -5,7 +5,7 @@ use "auth.wfs"
 // 检测逻辑：
 //   1. event filter: SSH 服务 + 登录失败
 //   2. on event: 5 分钟内同一 sip 累计失败 >= 10 次时触发
-//   3.（2026-08-24 对齐 v2.0.2）白名单排除：静态表 v1 不支持 anti，已省略
+//   3. join anti: 排除已知漏扫器 IP（静态表 anti 2026-08-24 放开）
 //   4. yield: 输出统计证据、相关 event_id 集合和事件/窗口时间边界
 //
 // 场景：
@@ -25,6 +25,7 @@ rule ssh_brute_force {
         // 累计 count 与累积的全部证据（collect_set 逐条递增），直到窗口过期才重启。
         on event<accu> { failures: e | count >= 10; }
     } -> score(70.0)
+    join scanner_whitelist anti on e.sip == scanner_whitelist.sip
     entity(ip, e.sip)
     yield security_alerts (
         sip = e.sip,

@@ -1,11 +1,9 @@
 use "network.wfs"
 
-// 端口扫描检测 + IP富化（白名单 anti 排除见下注）
+// 端口扫描检测 + 白名单排除 + IP富化
 //
-// 注（2026-08-24 对齐 v2.0.2）：provider 静态表（side input）v1 仅支持
-// snapshot/inner join；anti 需要时序语义（“至今未匹配”），对无时序静态表
-// 无意义被 checker 拒绝。白名单排除请改用流窗口 anti（Q21 形状）或
-// where 后置过滤；此处仅保留 internal_ips snapshot 富化演示。
+// join scanner_whitelist anti：排除已知漏扫器（静态表 anti = 纯键存在性
+// 否定，2026-08-24 放开；provider join_lookup 有 O(1) 行索引）
 // join internal_ips snapshot：富化告警（运行时注入 department/owner）
 // 注：WFL test runner 不支持 join 窗口数据预加载，富化效果在完整引擎验证
 
@@ -15,6 +13,7 @@ rule port_scan_whitelist {
         on event { c.dport | distinct | count >= 10; }
         and close { total: c | count >= 10; }
     } -> score(80.0)
+    join scanner_whitelist anti on c.sip == scanner_whitelist.sip
     join internal_ips snapshot on c.sip == internal_ips.ip
     entity(ip, c.sip)
     yield network_alerts (

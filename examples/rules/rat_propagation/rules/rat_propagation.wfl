@@ -50,25 +50,25 @@ rule rat_propagation {
 test full_chain_detected for rat_propagation {
   input {
     // 目标 B — 扫描
-    row(scan, sip = "10.0.0.99", dip = "192.168.1.10", dport = "22", bytes_out = "100", event_time = "2026-01-01T00:00:00Z");
+    row(scan, sip = "10.0.0.99", dip = "192.168.1.10", dport = 22, bytes_out = 100, event_time = "2026-01-01T00:00:00Z");
     // 目标 B — 登录成功
-    row(login, sip = "10.0.0.99", dip = "192.168.1.10", dport = "22", service = "ssh", user = "root", result = "success", event_time = "2026-01-01T00:01:00Z");
+    row(login, sip = "10.0.0.99", dip = "192.168.1.10", dport = 22, service = "ssh", user = "root", result = "success", event_time = "2026-01-01T00:01:00Z");
     // 目标 B — 数据传输
-    row(xfer, sip = "10.0.0.99", dip = "192.168.1.10", dport = "22", bytes_out = "50000", event_time = "2026-01-01T00:02:00Z");
+    row(xfer, sip = "10.0.0.99", dip = "192.168.1.10", dport = 22, bytes_out = 50000, event_time = "2026-01-01T00:02:00Z");
 
     // 目标 C — 扫描
-    row(scan, sip = "10.0.0.99", dip = "192.168.1.20", dport = "445", bytes_out = "200", event_time = "2026-01-01T00:03:00Z");
+    row(scan, sip = "10.0.0.99", dip = "192.168.1.20", dport = 445, bytes_out = 200, event_time = "2026-01-01T00:03:00Z");
     // 目标 C — 登录成功
-    row(login, sip = "10.0.0.99", dip = "192.168.1.20", dport = "445", service = "smb", result = "success", event_time = "2026-01-01T00:04:00Z");
+    row(login, sip = "10.0.0.99", dip = "192.168.1.20", dport = 445, service = "smb", result = "success", event_time = "2026-01-01T00:04:00Z");
     // 目标 C — 数据传输
-    row(xfer, sip = "10.0.0.99", dip = "192.168.1.20", dport = "445", bytes_out = "200000", event_time = "2026-01-01T00:05:00Z");
+    row(xfer, sip = "10.0.0.99", dip = "192.168.1.20", dport = 445, bytes_out = 200000, event_time = "2026-01-01T00:05:00Z");
 
     // 目标 D — 扫描
-    row(scan, sip = "10.0.0.99", dip = "192.168.1.30", dport = "3389", bytes_out = "150", event_time = "2026-01-01T00:06:00Z");
+    row(scan, sip = "10.0.0.99", dip = "192.168.1.30", dport = 3389, bytes_out = 150, event_time = "2026-01-01T00:06:00Z");
     // 目标 D — 登录成功
-    row(login, sip = "10.0.0.99", dip = "192.168.1.30", dport = "3389", service = "rdp", result = "success", event_time = "2026-01-01T00:07:00Z");
+    row(login, sip = "10.0.0.99", dip = "192.168.1.30", dport = 3389, service = "rdp", result = "success", event_time = "2026-01-01T00:07:00Z");
     // 目标 D — 数据传输
-    row(xfer, sip = "10.0.0.99", dip = "192.168.1.30", dport = "3389", bytes_out = "150000", event_time = "2026-01-01T00:08:00Z");
+    row(xfer, sip = "10.0.0.99", dip = "192.168.1.30", dport = 3389, bytes_out = 150000, event_time = "2026-01-01T00:08:00Z");
   }
   expect { hits == 3; }
 }
@@ -76,12 +76,12 @@ test full_chain_detected for rat_propagation {
 // 只有扫描和登录，没有数据传输 — 不告警
 test missing_xfer_step for rat_propagation {
   input {
-    row(scan, sip = "10.0.0.50", dip = "192.168.1.10", dport = "22", bytes_out = "100", event_time = "2026-01-01T00:00:00Z");
-    row(login, sip = "10.0.0.50", dip = "192.168.1.10", dport = "22", service = "ssh", user = "admin", result = "success", event_time = "2026-01-01T00:01:00Z");
-    row(scan, sip = "10.0.0.50", dip = "192.168.1.20", dport = "445", bytes_out = "200", event_time = "2026-01-01T00:02:00Z");
-    row(login, sip = "10.0.0.50", dip = "192.168.1.20", dport = "445", service = "smb", result = "success", event_time = "2026-01-01T00:03:00Z");
-    row(scan, sip = "10.0.0.50", dip = "192.168.1.30", dport = "3389", bytes_out = "150", event_time = "2026-01-01T00:04:00Z");
-    row(login, sip = "10.0.0.50", dip = "192.168.1.30", dport = "3389", service = "rdp", result = "success", event_time = "2026-01-01T00:05:00Z");
+    row(scan, sip = "10.0.0.50", dip = "192.168.1.10", dport = 22, bytes_out = 100, event_time = "2026-01-01T00:00:00Z");
+    row(login, sip = "10.0.0.50", dip = "192.168.1.10", dport = 22, service = "ssh", user = "admin", result = "success", event_time = "2026-01-01T00:01:00Z");
+    row(scan, sip = "10.0.0.50", dip = "192.168.1.20", dport = 445, bytes_out = 200, event_time = "2026-01-01T00:02:00Z");
+    row(login, sip = "10.0.0.50", dip = "192.168.1.20", dport = 445, service = "smb", result = "success", event_time = "2026-01-01T00:03:00Z");
+    row(scan, sip = "10.0.0.50", dip = "192.168.1.30", dport = 3389, bytes_out = 150, event_time = "2026-01-01T00:04:00Z");
+    row(login, sip = "10.0.0.50", dip = "192.168.1.30", dport = 3389, service = "rdp", result = "success", event_time = "2026-01-01T00:05:00Z");
   }
   expect { hits == 0; }
 }
@@ -89,10 +89,10 @@ test missing_xfer_step for rat_propagation {
 // 正常运维扫描（只有扫描，无登录无传输）— 不告警
 test admin_scan_only for rat_propagation {
   input {
-    row(scan, sip = "10.0.0.200", dip = "192.168.1.01", dport = "22", bytes_out = "100", event_time = "2026-01-01T00:00:00Z");
-    row(scan, sip = "10.0.0.200", dip = "192.168.1.02", dport = "22", bytes_out = "100", event_time = "2026-01-01T00:01:00Z");
-    row(scan, sip = "10.0.0.200", dip = "192.168.1.03", dport = "22", bytes_out = "100", event_time = "2026-01-01T00:02:00Z");
-    row(scan, sip = "10.0.0.200", dip = "192.168.1.04", dport = "22", bytes_out = "100", event_time = "2026-01-01T00:03:00Z");
+    row(scan, sip = "10.0.0.200", dip = "192.168.1.01", dport = 22, bytes_out = 100, event_time = "2026-01-01T00:00:00Z");
+    row(scan, sip = "10.0.0.200", dip = "192.168.1.02", dport = 22, bytes_out = 100, event_time = "2026-01-01T00:01:00Z");
+    row(scan, sip = "10.0.0.200", dip = "192.168.1.03", dport = 22, bytes_out = 100, event_time = "2026-01-01T00:02:00Z");
+    row(scan, sip = "10.0.0.200", dip = "192.168.1.04", dport = 22, bytes_out = 100, event_time = "2026-01-01T00:03:00Z");
   }
   expect { hits == 0; }
 }
@@ -100,9 +100,9 @@ test admin_scan_only for rat_propagation {
 // 单目标完成全链 — 也应该告警（三步序列 = 攻击确认）
 test single_target_full_chain for rat_propagation {
   input {
-    row(scan, sip = "10.0.0.77", dip = "192.168.1.10", dport = "22", bytes_out = "100", event_time = "2026-01-01T00:00:00Z");
-    row(login, sip = "10.0.0.77", dip = "192.168.1.10", dport = "22", service = "ssh", user = "root", result = "success", event_time = "2026-01-01T00:01:00Z");
-    row(xfer, sip = "10.0.0.77", dip = "192.168.1.10", dport = "22", bytes_out = "50000", event_time = "2026-01-01T00:02:00Z");
+    row(scan, sip = "10.0.0.77", dip = "192.168.1.10", dport = 22, bytes_out = 100, event_time = "2026-01-01T00:00:00Z");
+    row(login, sip = "10.0.0.77", dip = "192.168.1.10", dport = 22, service = "ssh", user = "root", result = "success", event_time = "2026-01-01T00:01:00Z");
+    row(xfer, sip = "10.0.0.77", dip = "192.168.1.10", dport = 22, bytes_out = 50000, event_time = "2026-01-01T00:02:00Z");
   }
   expect { hits == 1; }
 }
@@ -111,8 +111,8 @@ test single_target_full_chain for rat_propagation {
 test out_of_order_login for rat_propagation {
   input {
     row(login, sip = "10.0.0.88", dip = "192.168.1.10", result = "success", event_time = "2026-01-01T00:00:00Z");
-    row(scan, sip = "10.0.0.88", dip = "192.168.1.10", dport = "22", bytes_out = "100", event_time = "2026-01-01T00:01:00Z");
-    row(xfer, sip = "10.0.0.88", dip = "192.168.1.10", bytes_out = "50000", event_time = "2026-01-01T00:02:00Z");
+    row(scan, sip = "10.0.0.88", dip = "192.168.1.10", dport = 22, bytes_out = 100, event_time = "2026-01-01T00:01:00Z");
+    row(xfer, sip = "10.0.0.88", dip = "192.168.1.10", bytes_out = 50000, event_time = "2026-01-01T00:02:00Z");
   }
   expect { hits == 0; }
 }

@@ -57,9 +57,9 @@ test scan_detected_from_netflow_stream for netflow_syn_scan {
 
 test dns_detected_from_dns_stream for dns_tunnel_probe {
   input {
-    row(d, sip = "10.0.0.9", dip = "8.8.8.8", qtype = "TXT", query = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.exfil.example", query_len = "54", event_time = "2026-01-01T00:00:00Z");
-    row(d, sip = "10.0.0.9", dip = "8.8.8.8", qtype = "TXT", query = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.exfil.example", query_len = "54", event_time = "2026-01-01T00:00:01Z");
-    row(d, sip = "10.0.0.9", dip = "8.8.8.8", qtype = "TXT", query = "cccccccccccccccccccccccccccccccccccc.exfil.example", query_len = "54", event_time = "2026-01-01T00:00:02Z");
+    row(d, sip = "10.0.0.9", dip = "8.8.8.8", qtype = "TXT", query = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.exfil.example", query_len = 54, event_time = "2026-01-01T00:00:00Z");
+    row(d, sip = "10.0.0.9", dip = "8.8.8.8", qtype = "TXT", query = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.exfil.example", query_len = 54, event_time = "2026-01-01T00:00:01Z");
+    row(d, sip = "10.0.0.9", dip = "8.8.8.8", qtype = "TXT", query = "cccccccccccccccccccccccccccccccccccc.exfil.example", query_len = 54, event_time = "2026-01-01T00:00:02Z");
   }
   expect { hits == 1; }
 }

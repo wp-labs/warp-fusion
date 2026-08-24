@@ -30,9 +30,9 @@ rule close_demo {
 // 事件流结束 → eos close
 test close_eos for close_demo {
   input {
-    row(c, sip = "10.0.0.1", dip = "192.168.1.1", dport = "80", bytes = "100", protocol = "tcp", action = "syn", event_time = "2026-01-01T00:00:00Z");
-    row(c, sip = "10.0.0.1", dip = "192.168.1.1", dport = "80", bytes = "200", protocol = "tcp", action = "syn", event_time = "2026-01-01T00:01:00Z");
-    row(c, sip = "10.0.0.1", dip = "192.168.1.1", dport = "80", bytes = "300", protocol = "tcp", action = "syn", event_time = "2026-01-01T00:02:00Z");
+    row(c, sip = "10.0.0.1", dip = "192.168.1.1", dport = "80", bytes = 100, protocol = "tcp", action = "syn", event_time = "2026-01-01T00:00:00Z");
+    row(c, sip = "10.0.0.1", dip = "192.168.1.1", dport = "80", bytes = 200, protocol = "tcp", action = "syn", event_time = "2026-01-01T00:01:00Z");
+    row(c, sip = "10.0.0.1", dip = "192.168.1.1", dport = "80", bytes = 300, protocol = "tcp", action = "syn", event_time = "2026-01-01T00:02:00Z");
   }
   expect {
     hits == 1;
@@ -45,9 +45,9 @@ test close_eos for close_demo {
 // 窗口超时 → timeout close
 test close_timeout for close_demo {
   input {
-    row(c, sip = "10.0.0.2", dip = "192.168.1.1", dport = "80", bytes = "100", protocol = "tcp", action = "syn", event_time = "2026-01-01T00:00:00Z");
-    row(c, sip = "10.0.0.2", dip = "192.168.1.1", dport = "80", bytes = "200", protocol = "tcp", action = "syn", event_time = "2026-01-01T00:01:00Z");
-    row(c, sip = "10.0.0.2", dip = "192.168.1.1", dport = "80", bytes = "300", protocol = "tcp", action = "syn", event_time = "2026-01-01T00:02:00Z");
+    row(c, sip = "10.0.0.2", dip = "192.168.1.1", dport = "80", bytes = 100, protocol = "tcp", action = "syn", event_time = "2026-01-01T00:00:00Z");
+    row(c, sip = "10.0.0.2", dip = "192.168.1.1", dport = "80", bytes = 200, protocol = "tcp", action = "syn", event_time = "2026-01-01T00:01:00Z");
+    row(c, sip = "10.0.0.2", dip = "192.168.1.1", dport = "80", bytes = 300, protocol = "tcp", action = "syn", event_time = "2026-01-01T00:02:00Z");
     tick(6m);
   }
   expect {
@@ -61,9 +61,9 @@ test close_timeout for close_demo {
 // 显式 flush → flush close
 test close_flush for close_demo {
   input {
-    row(c, sip = "10.0.0.3", dip = "192.168.1.1", dport = "80", bytes = "100", protocol = "tcp", action = "syn", event_time = "2026-01-01T00:00:00Z");
-    row(c, sip = "10.0.0.3", dip = "192.168.1.1", dport = "80", bytes = "200", protocol = "tcp", action = "syn", event_time = "2026-01-01T00:01:00Z");
-    row(c, sip = "10.0.0.3", dip = "192.168.1.1", dport = "80", bytes = "300", protocol = "tcp", action = "syn", event_time = "2026-01-01T00:02:00Z");
+    row(c, sip = "10.0.0.3", dip = "192.168.1.1", dport = "80", bytes = 100, protocol = "tcp", action = "syn", event_time = "2026-01-01T00:00:00Z");
+    row(c, sip = "10.0.0.3", dip = "192.168.1.1", dport = "80", bytes = 200, protocol = "tcp", action = "syn", event_time = "2026-01-01T00:01:00Z");
+    row(c, sip = "10.0.0.3", dip = "192.168.1.1", dport = "80", bytes = 300, protocol = "tcp", action = "syn", event_time = "2026-01-01T00:02:00Z");
   }
   expect {
     hits == 1;

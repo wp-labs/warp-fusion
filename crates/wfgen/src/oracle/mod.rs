@@ -317,9 +317,8 @@ where
                 }
                 // P3：deferred join（`emit at`）——驱动事件挂起（expiry = emit at），
                 // 不即时输出；到期评估在水位推进后 pop_due（镜像引擎批次尾 scan）。
-                if engine.deferred.is_some() {
+                if let Some(deferred) = &mut engine.deferred {
                     let (due, join_idx, watermark) = {
-                        let deferred = engine.deferred.as_mut().expect("checked");
                         deferred.watermark = deferred.watermark.max(event_nanos);
                         let join_idx = deferred.join_idx;
                         if let Some(p) =
@@ -475,12 +474,11 @@ where
         // 未到期的实例错误输出（Q8 实证：引擎 82446 vs 按 eos 扫 83274，多
         // 828 条尾部 10s 桶）；主遍逐事件 pop_due 已覆盖全部到期实例，EOS
         // 无需再扫。close_at_eos=true（cmd_gen batch 语义）才 flush 全部剩余。
-        if close_at_eos && engine.deferred.is_some() {
+        if close_at_eos
+            && let Some(deferred) = &mut engine.deferred
+        {
             // P3：deferred join —— EOS 关闭触发全部剩余挂起实例（引擎 flush 语义）。
-            let (due, join_idx) = {
-                let deferred = engine.deferred.as_mut().expect("checked");
-                (deferred.pop_due(i64::MAX), deferred.join_idx)
-            };
+            let (due, join_idx) = (deferred.pop_due(i64::MAX), deferred.join_idx);
             let windows: &dyn WindowLookup = engine
                 .lookup
                 .as_ref()
@@ -511,11 +509,8 @@ where
                 &mut alerts,
             );
             // P3：deferred join —— EOS 关闭触发全部剩余挂起实例（引擎 flush 语义）。
-            if engine.deferred.is_some() {
-                let (due, join_idx) = {
-                    let deferred = engine.deferred.as_mut().expect("checked");
-                    (deferred.pop_due(i64::MAX), deferred.join_idx)
-                };
+            if let Some(deferred) = &mut engine.deferred {
+                let (due, join_idx) = (deferred.pop_due(i64::MAX), deferred.join_idx);
                 let windows: &dyn WindowLookup = engine
                     .lookup
                     .as_ref()

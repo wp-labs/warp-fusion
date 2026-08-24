@@ -189,7 +189,7 @@ fn batch_min_ts(batch: &RecordBatch) -> i64 {
                 .column(idx)
                 .as_any()
                 .downcast_ref::<TimestampNanosecondArray>()
-            && arr.len() > 0
+            && !arr.is_empty()
         {
             return arr.value(0);
         }

@@ -159,7 +159,7 @@ pub fn run(
     // eos 水位须覆盖数据末尾（span = count × 100µs，官方固定速率）才能模拟引擎 slice
     // 收口；旧实现固定 30min 与新 span（30M → 50min / 100M → 167min）不匹配。
     let duration = std::time::Duration::from_nanos((count * INTER_EVENT_DELAY_NS).max(1) as u64);
-    let n_threads = thread::available_parallelism()
+    let _n_threads = thread::available_parallelism()
         .map(|n| n.get())
         .unwrap_or(4)
         .min(rule_plans.len())
@@ -174,7 +174,7 @@ pub fn run(
         // 规则必须同组——oracle 的中间 feed 是组内（单实例）事件流转，跨组
         // 实例断裂（q13a/q13b 拆组则 q13b 收不到 bid_mod 事件，EMIT=0）。
         // 用并查集把 yield-bind 依赖链合并为组，每组一个线程。
-        fn find(group_of: &mut Vec<usize>, mut i: usize) -> usize {
+        fn find(group_of: &mut [usize], mut i: usize) -> usize {
             while group_of[i] != i {
                 group_of[i] = group_of[group_of[i]];
                 i = group_of[i];
@@ -322,12 +322,11 @@ fn read_engine_emits(path: &std::path::Path) -> WfgenResult<HashMap<String, u64>
             crate::error::error(WfgenReason::Io, format!("read {}: {e}", f.display()))
         })?;
         for line in text.lines() {
-            if let Some(rest) = line.strip_prefix("EMIT ") {
-                if let Some((rule, n)) = rest.rsplit_once(' ') {
-                    if let Ok(n) = n.trim().parse::<u64>() {
-                        counts.insert(rule.to_string(), n);
-                    }
-                }
+            if let Some(rest) = line.strip_prefix("EMIT ")
+                && let Some((rule, n)) = rest.rsplit_once(' ')
+                && let Ok(n) = n.trim().parse::<u64>()
+            {
+                counts.insert(rule.to_string(), n);
             }
         }
     }
@@ -346,6 +345,7 @@ fn read_engine_emits(path: &std::path::Path) -> WfgenResult<HashMap<String, u64>
 /// - CLOSE_BUDGET_DIFF（q4/q9/q16）：fixed+`and close` 规则，引擎热路径收口
 ///   每批预算 1024 + 尾桶收口依赖墙钟 scan_timeouts（快速 replay 可能不触发
 ///   → 丢尾部收口，引擎自身非确定；oracle 为“所有窗口最终收口”的理想值）。
+///
 /// （q21 anti-join 已于 2026-08-21 随 oracle join 窗口状态实现解决——oracle 与
 /// 引擎均全 drop，对拍一致，不再列 known。）
 fn normalize_counts(

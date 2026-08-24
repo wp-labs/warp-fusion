@@ -169,17 +169,15 @@ fn merge_count(a: &[&str], b: &[&str]) -> (usize, usize) {
 fn print_detail(text_a: &str, text_b: &str, degraded: bool) {
     println!("-- detail --");
     if degraded {
-        let a: Vec<&str> = split_lines(text_a);
-        let b: Vec<&str> = split_lines(text_b);
-        let mut sa: Vec<&str> = a.iter().copied().collect();
-        let mut sb: Vec<&str> = b.iter().copied().collect();
+        let mut sa: Vec<&str> = split_lines(text_a);
+        let mut sb: Vec<&str> = split_lines(text_b);
         sa.sort_unstable();
         sb.sort_unstable();
         let (mut i, mut j) = (0usize, 0usize);
         while i < sa.len() && j < sb.len() {
             match sa[i].cmp(sb[j]) {
                 std::cmp::Ordering::Less => {
-                    println!("- {} (only in {})", sa[i], "a");
+                    println!("- {} (only in a)", sa[i]);
                     i += 1;
                 }
                 std::cmp::Ordering::Greater => {

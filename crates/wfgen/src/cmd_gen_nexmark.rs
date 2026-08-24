@@ -698,9 +698,10 @@ fn check_event(ev: &NxEvent, count: i64) -> bool {
     }
 }
 
-/// 生成 + 可选自检（`--check`）：生成阶段（进度条）→ 数据检查阶段
-/// （`--check` 独立进度条：同一 seed 确定性重放事件流，逐事件值域校验）
-/// + 输出字节 md5 指纹（确定性锚点：同 seed+count 恒等；桶序模式 = 输出文件 md5）。
+/// 生成 + 可选自检（`--check`）：生成阶段（进度条）→ 数据检查阶段（`--check`
+/// 独立进度条：同一 seed 确定性重放事件流，逐事件值域校验）+ 输出字节 md5 指纹
+/// （确定性锚点：同 seed+count 恒等；桶序模式 = 输出文件 md5）。
+///
 /// 报告写 stderr（stdout 是数据流）：默认输出简短质量报告（行数/时间/乱序），
 /// `--check` 追加值域违规与 md5 指纹。
 pub fn run_checked(count: i64, seed: u64, no_sort: bool, check: bool) -> WfgenResult<()> {
@@ -833,9 +834,9 @@ pub fn run_checked(count: i64, seed: u64, no_sort: bool, check: bool) -> WfgenRe
                     }
                     let seller_base0 = seller - FIRST_PERSON_ID;
                     let lo = (n_person_so_far - NUM_ACTIVE_PEOPLE).max(0);
-                    if !(lo..(n_person_so_far + PERSON_ID_LEAD)).contains(&seller_base0) {
-                        ref_violations += 1;
-                    } else if seller_base0 < n_person_so_far && !person_ids.contains(&seller) {
+                    if !(lo..(n_person_so_far + PERSON_ID_LEAD)).contains(&seller_base0)
+                        || (seller_base0 < n_person_so_far && !person_ids.contains(&seller))
+                    {
                         ref_violations += 1;
                     }
                     n_auction_so_far += 1;
@@ -847,16 +848,15 @@ pub fn run_checked(count: i64, seed: u64, no_sort: bool, check: bool) -> WfgenRe
                     // 与 person 窗口的上界 last+LEAD-1 相差 1，照搬官方公式）。
                     if auc_base0 < (last_auc - NUM_IN_FLIGHT_AUCTIONS).max(0)
                         || auc_base0 > last_auc + AUCTION_ID_LEAD
+                        || (auc_base0 <= last_auc && !auction_ids.contains(&auc))
                     {
-                        ref_violations += 1;
-                    } else if auc_base0 <= last_auc && !auction_ids.contains(&auc) {
                         ref_violations += 1;
                     }
                     let bidder_base0 = bidder - FIRST_PERSON_ID;
                     let lo = (n_person_so_far - NUM_ACTIVE_PEOPLE).max(0);
-                    if !(lo..(n_person_so_far + PERSON_ID_LEAD)).contains(&bidder_base0) {
-                        ref_violations += 1;
-                    } else if bidder_base0 < n_person_so_far && !person_ids.contains(&bidder) {
+                    if !(lo..(n_person_so_far + PERSON_ID_LEAD)).contains(&bidder_base0)
+                        || (bidder_base0 < n_person_so_far && !person_ids.contains(&bidder))
+                    {
                         ref_violations += 1;
                     }
                 }
@@ -1240,9 +1240,9 @@ mod tests {
                     }
                     let b0 = seller - FIRST_PERSON_ID;
                     let lo = (n_person - NUM_ACTIVE_PEOPLE).max(0);
-                    if !(lo..(n_person + PERSON_ID_LEAD)).contains(&b0) {
-                        violations += 1;
-                    } else if b0 < n_person && !person_ids.contains(&seller) {
+                    if !(lo..(n_person + PERSON_ID_LEAD)).contains(&b0)
+                        || (b0 < n_person && !person_ids.contains(&seller))
+                    {
                         violations += 1;
                     }
                     n_auction += 1;
@@ -1252,16 +1252,15 @@ mod tests {
                     let last = n_auction - 1;
                     if auc_b0 < (last - NUM_IN_FLIGHT_AUCTIONS).max(0)
                         || auc_b0 > last + AUCTION_ID_LEAD
+                        || (auc_b0 <= last && !auction_ids.contains(&auc))
                     {
-                        violations += 1;
-                    } else if auc_b0 <= last && !auction_ids.contains(&auc) {
                         violations += 1;
                     }
                     let b0 = bidder - FIRST_PERSON_ID;
                     let lo = (n_person - NUM_ACTIVE_PEOPLE).max(0);
-                    if !(lo..(n_person + PERSON_ID_LEAD)).contains(&b0) {
-                        violations += 1;
-                    } else if b0 < n_person && !person_ids.contains(&bidder) {
+                    if !(lo..(n_person + PERSON_ID_LEAD)).contains(&b0)
+                        || (b0 < n_person && !person_ids.contains(&bidder))
+                    {
                         violations += 1;
                     }
                 }
@@ -1381,8 +1380,8 @@ mod tests {
             for _ in 0..20_000 {
                 let s = next_string(&mut rng, max_len, ' ');
                 assert!(
-                    s.len() <= max_len - 1,
-                    "len={} 应 ≤ {max_len}−1（trim 后可更短）",
+                    s.len() < max_len,
+                    "len={} 应 < {max_len}（trim 后可更短）",
                     s.len()
                 );
                 assert!(s.chars().all(|c| c == ' ' || c.is_ascii_lowercase()));
@@ -1416,12 +1415,11 @@ mod tests {
                 channel_id,
                 ..
             } = ev
+                && channel >= HOT_CHANNEL_MAX
             {
-                if channel >= HOT_CHANNEL_MAX {
-                    cold += 1;
-                    if channel_id.is_none() {
-                        missing += 1;
-                    }
+                cold += 1;
+                if channel_id.is_none() {
+                    missing += 1;
                 }
             }
             Ok(())

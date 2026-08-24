@@ -202,7 +202,15 @@ pub async fn send_arrow(
         send_arrow_raw(input, addr.clone(), connections, rate_bytes, sentinel).await
     } else {
         // 发送时按 key 分区(动态 decode;适合无预分片文件的临时注入)
-        send_arrow_sharded(input, addr.clone(), connections, key_by_stream, rate_bytes, sentinel).await
+        send_arrow_sharded(
+            input,
+            addr.clone(),
+            connections,
+            key_by_stream,
+            rate_bytes,
+            sentinel,
+        )
+        .await
     }
 }
 

@@ -26,8 +26,8 @@ use tokio::io::AsyncWriteExt;
 
 use wf_config::PerfConfig;
 
-use crate::error::{WfgenReason, WfgenResult};
 use crate::error;
+use crate::error::{WfgenReason, WfgenResult};
 
 // ---------------------------------------------------------------------------
 // 参数
@@ -105,7 +105,8 @@ pub struct FrameInfo {
 /// 扫描帧文件：RFC6587 `<len> <payload>` 帧序列 → 每帧 (offset, len, rows)。
 /// 行数需解码 Arrow IPC（一次性、离线），发送时纯字节复制。
 pub fn scan_frames(path: &Path) -> WfgenResult<Vec<FrameInfo>> {
-    let file = File::open(path).source_err(WfgenReason::Io, format!("opening {}", path.display()))?;
+    let file =
+        File::open(path).source_err(WfgenReason::Io, format!("opening {}", path.display()))?;
     let mut reader = BufReader::new(file);
     let mut frames = Vec::new();
     let mut offset = 0usize;
@@ -120,7 +121,10 @@ pub fn scan_frames(path: &Path) -> WfgenResult<Vec<FrameInfo>> {
             break; // EOF
         }
         let len_str = std::str::from_utf8(&buf[..buf.len() - 1]).map_err(|_| {
-            error::error(WfgenReason::Serialization, "frame length prefix is not ascii")
+            error::error(
+                WfgenReason::Serialization,
+                "frame length prefix is not ascii",
+            )
         })?;
         let len: usize = len_str.trim().parse().map_err(|_| {
             error::error(
@@ -250,7 +254,7 @@ pub fn read_sentinel_file(path: &Path) -> WfgenResult<Vec<SentinelFileRecord>> {
             return Err(error::error(
                 WfgenReason::Io,
                 format!("reading {}: {e}", path.display()),
-            ))
+            ));
         }
     };
     let mut out = Vec::new();
@@ -267,7 +271,12 @@ pub fn read_sentinel_file(path: &Path) -> WfgenResult<Vec<SentinelFileRecord>> {
             Some(t) => t.to_string(),
             None => continue,
         };
-        let num = |k: &str| v.get(k).and_then(|x| x.as_i64().or_else(|| x.as_str().and_then(|s| s.parse().ok())));
+        let num = |k: &str| {
+            v.get(k).and_then(|x| {
+                x.as_i64()
+                    .or_else(|| x.as_str().and_then(|s| s.parse().ok()))
+            })
+        };
         out.push(SentinelFileRecord {
             record_type,
             current: num("current"),
@@ -367,8 +376,10 @@ pub async fn run_perf_diag(args: PerfDiagArgs) -> WfgenResult<()> {
         ));
     }
     let total_rows: u64 = frames.iter().map(|f| f.rows).sum();
-    let data = std::fs::read(&args.frames)
-        .source_err(WfgenReason::Io, format!("reading {}", args.frames.display()))?;
+    let data = std::fs::read(&args.frames).source_err(
+        WfgenReason::Io,
+        format!("reading {}", args.frames.display()),
+    )?;
 
     let n_list = if let Some(spec) = &args.n_list {
         parse_n_list(spec)?
@@ -423,17 +434,22 @@ pub async fn run_perf_diag(args: PerfDiagArgs) -> WfgenResult<()> {
                 send_payload(&args.addr, &payload).await?;
 
                 // 3. 读完成信号：sentinel{round=k, n=sent_n}（第 r 条）。
-                let rec = wait_for_sentinel(&sentinels, k as i64, sent_n as i64, r, timeout).await?;
-                let eps = compute_eps(rec.n.unwrap_or(sent_n as i64), rec.start_ns.unwrap(), rec.emit_ns.unwrap())
-                    .ok_or_else(|| {
-                        error::error(
-                            WfgenReason::Validation,
-                            format!(
-                                "sentinel 时间序异常: emit_ns={:?} start_ns={:?}",
-                                rec.emit_ns, rec.start_ns
-                            ),
-                        )
-                    })?;
+                let rec =
+                    wait_for_sentinel(&sentinels, k as i64, sent_n as i64, r, timeout).await?;
+                let eps = compute_eps(
+                    rec.n.unwrap_or(sent_n as i64),
+                    rec.start_ns.unwrap(),
+                    rec.emit_ns.unwrap(),
+                )
+                .ok_or_else(|| {
+                    error::error(
+                        WfgenReason::Validation,
+                        format!(
+                            "sentinel 时间序异常: emit_ns={:?} start_ns={:?}",
+                            rec.emit_ns, rec.start_ns
+                        ),
+                    )
+                })?;
                 best_eps = best_eps.max(eps);
                 println!(
                     "  {}/{}: sent {} rows in {:?} → eps={:.0}",
@@ -452,19 +468,21 @@ pub async fn run_perf_diag(args: PerfDiagArgs) -> WfgenResult<()> {
     }
 
     let table = wall_lines.join("\n");
-    std::fs::write(&output, table.clone() + "\n").source_err(
-        WfgenReason::Io,
-        format!("writing {}", output.display()),
-    )?;
-    println!("\n== wall table ==\n{table}\n== done: 结果在 {} ==", output.display());
+    std::fs::write(&output, table.clone() + "\n")
+        .source_err(WfgenReason::Io, format!("writing {}", output.display()))?;
+    println!(
+        "\n== wall table ==\n{table}\n== done: 结果在 {} ==",
+        output.display()
+    );
     Ok(())
 }
 
 /// 单连接发送载荷（字节复制，零解析）并 shutdown。
 pub(crate) async fn send_payload(addr: &str, payload: &[u8]) -> WfgenResult<()> {
-    let stream = tokio::net::TcpStream::connect(&addr)
-        .await
-        .source_err(WfgenReason::Network, format!("connecting to runtime: {addr}"))?;
+    let stream = tokio::net::TcpStream::connect(&addr).await.source_err(
+        WfgenReason::Network,
+        format!("connecting to runtime: {addr}"),
+    )?;
     stream
         .set_nodelay(true)
         .source_err(WfgenReason::Network, "set_nodelay")?;
@@ -489,7 +507,10 @@ mod tests {
 
     #[test]
     fn n_list_parses_suffixes() {
-        assert_eq!(parse_n_list("100k,1m,3m").unwrap(), vec![100_000, 1_000_000, 3_000_000]);
+        assert_eq!(
+            parse_n_list("100k,1m,3m").unwrap(),
+            vec![100_000, 1_000_000, 3_000_000]
+        );
         assert_eq!(parse_n_list("100000").unwrap(), vec![100_000]);
         assert_eq!(parse_n_list("2M").unwrap(), vec![2_000_000]);
         assert_eq!(parse_n_list("1g").unwrap(), vec![1_000_000_000]);
@@ -527,7 +548,10 @@ mod tests {
         assert!(err.to_string().contains("invalid frame length"));
         let _ = std::fs::remove_file(&path);
         // 长度合法但载荷不可解码。
-        let path = dir.join(format!("wfgen_scan_bad_payload_{}.frames", std::process::id()));
+        let path = dir.join(format!(
+            "wfgen_scan_bad_payload_{}.frames",
+            std::process::id()
+        ));
         std::fs::write(&path, b"4 junk").unwrap();
         let err = scan_frames(&path).unwrap_err();
         assert!(err.to_string().contains("decode frame"));
@@ -554,12 +578,11 @@ mod tests {
     #[test]
     fn read_sentinel_file_skips_blank_and_bad_record_type_lines() {
         let dir = std::env::temp_dir();
-        let path = dir.join(format!("wfgen_sentinel_blank_{}.ndjson", std::process::id()));
-        std::fs::write(
-            &path,
-            "\n\n{\"record_type\":\"stage\",\"current\":0}\n\n",
-        )
-        .unwrap();
+        let path = dir.join(format!(
+            "wfgen_sentinel_blank_{}.ndjson",
+            std::process::id()
+        ));
+        std::fs::write(&path, "\n\n{\"record_type\":\"stage\",\"current\":0}\n\n").unwrap();
         let records = read_sentinel_file(&path).unwrap();
         let _ = std::fs::remove_file(&path);
         assert_eq!(records.len(), 1, "空行跳过");
@@ -569,10 +592,16 @@ mod tests {
     #[tokio::test]
     async fn wait_for_sentinel_times_out() {
         let dir = std::env::temp_dir();
-        let path = dir.join(format!("wfgen_wait_sent_timeout_{}.ndjson", std::process::id()));
+        let path = dir.join(format!(
+            "wfgen_wait_sent_timeout_{}.ndjson",
+            std::process::id()
+        ));
         let _ = std::fs::remove_file(&path);
-        std::fs::write(&path, r#"{"record_type":"stage","current":0}"#.to_string() + "\n")
-            .unwrap();
+        std::fs::write(
+            &path,
+            r#"{"record_type":"stage","current":0}"#.to_string() + "\n",
+        )
+        .unwrap();
         let err = wait_for_sentinel(&path, 9, 99, 0, Duration::from_millis(150))
             .await
             .unwrap_err();
@@ -598,8 +627,11 @@ mod tests {
         let sentinel_path = dir.path().join("perf_sentinel.ndjson");
         let wall_path = dir.path().join("wall.txt");
         // 启动信号：stage{current=0} 预先存在（模拟 daemon 启动即写）。
-        std::fs::write(&sentinel_path, r#"{"record_type":"stage","current":0}"#.to_string() + "\n")
-            .unwrap();
+        std::fs::write(
+            &sentinel_path,
+            r#"{"record_type":"stage","current":0}"#.to_string() + "\n",
+        )
+        .unwrap();
 
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap().to_string();
@@ -623,10 +655,7 @@ mod tests {
                     r#"{{"record_type":"sentinel","round":{k},"n":2,"start_ns":"1000000000","emit_ns":"1100000000"}}"#
                 ));
                 rec.push('\n');
-                rec.push_str(&format!(
-                    r#"{{"record_type":"stage","current":{}}}"#,
-                    k + 1
-                ));
+                rec.push_str(&format!(r#"{{"record_type":"stage","current":{}}}"#, k + 1));
                 rec.push('\n');
                 std::fs::write(&sentinel_path2, rec).unwrap();
             }
@@ -727,11 +756,7 @@ rules = ""
         let err = run_perf_diag(args).await.unwrap_err();
         assert!(err.to_string().contains("至少一个 [[stages]]"));
         // n 超过帧行数。
-        std::fs::write(
-            &diag_path,
-            "[[stages]]\nname = \"floor\"\n",
-        )
-        .unwrap();
+        std::fs::write(&diag_path, "[[stages]]\nname = \"floor\"\n").unwrap();
         let args = PerfDiagArgs {
             diag: diag_path,
             frames: frames_path,
@@ -751,16 +776,15 @@ rules = ""
         // 无服务器监听 → send_payload 连接失败。
         let dir = tempfile::tempdir().unwrap();
         let diag_path = dir.path().join("perf-diag.toml");
-        std::fs::write(
-            &diag_path,
-            "[[stages]]\nname = \"floor\"\n",
-        )
-        .unwrap();
+        std::fs::write(&diag_path, "[[stages]]\nname = \"floor\"\n").unwrap();
         let frames_path = dir.path().join("data.frames");
         make_frames_file(&frames_path, 2);
         let sentinel_path = dir.path().join("perf_sentinel.ndjson");
-        std::fs::write(&sentinel_path, r#"{"record_type":"stage","current":0}"#.to_string() + "\n")
-            .unwrap();
+        std::fs::write(
+            &sentinel_path,
+            r#"{"record_type":"stage","current":0}"#.to_string() + "\n",
+        )
+        .unwrap();
         // 找一个肯定没监听的端口。
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap().to_string();
@@ -799,9 +823,21 @@ rules = ""
     #[test]
     fn prefix_for_n_picks_frames_covering_rows() {
         let frames = vec![
-            FrameInfo { offset: 0, len: 10, rows: 4 },
-            FrameInfo { offset: 10, len: 10, rows: 6 },
-            FrameInfo { offset: 20, len: 10, rows: 8 },
+            FrameInfo {
+                offset: 0,
+                len: 10,
+                rows: 4,
+            },
+            FrameInfo {
+                offset: 10,
+                len: 10,
+                rows: 6,
+            },
+            FrameInfo {
+                offset: 20,
+                len: 10,
+                rows: 8,
+            },
         ];
         let data = vec![0u8; 30];
         // 4 行 → 第一帧。
@@ -890,7 +926,10 @@ rules = ""
         assert_eq!(frames.len(), 2);
         assert_eq!(frames[0].rows, 2);
         assert_eq!(frames[1].rows, 1);
-        assert_eq!(frames[0].len, payload.len() + format!("{} ", payload.len()).len());
+        assert_eq!(
+            frames[0].len,
+            payload.len() + format!("{} ", payload.len()).len()
+        );
         assert_eq!(frames[1].offset, frames[0].offset + frames[0].len);
     }
 
@@ -980,7 +1019,9 @@ rules = ""
                 .unwrap();
             }
         });
-        wait_for_stage(&path, 1, Duration::from_secs(5)).await.unwrap();
+        wait_for_stage(&path, 1, Duration::from_secs(5))
+            .await
+            .unwrap();
         writer.await.unwrap();
         let _ = std::fs::remove_file(&path);
     }
@@ -988,7 +1029,10 @@ rules = ""
     #[tokio::test]
     async fn wait_for_stage_times_out() {
         let dir = std::env::temp_dir();
-        let path = dir.join(format!("wfgen_wait_stage_timeout_{}.ndjson", std::process::id()));
+        let path = dir.join(format!(
+            "wfgen_wait_stage_timeout_{}.ndjson",
+            std::process::id()
+        ));
         let _ = std::fs::remove_file(&path);
         let err = wait_for_stage(&path, 2, Duration::from_millis(150))
             .await

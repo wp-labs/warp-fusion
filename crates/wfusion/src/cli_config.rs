@@ -9,7 +9,9 @@ use std::str::FromStr;
 use clap::Args;
 use orion_error::conversion::{ConvErr, ConvStructError, SourceErr, ToStructError};
 
-use wf_config::{ConfigVarContext, FusionConfigLoader, FusionMode, HumanDuration, PerfConfig, parse_vars};
+use wf_config::{
+    ConfigVarContext, FusionConfigLoader, FusionMode, HumanDuration, PerfConfig, parse_vars,
+};
 use wf_runtime::{
     cli::error::{EngineError, EngineReason, EngineResult},
     error::{RuntimeError, RuntimeReason},
@@ -130,9 +132,16 @@ pub async fn run_engine_command(
     metrics_listen: Option<String>,
     perf_diag: Option<PathBuf>,
 ) -> CliResult<()> {
-    run_engine_inner(load, mode, metrics, metrics_interval, metrics_listen, perf_diag)
-        .await
-        .map_err(into_cli_error)
+    run_engine_inner(
+        load,
+        mode,
+        metrics,
+        metrics_interval,
+        metrics_listen,
+        perf_diag,
+    )
+    .await
+    .map_err(into_cli_error)
 }
 
 async fn run_engine_inner(
@@ -210,7 +219,10 @@ async fn run_engine_inner(
         );
     } else {
         wf_runtime::perf_diag::reset_perf_diag();
-        tracing::info!(domain = "sys", "perf-diag 未启用（无 --perf-diag）——哨兵帧将按未知流 window miss 丢弃");
+        tracing::info!(
+            domain = "sys",
+            "perf-diag 未启用（无 --perf-diag）——哨兵帧将按未知流 window miss 丢弃"
+        );
     }
     let reactor = match Reactor::start(fusion_config, raw, &resolved.runtime_base_dir).await {
         Ok(reactor) => reactor,

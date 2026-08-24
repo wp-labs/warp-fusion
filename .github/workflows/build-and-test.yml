@@ -1,9 +1,12 @@
 name: Build & Test
 
 on:
+  # push 只对合入目标 main 触发；其它分支（alpha/develop/feat/tasks 等）由
+  # pull_request（含 synchronize）覆盖——避免推 PR 源分支时 push + PR 双跑
+  # （GitHub 官方去重做法，PR 事件含全部分支）。
   push:
     branches:
-      - "*"
+      - main
   pull_request:
     branches:
       - "*"

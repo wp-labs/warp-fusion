@@ -374,6 +374,17 @@ rule conv_mixed {
         ));
     }
 
+    // 水印推进事件（2026-08-24 修: q5 close_all 对齐 oracle 后, HOP/Fixed 窗口
+    // 只收口**完整窗口**——尾部未完整窗口（w_end > 最终 watermark）释放但不
+    // 发射。1h:fixed 窗口 + 14s 数据永不完整 → EOF 不产出 qualifying → conv 无
+    // 输入。此 dummy 事件把 watermark 推到窗口终点之后（w_end = base + 2800s,
+    // base mod 1h = 800s）→ 窗口完整 close; dummy IP scan=1 不 qualify, 且落入
+    // 下一窗口 EOF 不发射, 不影响断言）。
+    lines.push(format!(
+        r#"{{"_stream":"netflow","sip":"10.0.0.9","dport":9999,"action":"syn","event_time":{}}}"#,
+        base + 2_800_000_000_001i64
+    ));
+
     let ndjson = lines.join("\n");
     let reader = BufReader::new(ndjson.as_bytes());
 

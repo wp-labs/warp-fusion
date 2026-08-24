@@ -19,18 +19,65 @@ use crate::wfg_parser::parse_wfg;
 use crate::cmd_helpers::{load_wfl_files, load_ws_files};
 use crate::tcp_send::send_events;
 
-#[allow(clippy::too_many_arguments)]
-pub async fn run(
-    scenario: PathBuf,
-    format: String,
-    out: Option<PathBuf>,
-    ws: Vec<PathBuf>,
-    wfl: Vec<PathBuf>,
-    no_wfl: bool,
-    no_oracle: bool,
-    send: bool,
-    addr: String,
-) -> WfgenResult<()> {
+/// `wfgen gen` 参数：从 .wfg scenario 生成测试数据。
+#[derive(clap::Args)]
+pub struct Args {
+    /// Path to the .wfg scenario file
+    #[arg(long)]
+    pub scenario: PathBuf,
+
+    /// Output format: "jsonl" or "arrow" ("arrow-ipc"/"ipc" aliases)
+    #[arg(long, default_value = "jsonl")]
+    pub format: String,
+
+    /// Output directory. Optional when --send is used; at least one of
+    /// --out / --send must be given.
+    #[arg(long)]
+    pub out: Option<PathBuf>,
+
+    /// Additional .wfs schema files (beyond those in `use` declarations)
+    #[arg(long)]
+    pub ws: Vec<PathBuf>,
+
+    /// Additional .wfl rule files (beyond those in `use` declarations)
+    #[arg(long)]
+    pub wfl: Vec<PathBuf>,
+
+    /// Skip the entire WFL pipeline: no rule loading, no `_global.wfl` /
+    /// yield-preset evaluation, no compilation, no injection-aware event
+    /// generation, and no oracle/expected output. Generation falls back to
+    /// baseline background events.
+    #[arg(long)]
+    pub no_wfl: bool,
+
+    /// Skip oracle/expected output only: WFL is still compiled, so
+    /// injection `use()` fixed values apply and generated events are
+    /// inject-aware; no `.except.jsonl` / `.except.meta.jsonl` sidecars
+    /// are written. Use `--no-wfl` to also drop rule compilation.
+    #[arg(long)]
+    pub no_oracle: bool,
+
+    /// Send generated events to wfusion over TCP + Arrow IPC
+    #[arg(long)]
+    pub send: bool,
+
+    /// Runtime TCP address used with --send, e.g. 127.0.0.1:9800
+    #[arg(long, default_value = "127.0.0.1:9800")]
+    pub addr: String,
+}
+
+pub async fn run(args: Args) -> WfgenResult<()> {
+    let Args {
+        scenario,
+        format,
+        out,
+        ws,
+        wfl,
+        no_wfl,
+        no_oracle,
+        send,
+        addr,
+    } = args;
     // At least one sink must be requested: write files via --out, stream via
     // --send, or both. Having neither is a usage error, not a silent no-op.
     if out.is_none() && !send {
@@ -295,17 +342,17 @@ mod tests {
     // return the usage error without touching the filesystem.
     #[tokio::test]
     async fn run_requires_out_or_send() {
-        let err = run(
-            PathBuf::from("nonexistent.wfg"),
-            "jsonl".to_string(),
-            None,       // out
-            Vec::new(), // ws
-            Vec::new(), // wfl
-            false,      // no_wfl
-            false,      // no_oracle
-            false,      // send
-            "127.0.0.1:1".to_string(),
-        )
+        let err = run(Args {
+            scenario: PathBuf::from("nonexistent.wfg"),
+            format: "jsonl".to_string(),
+            out: None,
+            ws: Vec::new(),
+            wfl: Vec::new(),
+            no_wfl: false,
+            no_oracle: false,
+            send: false,
+            addr: "127.0.0.1:1".to_string(),
+        })
         .await;
         let err = err.unwrap_err();
         let msg = err.report().render();

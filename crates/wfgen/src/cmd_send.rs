@@ -14,14 +14,44 @@ use crate::wfg_parser::parse_wfg;
 use crate::cmd_helpers::load_ws_files;
 use crate::tcp_send::{connect_sender, send_events_with_stream};
 
-pub async fn run(
-    scenario: PathBuf,
-    input: PathBuf,
-    addr: String,
-    ws: Vec<PathBuf>,
-    chunk: Option<usize>,
-    rate_ms: Option<u64>,
-) -> WfgenResult<()> {
+/// `wfgen send` 参数：发送已生成的 JSONL 事件到 wfusion（TCP + Arrow IPC）。
+#[derive(clap::Args)]
+pub struct Args {
+    /// Path to the .wfg scenario file (used to load schemas)
+    #[arg(long)]
+    pub scenario: PathBuf,
+
+    /// Path to generated events JSONL file, or `-` to read stdin
+    #[arg(long)]
+    pub input: PathBuf,
+
+    /// Runtime TCP address, e.g. 127.0.0.1:9800
+    #[arg(long, default_value = "127.0.0.1:9800")]
+    pub addr: String,
+
+    /// Additional .wfs schema files (beyond those in `use` declarations)
+    #[arg(long)]
+    pub ws: Vec<PathBuf>,
+
+    /// Stream in batches of this many events over one persistent
+    /// connection. Omit to read the whole input and send once.
+    #[arg(long)]
+    pub chunk: Option<usize>,
+
+    /// Sleep this many ms between streamed batches (pacing; needs --chunk)
+    #[arg(long)]
+    pub rate_ms: Option<u64>,
+}
+
+pub async fn run(args: Args) -> WfgenResult<()> {
+    let Args {
+        scenario,
+        input,
+        addr,
+        ws,
+        chunk,
+        rate_ms,
+    } = args;
     let wfg_content = std::fs::read_to_string(&scenario).source_err(
         WfgenReason::Io,
         format!("reading .wfg file: {}", scenario.display()),

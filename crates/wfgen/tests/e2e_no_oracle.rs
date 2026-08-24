@@ -13,13 +13,28 @@ use std::path::PathBuf;
 
 use serde_json::Value as Json;
 
-use wfgen::cmd_gen::run;
+use wfgen::cmd_gen::{self, run};
 use wfgen::datagen::generate;
 use wfgen::loader::load_from_uses;
 use wfgen::validate::validate_wfg;
 use wfgen::wfg_parser::parse_wfg;
 
 const WFG_REL: &str = "examples/count/scenarios/brute_force.wfg";
+
+/// 构造 `wfgen gen` 参数（fixture 固定：brute_force.wfg / jsonl / 不发送）。
+fn gen_args(out: PathBuf, wfl: Vec<PathBuf>, no_wfl: bool, no_oracle: bool) -> cmd_gen::Args {
+    cmd_gen::Args {
+        scenario: manifest().join(WFG_REL),
+        format: "jsonl".to_string(),
+        out: Some(out),
+        ws: Vec::new(),
+        wfl,
+        no_wfl,
+        no_oracle,
+        send: false,
+        addr: "127.0.0.1:1".to_string(),
+    }
+}
 
 fn manifest() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -81,18 +96,7 @@ async fn no_oracle_run_writes_events_without_sidecars() {
     std::fs::create_dir_all(&tmp).expect("create temp out dir");
     let out = tmp.clone();
 
-    let res = run(
-        manifest().join(WFG_REL),
-        "jsonl".to_string(),
-        Some(out.clone()),
-        Vec::new(), // ws
-        Vec::new(), // wfl
-        false,      // no_wfl
-        true,       // no_oracle
-        false,      // send
-        "127.0.0.1:1".to_string(),
-    )
-    .await;
+    let res = run(gen_args(out.clone(), Vec::new(), false, true)).await;
     assert!(res.is_ok(), "--no-oracle run failed: {:?}", res.err());
 
     let files: Vec<String> = std::fs::read_dir(&out)
@@ -122,18 +126,7 @@ async fn no_wfl_run_writes_events_without_sidecars() {
     std::fs::create_dir_all(&tmp).expect("create temp out dir");
     let out = tmp.clone();
 
-    let res = run(
-        manifest().join(WFG_REL),
-        "jsonl".to_string(),
-        Some(out.clone()),
-        Vec::new(), // ws
-        Vec::new(), // wfl
-        true,       // no_wfl
-        false,      // no_oracle
-        false,      // send
-        "127.0.0.1:1".to_string(),
-    )
-    .await;
+    let res = run(gen_args(out.clone(), Vec::new(), true, false)).await;
     assert!(res.is_ok(), "--no-wfl run failed: {:?}", res.err());
 
     let files: Vec<String> = std::fs::read_dir(&out)
@@ -192,18 +185,7 @@ async fn no_wfl_run_skips_cli_wfl_files() {
     let out = tmp.clone();
 
     let wfl_file = manifest().join("examples/count/rules/brute_force.wfl");
-    let res = run(
-        manifest().join(WFG_REL),
-        "jsonl".to_string(),
-        Some(out.clone()),
-        Vec::new(),     // ws
-        vec![wfl_file], // wfl — must be skipped under --no-wfl
-        true,           // no_wfl
-        false,          // no_oracle
-        false,          // send
-        "127.0.0.1:1".to_string(),
-    )
-    .await;
+    let res = run(gen_args(out.clone(), vec![wfl_file], true, false)).await;
     assert!(
         res.is_ok(),
         "--no-wfl with CLI --wfl failed: {:?}",
@@ -233,18 +215,7 @@ async fn no_oracle_run_keeps_injected_fixed_values() {
     std::fs::create_dir_all(&tmp).expect("create temp out dir");
     let out = tmp.clone();
 
-    let res = run(
-        manifest().join(WFG_REL),
-        "jsonl".to_string(),
-        Some(out.clone()),
-        Vec::new(), // ws
-        Vec::new(), // wfl
-        false,      // no_wfl
-        true,       // no_oracle
-        false,      // send
-        "127.0.0.1:1".to_string(),
-    )
-    .await;
+    let res = run(gen_args(out.clone(), Vec::new(), false, true)).await;
     assert!(res.is_ok(), "--no-oracle run failed: {:?}", res.err());
 
     // output_case = the scenario file stem → brute_force.jsonl.

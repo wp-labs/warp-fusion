@@ -24,10 +24,10 @@ use std::thread;
 use chrono::{DateTime, Utc};
 use serde_json::json;
 
-use crate::cmd_gen_nexmark::{INTER_EVENT_DELAY_NS, NxEvent, generate_events, nx_to_value};
 use crate::cmd_helpers::{load_wfl_files, load_ws_files};
 use crate::datagen::stream_gen::GenEvent;
 use crate::error::{WfgenReason, WfgenResult};
+use crate::nexmark::{INTER_EVENT_DELAY_NS, NxEvent, generate_events, nx_to_value};
 use crate::oracle::run_oracle_events_full;
 
 const BASE_NS: i64 = 1767225600000000000; // 与 cmd_gen_nexmark::BASE_NS 一致（2026-01-01T00:00:00Z）
@@ -93,14 +93,47 @@ fn nx_to_gen_event(ev: &NxEvent) -> GenEvent {
     }
 }
 
-pub fn run(
-    count: i64,
-    seed: u64,
-    rules_dir: PathBuf,
-    schemas: PathBuf,
-    query: Option<String>,
-    engine_emit: Option<PathBuf>,
-) -> WfgenResult<()> {
+/// `wfgen verify-nexmark` 参数：真实 WFL 规则引擎处理 NEXMark 事件，产出
+/// 各规则应 EMIT 计数，供与引擎 daemon 对拍。
+#[derive(clap::Args)]
+pub struct Args {
+    /// Number of events to verify
+    pub count: i64,
+
+    /// RNG seed (must match `gen-nexmark` for comparable output)
+    #[arg(long, default_value_t = 1)]
+    pub seed: u64,
+
+    /// Directory containing the NEXMark .wfl rule files (glob *.wfl)
+    #[arg(long, default_value = "models/queries")]
+    pub rules_dir: PathBuf,
+
+    /// NEXMark window schema .wfs (referenced by `use` in the rules)
+    #[arg(long, default_value = "models/schemas/nexmark.wfs")]
+    pub schemas: PathBuf,
+
+    /// 只验证指定查询的规则文件（q1..q22；默认全部 models/queries/*.wfl）。
+    /// bench 单查询验证时传 --query 大幅提速（26 规则 → 1 个文件）。
+    #[arg(long)]
+    pub query: Option<String>,
+
+    /// 引擎结果对拍：目录（扫描 bench_*_replay.txt，bench.sh 用法）或单文件。
+    /// 读引擎实际 EMIT 计数，在 wfgen 内用 git-diff 同款分层方法
+    /// （L1 哈希 → L2 Myers/降级 → L3 明细）与 oracle 逐规则对拍；
+    /// 退出码 0=一致 / 1=有差异（q21 已知差异不判失败）。
+    #[arg(long)]
+    pub engine_emit: Option<PathBuf>,
+}
+
+pub fn run(args: Args) -> WfgenResult<()> {
+    let Args {
+        count,
+        seed,
+        rules_dir,
+        schemas,
+        query,
+        engine_emit,
+    } = args;
     // 1) 生成并分桶（确定性事件流，与 gen-nexmark 一致；桶序 = daemon 输入序）
     let data = collect_buckets(count, seed)?;
 

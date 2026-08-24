@@ -1,5 +1,3 @@
-use std::path::PathBuf;
-
 use clap::{Parser, Subcommand};
 
 use wfgen::error::WfgenResult;
@@ -16,378 +14,43 @@ struct Cli {
     command: Commands,
 }
 
+/// 每个子命令的参数定义与实现都在各自的 `cmd_*` 模块里（`cmd_*::Args` +
+/// `cmd_*::run`），这里只做命令注册与分发。
 #[derive(Subcommand)]
 enum Commands {
     /// Generate test data from a .wfg scenario file
-    Gen {
-        /// Path to the .wfg scenario file
-        #[arg(long)]
-        scenario: PathBuf,
-
-        /// Output format: "jsonl" or "arrow" ("arrow-ipc"/"ipc" aliases)
-        #[arg(long, default_value = "jsonl")]
-        format: String,
-
-        /// Output directory. Optional when --send is used; at least one of
-        /// --out / --send must be given.
-        #[arg(long)]
-        out: Option<PathBuf>,
-
-        /// Additional .wfs schema files (beyond those in `use` declarations)
-        #[arg(long)]
-        ws: Vec<PathBuf>,
-
-        /// Additional .wfl rule files (beyond those in `use` declarations)
-        #[arg(long)]
-        wfl: Vec<PathBuf>,
-
-        /// Skip the entire WFL pipeline: no rule loading, no `_global.wfl` /
-        /// yield-preset evaluation, no compilation, no injection-aware event
-        /// generation, and no oracle/expected output. Generation falls back to
-        /// baseline background events.
-        #[arg(long)]
-        no_wfl: bool,
-
-        /// Skip oracle/expected output only: WFL is still compiled, so
-        /// injection `use()` fixed values apply and generated events are
-        /// inject-aware; no `.except.jsonl` / `.except.meta.jsonl` sidecars
-        /// are written. Use `--no-wfl` to also drop rule compilation.
-        #[arg(long)]
-        no_oracle: bool,
-
-        /// Send generated events to wfusion over TCP + Arrow IPC
-        #[arg(long)]
-        send: bool,
-
-        /// Runtime TCP address used with --send, e.g. 127.0.0.1:9800
-        #[arg(long, default_value = "127.0.0.1:9800")]
-        addr: String,
-    },
+    Gen(wfgen::cmd_gen::Args),
     /// Generate deterministic NEXMark events (Person/Auction/Bid) as JSONL
-    GenNexmark {
-        /// Number of events to generate
-        count: i64,
-
-        /// RNG seed for deterministic output
-        #[arg(long, default_value_t = 1)]
-        seed: u64,
-
-        /// Emit phase-major generation order instead of event-time order
-        /// (pre-2026-08-20 behavior; breaks `over`-window time eviction)
-        #[arg(long)]
-        no_sort: bool,
-
-        /// 生成自检：生成后独立检查阶段（同一 seed 重放，独立进度条），
-        /// 逐事件值域校验 + 输出字节 md5 指纹
-        /// （报告写 stderr；stdout 仍是数据流，可与 --no-sort 之外的管道共用）
-        #[arg(long)]
-        check: bool,
-    },
+    GenNexmark(wfgen::cmd_gen_nexmark::Args),
     /// NEXMark 引擎结果验证：用真实 WFL 规则引擎（wf_engine）处理
     /// wfgen 生成的事件，产出各规则应 EMIT 计数（JSON），供与引擎
     /// daemon 实际 EMIT 对拍（nexmark_pk/bench.sh --verify）
-    VerifyNexmark {
-        /// Number of events to verify
-        count: i64,
-
-        /// RNG seed (must match `gen-nexmark` for comparable output)
-        #[arg(long, default_value_t = 1)]
-        seed: u64,
-
-        /// Directory containing the NEXMark .wfl rule files (glob *.wfl)
-        #[arg(long, default_value = "models/queries")]
-        rules_dir: PathBuf,
-
-        /// NEXMark window schema .wfs (referenced by `use` in the rules)
-        #[arg(long, default_value = "models/schemas/nexmark.wfs")]
-        schemas: PathBuf,
-
-        /// 只验证指定查询的规则文件（q1..q22；默认全部 models/queries/*.wfl）。
-        /// bench 单查询验证时传 --query 大幅提速（26 规则 → 1 个文件）。
-        #[arg(long)]
-        query: Option<String>,
-
-        /// 引擎结果对拍：目录（扫描 bench_*_replay.txt，bench.sh 用法）或单文件。
-        /// 读引擎实际 EMIT 计数，在 wfgen 内用 git-diff 同款分层方法
-        /// （L1 哈希 → L2 Myers/降级 → L3 明细）与 oracle 逐规则对拍；
-        /// 退出码 0=一致 / 1=有差异（q21 已知差异不判失败）。
-        #[arg(long)]
-        engine_emit: Option<PathBuf>,
-    },
+    VerifyNexmark(wfgen::cmd_verify_nexmark::Args),
     /// 分层文件比对（L1 哈希相同性 → L2 Myers 差异量 → L3 --detail 定位）
-    Diff {
-        /// 第一个文件（如引擎 alerts）
-        a: PathBuf,
-
-        /// 第二个文件（如模拟器期望）
-        b: PathBuf,
-
-        /// 输出差异行明细（L3；差异大时降级为排序归并明细）
-        #[arg(long)]
-        detail: bool,
-    },
+    Diff(wfgen::cmd_diff::Args),
     /// Lint (validate) a .wfg scenario file
-    Lint {
-        /// Path to the .wfg scenario file
-        scenario: PathBuf,
-
-        /// Additional .wfs schema files (beyond those in `use` declarations)
-        #[arg(long)]
-        ws: Vec<PathBuf>,
-
-        /// Additional .wfl rule files (beyond those in `use` declarations)
-        #[arg(long)]
-        wfl: Vec<PathBuf>,
-    },
+    Lint(wfgen::cmd_lint::Args),
     /// Verify actual alerts against oracle expectations
-    Verify {
-        /// Path to the oracle (expected) JSONL file
-        #[arg(long)]
-        expected: PathBuf,
-
-        /// Path to the actual alerts JSONL file
-        #[arg(long)]
-        actual: PathBuf,
-
-        /// Score tolerance for matching (overrides meta file if set)
-        #[arg(long)]
-        score_tolerance: Option<f64>,
-
-        /// Time tolerance for matching in seconds (overrides meta file if set)
-        #[arg(long)]
-        time_tolerance: Option<f64>,
-
-        /// Path to oracle meta JSON with tolerances (written by gen)
-        #[arg(long)]
-        meta: Option<PathBuf>,
-
-        /// Output format: "json" or "markdown" (default: json)
-        #[arg(long, default_value = "json")]
-        format: String,
-    },
+    Verify(wfgen::cmd_verify::Args),
     /// Send generated JSONL events to wfusion over TCP + Arrow IPC
-    Send {
-        /// Path to the .wfg scenario file (used to load schemas)
-        #[arg(long)]
-        scenario: PathBuf,
-
-        /// Path to generated events JSONL file, or `-` to read stdin
-        #[arg(long)]
-        input: PathBuf,
-
-        /// Runtime TCP address, e.g. 127.0.0.1:9800
-        #[arg(long, default_value = "127.0.0.1:9800")]
-        addr: String,
-
-        /// Additional .wfs schema files (beyond those in `use` declarations)
-        #[arg(long)]
-        ws: Vec<PathBuf>,
-
-        /// Stream in batches of this many events over one persistent
-        /// connection. Omit to read the whole input and send once.
-        #[arg(long)]
-        chunk: Option<usize>,
-
-        /// Sleep this many ms between streamed batches (pacing; needs --chunk)
-        #[arg(long)]
-        rate_ms: Option<u64>,
-    },
+    Send(wfgen::cmd_send::Args),
     /// Pre-encode JSONL events into Arrow frames for raw byte replay
-    DumpFrames {
-        /// Path to the .wfg scenario file (used to load schemas)
-        #[arg(long)]
-        scenario: PathBuf,
-
-        /// Path to generated events JSONL file, or `-` to read stdin
-        #[arg(long)]
-        input: PathBuf,
-
-        /// Runtime TCP address used only to borrow the framed encoder
-        #[arg(long, default_value = "127.0.0.1:9800")]
-        addr: String,
-
-        /// Additional .wfs schema files (beyond those in `use` declarations)
-        #[arg(long)]
-        ws: Vec<PathBuf>,
-
-        /// Path to write the encoded frame bytes to
-        #[arg(long)]
-        output: PathBuf,
-
-        /// Accumulate this many events per Arrow batch (default: one-shot,
-        /// matching `send` without --chunk). Bounds per-batch memory for huge
-        /// event counts.
-        #[arg(long)]
-        chunk: Option<usize>,
-
-        /// Frame byte cap (default 8388608 = 8MiB). A frame is one window commit;
-        /// smaller frames → lower per-batch memory, more commits.
-        #[arg(long, default_value_t = wfgen::output::arrow_ipc::DEFAULT_MAX_FRAME_BYTES)]
-        max_frame_bytes: usize,
-
-        /// Frame row cap (default 100000).
-        #[arg(long, default_value_t = wfgen::output::arrow_ipc::DEFAULT_MAX_FRAME_ROWS)]
-        max_frame_rows: usize,
-    },
+    DumpFrames(wfgen::cmd_frames::DumpFramesArgs),
     /// Replay pre-encoded Arrow frame bytes over `connections` concurrent TCP
     /// connections (no JSON parsing / Arrow encoding on the hot path).
     /// `connections>1` is the C-UCP supply lever: the runtime's TCP source
     /// round-robins the connections across its `instances` reader loops.
-    SendArrow {
-        /// Path to the frames file produced by `wfgen dump-frames`
-        #[arg(long)]
-        input: PathBuf,
-
-        /// Runtime TCP address, e.g. 127.0.0.1:9800
-        #[arg(long, default_value = "127.0.0.1:9800")]
-        addr: String,
-
-        /// Concurrent TCP connections (each sends a full copy of the file)
-        #[arg(long, default_value_t = 1)]
-        connections: usize,
-
-        /// Per-stream key field for key-sharded replay, e.g.
-        /// "bid_events:auction,auction_events:id,person_events:id". When set
-        /// with --connections>1, events are split by hash(key) so the same key
-        /// always goes to the same connection (key closure) — multi-connection
-        /// stays correct for stateful rules.
-        #[arg(long)]
-        shard_keys: Option<String>,
-
-        /// Comma-separated pre-sharded frame files, one per connection
-        /// (produced by `wfgen shard-frames`). Each connection raw-copies its
-        /// file — zero decode on the send path, so multi-connection stays at
-        /// raw-copy speed while preserving key closure for stateful rules.
-        #[arg(long)]
-        shard_files: Option<String>,
-
-        /// Target replay rate in bytes/sec. 0 = unlimited (default). When > 0,
-        /// send-arrow paces its raw-copy at ~this rate per connection, so a
-        /// stateful engine (e.g. 450-rule qradar) is not hit with an instant
-        /// burst that swamps its steady-state capacity.
-        #[arg(long, default_value_t = 0)]
-        rate_bytes: u64,
-
-        /// Enable per-connection `__wf_sentinel` completion frames: each
-        /// connection sends one after its data (round=conn id, n=that conn's
-        /// actual rows, start_ns=conn start). Single connection = one frame
-        /// (round=0). The engine writes {round,n,start_ns,emit_ns} tuples to
-        /// perf_sentinel.ndjson once data windows drain — precise EPS for bench
-        /// (multi-conn aggregate: Σn/(max emit − min start)). The value is a
-        /// switch; per-conn row counts come from frame scanning.
-        #[arg(long)]
-        sentinel: Option<i64>,
-    },
+    SendArrow(wfgen::cmd_frames::SendArrowArgs),
     /// Split a frame file into N key-sharded frame files (one per shard;
     /// same key always lands in the same file). Send them later with
     /// `send-arrow --shard-files` for zero-decode multi-connection replay.
-    ShardFrames {
-        /// Path to the frame file produced by `wfgen dump-frames`
-        #[arg(long)]
-        input: PathBuf,
-
-        /// Number of shards (connections to replay with later)
-        #[arg(long)]
-        shards: usize,
-
-        /// Per-stream key field, e.g. "bid_events:auction,auction_events:id,person_events:id"
-        #[arg(long)]
-        shard_keys: String,
-
-        /// Output prefix: produces {prefix}.s0.frames .. {prefix}.s{N-1}.frames
-        #[arg(long)]
-        output_prefix: PathBuf,
-    },
+    ShardFrames(wfgen::cmd_frames::ShardFramesArgs),
     /// Measure generation throughput (optional TCP send to wfusion)
-    Bench {
-        /// Path to the .wfg scenario file
-        #[arg(long)]
-        scenario: PathBuf,
-
-        /// Additional .wfs schema files (beyond those in `use` declarations)
-        #[arg(long)]
-        ws: Vec<PathBuf>,
-
-        /// Additional .wfl rule files (beyond those in `use` declarations)
-        #[arg(long)]
-        wfl: Vec<PathBuf>,
-
-        /// Sustained bench duration (e.g. "30s", "2m"). Omit for single-shot.
-        #[arg(long)]
-        duration: Option<String>,
-
-        /// Send generated events to wfusion over TCP + Arrow IPC
-        #[arg(long)]
-        send: bool,
-
-        /// Runtime TCP address used with --send, e.g. 127.0.0.1:9800
-        #[arg(long, default_value = "127.0.0.1:9800")]
-        addr: String,
-    },
+    Bench(wfgen::cmd_bench::Args),
     /// Continuous data generation (daemon mode)
-    Stream {
-        /// Directory containing .wfg scenario files (cycled indefinitely)
-        #[arg(long)]
-        scenario_dir: PathBuf,
-
-        /// Schema files (.wfs)
-        #[arg(long)]
-        ws: Vec<PathBuf>,
-
-        /// Rule files (.wfl) — required for injection to work correctly
-        #[arg(long, required = true)]
-        wfl: Vec<PathBuf>,
-
-        /// Target TCP address (wparse tcp_src)
-        #[arg(long, default_value = "127.0.0.1:9800")]
-        addr: String,
-
-        /// Seconds per scenario before switching
-        #[arg(long, default_value = "60")]
-        interval: u64,
-
-        /// Target event rate (events/sec). 0 = use the scenario's declared `gen N/s`
-        #[arg(long, default_value = "0")]
-        rate: u64,
-
-        /// Event-time slice per batch (ms). Batch size = rate × slice, capped for bounded memory
-        #[arg(long, default_value = "1000")]
-        slice_ms: u64,
-
-        /// Event budget: stop after sending n events and append a `__wf_sentinel`
-        /// completion frame (round=0, n=sent, start_ns=stream start). Engine
-        /// writes {round,n,start_ns,emit_ns} to perf_sentinel.ndjson once data
-        /// windows drain — precise EPS for bench. Omit = keep cycling forever.
-        #[arg(long)]
-        sentinel: Option<u64>,
-    },
+    Stream(wfgen::cmd_stream::Args),
     /// 性能诊断驱动（sentinel 漂流瓶协议，与 daemon 读同一份 perf-diag.toml）
-    PerfDiag {
-        /// 诊断配置（--diag conf/perf-diag.toml；[[stages]] 列表 = 轮数）
-        #[arg(long)]
-        diag: PathBuf,
-        /// 预编码帧文件（wfgen dump-frames 产物，数据部分）
-        #[arg(long)]
-        frames: PathBuf,
-        /// TCP 数据端口
-        #[arg(long, default_value = "127.0.0.1:9800")]
-        addr: String,
-        /// 数据量列表（"100k,1m,3m"；缺省 = 帧文件全部行）
-        #[arg(long)]
-        n_list: Option<String>,
-        /// 每点轮数（取 max，降负载噪声）
-        #[arg(long, default_value = "1")]
-        rounds: usize,
-        /// 哨兵记录文件（默认 data/perf_sentinel.ndjson）
-        #[arg(long)]
-        sentinels: Option<PathBuf>,
-        /// 墙表输出文件（默认 data/perf_diag_wall.txt）
-        #[arg(long)]
-        output: Option<PathBuf>,
-        /// 单次等待（切换/哨兵记录）超时秒数
-        #[arg(long, default_value = "60")]
-        timeout_secs: u64,
-    },
+    PerfDiag(wfgen::cmd_perf_diag::Args),
 }
 
 #[tokio::main]
@@ -399,170 +62,26 @@ async fn main() {
 }
 
 async fn run_cli() -> WfgenResult<()> {
-    let cli = Cli::parse();
-
-    match cli.command {
-        Commands::Gen {
-            scenario,
-            format,
-            out,
-            ws,
-            wfl,
-            no_wfl,
-            no_oracle,
-            send,
-            addr,
-        } => {
-            wfgen::cmd_gen::run(
-                scenario, format, out, ws, wfl, no_wfl, no_oracle, send, addr,
-            )
-            .await
-        }
-        Commands::GenNexmark {
-            count,
-            seed,
-            no_sort,
-            check,
-        } => wfgen::cmd_gen_nexmark::run_checked(count, seed, no_sort, check),
-        Commands::VerifyNexmark {
-            count,
-            seed,
-            rules_dir,
-            schemas,
-            query,
-            engine_emit,
-        } => wfgen::cmd_verify_nexmark::run(count, seed, rules_dir, schemas, query, engine_emit),
-        Commands::Diff { a, b, detail } => {
-            let same = wfgen::cmd_diff::run(&a.to_string_lossy(), &b.to_string_lossy(), detail)?;
+    match Cli::parse().command {
+        Commands::Gen(a) => wfgen::cmd_gen::run(a).await,
+        Commands::GenNexmark(a) => wfgen::cmd_gen_nexmark::run_checked(a, false),
+        Commands::VerifyNexmark(a) => wfgen::cmd_verify_nexmark::run(a),
+        Commands::Diff(a) => {
+            let same = wfgen::cmd_diff::run(&a)?;
             if !same {
                 std::process::exit(1);
             }
             Ok(())
         }
-        Commands::Lint { scenario, ws, wfl } => wfgen::cmd_lint::run(scenario, ws, wfl),
-        Commands::Verify {
-            expected,
-            actual,
-            score_tolerance,
-            time_tolerance,
-            meta,
-            format,
-        } => wfgen::cmd_verify::run(
-            expected,
-            actual,
-            score_tolerance,
-            time_tolerance,
-            meta,
-            format,
-        ),
-        Commands::Send {
-            scenario,
-            input,
-            addr,
-            ws,
-            chunk,
-            rate_ms,
-        } => wfgen::cmd_send::run(scenario, input, addr, ws, chunk, rate_ms).await,
-        Commands::DumpFrames {
-            scenario,
-            input,
-            addr,
-            ws,
-            output,
-            chunk,
-            max_frame_bytes,
-            max_frame_rows,
-        } => {
-            wfgen::cmd_frames::dump_frames(
-                scenario,
-                input,
-                addr,
-                ws,
-                output,
-                chunk,
-                max_frame_bytes,
-                max_frame_rows,
-            )
-            .await
-        }
-        Commands::SendArrow {
-            input,
-            addr,
-            connections,
-            shard_keys,
-            shard_files,
-            rate_bytes,
-            sentinel,
-        } => {
-            wfgen::cmd_frames::send_arrow(
-                input,
-                addr,
-                connections,
-                shard_keys,
-                shard_files,
-                rate_bytes,
-                sentinel,
-            )
-            .await
-        }
-        Commands::ShardFrames {
-            input,
-            shards,
-            shard_keys,
-            output_prefix,
-        } => wfgen::cmd_frames::shard_frames(input, shards, shard_keys, output_prefix).await,
-        Commands::Bench {
-            scenario,
-            ws,
-            wfl,
-            duration,
-            send,
-            addr,
-        } => wfgen::cmd_bench::run(scenario, ws, wfl, duration, send, addr).await,
-        Commands::Stream {
-            scenario_dir,
-            ws,
-            wfl,
-            addr,
-            interval,
-            rate,
-            slice_ms,
-            sentinel,
-        } => {
-            wfgen::cmd_stream::run(wfgen::cmd_stream::StreamOptions {
-                scenario_dir,
-                ws,
-                wfl,
-                addr,
-                interval_secs: interval,
-                rate_eps_override: rate,
-                slice_ms,
-                sentinel_n: sentinel,
-            })
-            .await
-        }
-        Commands::PerfDiag {
-            diag,
-            frames,
-            addr,
-            n_list,
-            rounds,
-            sentinels,
-            output,
-            timeout_secs,
-        } => {
-            wfgen::cmd_perf_diag::run_perf_diag(wfgen::cmd_perf_diag::PerfDiagArgs {
-                diag,
-                frames,
-                addr,
-                n_list,
-                rounds,
-                sentinels,
-                output,
-                timeout_secs,
-            })
-            .await
-        }
+        Commands::Lint(a) => wfgen::cmd_lint::run(a),
+        Commands::Verify(a) => wfgen::cmd_verify::run(a),
+        Commands::Send(a) => wfgen::cmd_send::run(a).await,
+        Commands::DumpFrames(a) => wfgen::cmd_frames::dump_frames(a).await,
+        Commands::SendArrow(a) => wfgen::cmd_frames::send_arrow(a).await,
+        Commands::ShardFrames(a) => wfgen::cmd_frames::shard_frames(a).await,
+        Commands::Bench(a) => wfgen::cmd_bench::run(a).await,
+        Commands::Stream(a) => wfgen::cmd_stream::run(a).await,
+        Commands::PerfDiag(a) => wfgen::cmd_perf_diag::run_perf_diag(a).await,
     }
 }
 

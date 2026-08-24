@@ -14,6 +14,7 @@ pub mod datagen;
 pub mod error;
 pub mod injection_targets;
 pub mod loader;
+pub mod nexmark;
 pub mod nexmark_conformance;
 pub mod oracle;
 pub mod output;

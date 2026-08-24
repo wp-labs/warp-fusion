@@ -10,7 +10,25 @@ use crate::wfg_parser::parse_wfg;
 
 use crate::cmd_helpers::{load_wfl_files, load_ws_files};
 
-pub fn run(scenario: PathBuf, ws: Vec<PathBuf>, wfl: Vec<PathBuf>) -> WfgenResult<()> {
+/// `wfgen lint` 参数：校验 .wfg scenario 文件。
+#[derive(clap::Args)]
+pub struct Args {
+    /// Path to the .wfg scenario file
+    pub scenario: PathBuf,
+
+    /// Additional .wfs schema files (beyond those in `use` declarations)
+    #[arg(long)]
+    pub ws: Vec<PathBuf>,
+
+    /// Additional .wfl rule files (beyond those in `use` declarations)
+    #[arg(long)]
+    pub wfl: Vec<PathBuf>,
+}
+
+pub fn run(args: Args) -> WfgenResult<()> {
+    let scenario = args.scenario;
+    let ws = args.ws;
+    let wfl = args.wfl;
     let wfg_content = std::fs::read_to_string(&scenario).source_err(
         WfgenReason::Io,
         format!("reading .wfg file: {}", scenario.display()),

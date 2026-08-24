@@ -15,21 +15,38 @@
 
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
+use std::path::PathBuf;
 
 use crate::error::{self, WfgenReason, WfgenResult};
 
 /// Myers 退化的行数差阈值：|N-M| > total*RATIO 时降级排序归并。
 const DEGRADE_RATIO: f64 = 0.10;
 
+/// `wfgen diff` 参数：两份文件（如引擎 alerts vs 模拟器期望）。
+#[derive(clap::Args)]
+pub struct Args {
+    /// 第一个文件（如引擎 alerts）
+    pub a: PathBuf,
+
+    /// 第二个文件（如模拟器期望）
+    pub b: PathBuf,
+
+    /// 输出差异行明细（L3；差异大时降级为排序归并明细）
+    #[arg(long)]
+    pub detail: bool,
+}
+
 /// 退出码：调用方依据返回的 `same` 决定（0 = 相同；1 = 不同）。
-pub fn run(path_a: &str, path_b: &str, detail: bool) -> WfgenResult<bool> {
-    let text_a = std::fs::read_to_string(path_a)
-        .map_err(|e| error::error(WfgenReason::Io, format!("read {}: {e}", path_a)))?;
-    let text_b = std::fs::read_to_string(path_b)
-        .map_err(|e| error::error(WfgenReason::Io, format!("read {}: {e}", path_b)))?;
+pub fn run(args: &Args) -> WfgenResult<bool> {
+    let a = args.a.to_string_lossy();
+    let b = args.b.to_string_lossy();
+    let text_a = std::fs::read_to_string(&*a)
+        .map_err(|e| error::error(WfgenReason::Io, format!("read {a}: {e}")))?;
+    let text_b = std::fs::read_to_string(&*b)
+        .map_err(|e| error::error(WfgenReason::Io, format!("read {b}: {e}")))?;
 
     let (lines_a, lines_b) = (split_lines(&text_a), split_lines(&text_b));
-    Ok(compare_lines(&lines_a, &lines_b, detail))
+    Ok(compare_lines(&lines_a, &lines_b, args.detail))
 }
 
 /// 对拍两份行列表（git diff 同款分层方法，供 verify-nexmark --engine-emit

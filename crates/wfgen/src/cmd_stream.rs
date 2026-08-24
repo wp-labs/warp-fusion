@@ -49,19 +49,46 @@ struct LoadedScenario {
     rule_plans: Vec<wf_lang::plan::RulePlan>,
 }
 
-/// `wfgen stream` 发送参数（CLI 直通；参数超 7 个 clippy 阈值，封装为 struct）。
-pub struct StreamOptions {
+/// `wfgen stream` 发送参数（CLI 直通）。
+#[derive(clap::Args)]
+pub struct Args {
+    /// Directory containing .wfg scenario files (cycled indefinitely)
+    #[arg(long)]
     pub scenario_dir: PathBuf,
+
+    /// Schema files (.wfs)
+    #[arg(long)]
     pub ws: Vec<PathBuf>,
+
+    /// Rule files (.wfl) — required for injection to work correctly
+    #[arg(long, required = true)]
     pub wfl: Vec<PathBuf>,
+
+    /// Target TCP address (wparse tcp_src)
+    #[arg(long, default_value = "127.0.0.1:9800")]
     pub addr: String,
+
+    /// Seconds per scenario before switching
+    #[arg(long = "interval", default_value = "60")]
     pub interval_secs: u64,
+
+    /// Target event rate (events/sec). 0 = use the scenario's declared `gen N/s`
+    #[arg(long = "rate", default_value = "0")]
     pub rate_eps_override: u64,
+
+    /// Event-time slice per batch (ms). Batch size = rate × slice, capped for bounded memory
+    #[arg(long, default_value = "1000")]
     pub slice_ms: u64,
+
+    /// Event budget: stop after sending n events and append a `__wf_sentinel`
+    /// completion frame (round=0, n=sent, start_ns=stream start). Engine
+    /// writes {round,n,start_ns,emit_ns} to perf_sentinel.ndjson once data
+    /// windows drain — precise EPS for bench. Omit = keep cycling forever.
+    #[arg(long = "sentinel")]
     pub sentinel_n: Option<u64>,
 }
 
-pub async fn run(opts: StreamOptions) -> WfgenResult<()> {
+pub async fn run(opts: Args) -> WfgenResult<()> {
     // 1. Load schemas
     let mut schemas: Vec<WindowSchema> = Vec::new();
     schemas.extend(load_ws_files(&opts.ws)?);

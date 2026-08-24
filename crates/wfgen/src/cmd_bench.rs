@@ -12,14 +12,44 @@ use crate::cmd_helpers::{load_wfl_files, load_ws_files};
 use crate::tcp_send::{connect_sender, send_events, send_events_with_stream};
 use wp_core_connectors::sinks::tcp::TcpArrowSink;
 
-pub async fn run(
-    scenario: PathBuf,
-    ws: Vec<PathBuf>,
-    wfl: Vec<PathBuf>,
-    bench_duration: Option<String>,
-    send: bool,
-    addr: String,
-) -> WfgenResult<()> {
+/// `wfgen bench` 参数：测量生成吞吐（可选 TCP 发送到 wfusion）。
+#[derive(clap::Args)]
+pub struct Args {
+    /// Path to the .wfg scenario file
+    #[arg(long)]
+    pub scenario: PathBuf,
+
+    /// Additional .wfs schema files (beyond those in `use` declarations)
+    #[arg(long)]
+    pub ws: Vec<PathBuf>,
+
+    /// Additional .wfl rule files (beyond those in `use` declarations)
+    #[arg(long)]
+    pub wfl: Vec<PathBuf>,
+
+    /// Sustained bench duration (e.g. "30s", "2m"). Omit for single-shot.
+    #[arg(long)]
+    pub duration: Option<String>,
+
+    /// Send generated events to wfusion over TCP + Arrow IPC
+    #[arg(long)]
+    pub send: bool,
+
+    /// Runtime TCP address used with --send, e.g. 127.0.0.1:9800
+    #[arg(long, default_value = "127.0.0.1:9800")]
+    pub addr: String,
+}
+
+pub async fn run(args: Args) -> WfgenResult<()> {
+    let Args {
+        scenario,
+        ws,
+        wfl,
+        duration,
+        send,
+        addr,
+    } = args;
+    let bench_duration = duration;
     let wfg_content = std::fs::read_to_string(&scenario).source_err(
         WfgenReason::Io,
         format!("reading .wfg file: {}", scenario.display()),

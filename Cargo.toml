@@ -40,7 +40,7 @@ chrono = { version = "0.4", features = ["serde"] }
 clap = { version = "4", features = ["derive"] }
 tokio = { version = "1", features = ["net", "time", "rt", "rt-multi-thread", "macros", "signal"] }
 rand = "=0.9"
-wp-arrow = "0.2"
+wp-arrow = "0.3"
 wp-connector-api = "0.12"
 tracing = "0.1"
 toml = "1.0"

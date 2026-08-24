@@ -5606,7 +5606,7 @@ dependencies = [
  "wf-data",
  "wf-engine",
  "wf-lang",
- "wp-arrow",
+ "wp-arrow 0.2.0",
  "wp-connector-api",
  "wp-core-connectors",
  "wp-knowledge",
@@ -5659,7 +5659,7 @@ dependencies = [
  "wf-lang",
  "wf-runtime",
  "winnow",
- "wp-arrow",
+ "wp-arrow 0.3.1",
  "wp-connector-api",
  "wp-core-connectors",
 ]
@@ -6052,6 +6052,18 @@ dependencies = [
  "arrow",
  "chrono",
  "wp-model-core 0.8.9",
+]
+
+[[package]]
+name = "wp-arrow"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "270eccebb38d8d03d09237d2f141da0d40d2b8a5de7c56d548eac43a5c5c2481"
+dependencies = [
+ "arrow",
+ "chrono",
+ "num-bigint 0.4.8",
+ "wp-model-core 0.9.0",
 ]
 
 [[package]]

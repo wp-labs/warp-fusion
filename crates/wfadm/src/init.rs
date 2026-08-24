@@ -206,6 +206,8 @@ mod tests {
         assert!(dir.join("conf/wfusion.toml").exists());
         assert!(dir.join("topology/sinks").is_dir());
         assert!(dir.join("topology/sources").is_dir());
+        // business.d 固定业务组：sentinel（perf-diag 哨兵落盘）由 init 自动生成。
+        assert!(dir.join("topology/sinks/business.d/sentinel.toml").exists());
         // Conf scope needs the external window config referenced by
         // conf/wfusion.toml, but should not include rules/scenarios.
         assert!(dir.join("models/schemas/windows.toml").exists());

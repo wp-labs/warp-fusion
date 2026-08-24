@@ -684,6 +684,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6bb31b46c14244e20ee9984b11bf5c992b91fb6939fea616e3512c8baecdbe5f"
 dependencies = [
  "memchr",
+ "serde_core",
 ]
 
 [[package]]
@@ -1036,6 +1037,25 @@ name = "crossbeam-channel"
 version = "0.5.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d85363c37faeca707aef026efa9f3b34d077bce547e48f770770625c6013679e"
+dependencies = [
+ "crossbeam-utils",
+]
+
+[[package]]
+name = "crossbeam-deque"
+version = "0.8.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5181e0de7b61eb03a81e347d6dd8797bae9da5146707b51077e2d71a54ec0ceb"
+dependencies = [
+ "crossbeam-epoch",
+ "crossbeam-utils",
+]
+
+[[package]]
+name = "crossbeam-epoch"
+version = "0.9.20"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2d6914041f254d6e9176c01941b21115dcfb7089e55135a35411081bd106ef3f"
 dependencies = [
  "crossbeam-utils",
 ]
@@ -3442,6 +3462,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "rayon"
+version = "1.12.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fb39b166781f92d482534ef4b4b1b2568f42613b53e5b6c160e24cfbfa30926d"
+dependencies = [
+ "either",
+ "rayon-core",
+]
+
+[[package]]
+name = "rayon-core"
+version = "1.13.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "22e18b0f0062d30d4230b2e85ff77fdfe4326feb054b9783a3460d8435c8ab91"
+dependencies = [
+ "crossbeam-deque",
+ "crossbeam-utils",
+]
+
+[[package]]
 name = "rdkafka"
 version = "0.33.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4129,6 +4169,15 @@ name = "simdutf8"
 version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e3a9fe34e3e7a50316060351f37187a3f546bce95496156754b601a5fa71b76e"
+
+[[package]]
+name = "similar"
+version = "3.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4f66ca1f7aca2474dc10c942eb22feffc897735f54cd1db90138c2fddb490987"
+dependencies = [
+ "bstr",
+]
 
 [[package]]
 name = "slab"
@@ -5435,8 +5484,7 @@ dependencies = [
 
 [[package]]
 name = "wf-config"
-version = "1.0.2"
-source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v1.0.2#fd61097b5b60a3998ea6648003b1184ca6abb27c"
+version = "2.0.1"
 dependencies = [
  "chrono",
  "glob",
@@ -5463,8 +5511,7 @@ dependencies = [
 
 [[package]]
 name = "wf-data"
-version = "1.0.2"
-source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v1.0.2#fd61097b5b60a3998ea6648003b1184ca6abb27c"
+version = "2.0.1"
 dependencies = [
  "chrono",
  "serde_json",
@@ -5472,8 +5519,7 @@ dependencies = [
 
 [[package]]
 name = "wf-engine"
-version = "1.0.2"
-source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v1.0.2#fd61097b5b60a3998ea6648003b1184ca6abb27c"
+version = "2.0.1"
 dependencies = [
  "arrow",
  "async-trait",
@@ -5503,8 +5549,7 @@ dependencies = [
 
 [[package]]
 name = "wf-lang"
-version = "1.0.2"
-source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v1.0.2#fd61097b5b60a3998ea6648003b1184ca6abb27c"
+version = "2.0.1"
 dependencies = [
  "moju-derive",
  "orion-error",
@@ -5529,8 +5574,7 @@ dependencies = [
 
 [[package]]
 name = "wf-runtime"
-version = "1.0.2"
-source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v1.0.2#fd61097b5b60a3998ea6648003b1184ca6abb27c"
+version = "2.0.1"
 dependencies = [
  "arrow",
  "async-broadcast",
@@ -5593,10 +5637,14 @@ dependencies = [
  "arrow",
  "chrono",
  "clap",
+ "md-5",
  "orion-error",
  "rand 0.9.5",
+ "rayon",
+ "rustc-hash",
  "serde",
  "serde_json",
+ "similar",
  "tempfile",
  "tokio",
  "tracing-appender",

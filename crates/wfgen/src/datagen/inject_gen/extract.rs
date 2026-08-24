@@ -16,6 +16,8 @@ pub(super) fn extract_rule_structure(
 ) -> WfgenResult<RuleStructure> {
     let window_dur = match rule_plan.match_plan.window_spec {
         WindowSpec::Sliding(d) | WindowSpec::Fixed(d) | WindowSpec::Session(d) => d,
+        // Hop 的注入窗长 = 窗口大小（slide 步长不改变窗长口径）。
+        WindowSpec::Hop { size, .. } => size,
     };
 
     let keys: Vec<String> = rule_plan

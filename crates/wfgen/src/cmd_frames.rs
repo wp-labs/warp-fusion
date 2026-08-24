@@ -19,6 +19,7 @@ use std::io::{BufRead, BufReader, BufWriter, Write};
 use std::path::{Path, PathBuf};
 
 use orion_error::conversion::SourceErr;
+use rayon::prelude::*;
 
 use wf_lang::WindowSchema;
 
@@ -81,20 +82,28 @@ pub async fn dump_frames(
         Box::new(BufReader::new(file))
     };
 
-    let mut events: Vec<crate::datagen::stream_gen::GenEvent> = Vec::new();
+    let mut events: Vec<crate::datagen::stream_gen::GenEvent>;
     let mut total_events = 0usize;
     let mut total_frames = 0usize;
     let mut total_bytes = 0usize;
 
+    // Read lines in `chunk`-row batches and parse them in parallel (rayon,
+    // order-preserving): `parse_gen_event_line` is a pure per-line function, so
+    // the 23GB JSONL parse dominates dump time and parallelizes cleanly. Batch
+    // boundaries stay identical to the serial path (same lines, same order).
+    let mut lines_buf: Vec<String> = Vec::with_capacity(chunk.unwrap_or(1 << 20));
     for line in reader.lines() {
         let line = line.source_err(WfgenReason::Io, format!("reading {}", input.display()))?;
-        if let Some(ev) = parse_gen_event_line(&line, &input)? {
-            events.push(ev);
-        }
+        lines_buf.push(line);
 
         if let Some(n) = chunk
-            && events.len() >= n
+            && lines_buf.len() >= n
         {
+            events = lines_buf
+                .par_iter()
+                .filter_map(|l| parse_gen_event_line(l, &input).transpose())
+                .collect::<WfgenResult<Vec<_>>>()?;
+            lines_buf.clear();
             total_frames += write_frames(
                 &events,
                 &schemas,
@@ -109,7 +118,12 @@ pub async fn dump_frames(
         }
     }
 
-    if !events.is_empty() {
+    if !lines_buf.is_empty() {
+        events = lines_buf
+            .par_iter()
+            .filter_map(|l| parse_gen_event_line(l, &input).transpose())
+            .collect::<WfgenResult<Vec<_>>>()?;
+        lines_buf.clear();
         total_frames += write_frames(
             &events,
             &schemas,
@@ -152,8 +166,15 @@ pub async fn send_arrow(
     connections: usize,
     shard_keys: Option<String>,
     shard_files: Option<String>,
+    rate_bytes: u64,
+    sentinel_n: Option<i64>,
 ) -> WfgenResult<()> {
     let connections = connections.max(1);
+    // --sentinel 存在即启用**分连接哨兵**：每条连接 copy 完自己的数据后追加
+    // 哨兵帧 {round=连接号, n=该连接实际行数, start_ns=该连接开始}——单连接
+    // = 1 条（round=0，兼容旧语义）；多连接 = N 条，bench 侧汇总 Σn/(max emit −
+    // min start)。传入值仅作开关（每连接行数以帧扫描为准）。
+    let sentinel = sentinel_n.filter(|&n| n > 0);
 
     // 分片文件模式:数据已按 key 分区(生成/切分阶段),每条连接纯 copy 一个文件,
     // 发送零解析(恢复 19.8M 级)——C-UCP × 键闭包的最优注入形态。
@@ -169,7 +190,7 @@ pub async fn send_arrow(
                 "--shard-files must list at least one file",
             ));
         }
-        return send_arrow_copy_files(files, addr).await;
+        return send_arrow_copy_files(files, addr, rate_bytes, sentinel).await;
     }
 
     // --shard-keys "bid_events:auction,auction_events:id,person_events:id"
@@ -178,11 +199,27 @@ pub async fn send_arrow(
 
     if key_by_stream.is_empty() {
         // 原样回放(raw copy):纯字节零解析;多连接时每条连接推完整文件
-        send_arrow_raw(input, addr, connections).await
+        send_arrow_raw(input, addr.clone(), connections, rate_bytes, sentinel).await
     } else {
         // 发送时按 key 分区(动态 decode;适合无预分片文件的临时注入)
-        send_arrow_sharded(input, addr, connections, key_by_stream).await
+        send_arrow_sharded(
+            input,
+            addr.clone(),
+            connections,
+            key_by_stream,
+            rate_bytes,
+            sentinel,
+        )
+        .await
     }
+}
+
+/// 发一条分连接哨兵帧（round=连接号）。
+async fn send_conn_sentinel(addr: &str, round: usize, n: u64, start_ns: i64) -> WfgenResult<()> {
+    let frame = crate::cmd_perf_diag::build_sentinel_frame(round as i64, n as i64, start_ns)?;
+    crate::cmd_perf_diag::send_payload(addr, &frame).await?;
+    println!("Sentinel sent (conn {round} n={n}) — EPS 以 data/perf_sentinel.ndjson 为准");
+    Ok(())
 }
 
 /// 解析 --shard-keys "stream:field,..." 为 {流 → key 字段}。
@@ -239,15 +276,46 @@ fn shard_batch(
 /// 分片文件回放:每条连接纯 copy 一个已按 key 分区的帧文件(零解析)。
 /// 数据在生成/切分阶段按 key 分桶(键闭包),发送端不 decode——C-UCP × 键闭包
 /// 的最优注入形态(实测 100M 16 连接 ~19.8M EPS,与全量 copy 同级)。
-async fn send_arrow_copy_files(files: Vec<PathBuf>, addr: String) -> WfgenResult<()> {
+/// `--sentinel` 时逐文件 scan 行数（仅统计不解析），每条连接 copy 完追加
+/// 自己的哨兵帧（round=文件序号, n=该文件实际行数）。
+async fn send_arrow_copy_files(
+    files: Vec<PathBuf>,
+    addr: String,
+    rate_bytes: u64,
+    sentinel: Option<i64>,
+) -> WfgenResult<()> {
     use tokio::io::AsyncWriteExt;
+
+    // 逐文件预 scan 行数（--sentinel 才需要；默认路径保持纯 copy 零解析）。
+    let rows_by_file: Vec<u64> = if sentinel.is_some() {
+        let mut out = Vec::with_capacity(files.len());
+        for f in &files {
+            let rows: u64 = crate::cmd_perf_diag::scan_frames(f)
+                .map_err(|e| {
+                    crate::error::error(
+                        WfgenReason::Validation,
+                        format!("scan {}: {e}", f.display()),
+                    )
+                })?
+                .iter()
+                .map(|fi| fi.rows)
+                .sum();
+            out.push(rows);
+        }
+        out
+    } else {
+        Vec::new()
+    };
 
     let start = std::time::Instant::now();
     let n = files.len();
     let mut handles: Vec<tokio::task::JoinHandle<WfgenResult<u64>>> = Vec::with_capacity(n);
-    for file in files {
+    for (idx, file) in files.into_iter().enumerate() {
         let addr = addr.clone();
+        let conn_rows = rows_by_file.get(idx).copied().unwrap_or(0);
+        let send_sentinel = sentinel.is_some();
         handles.push(tokio::spawn(async move {
+            let conn_start = crate::cmd_perf_diag::now_nanos();
             let mut f = tokio::fs::File::open(&file)
                 .await
                 .source_err(WfgenReason::Io, format!("opening {}", file.display()))?;
@@ -259,9 +327,10 @@ async fn send_arrow_copy_files(files: Vec<PathBuf>, addr: String) -> WfgenResult
                 .set_nodelay(true)
                 .source_err(WfgenReason::Network, "set_nodelay")?;
             let mut sink = stream;
-            let copied = tokio::io::copy(&mut f, &mut sink)
-                .await
-                .source_err(WfgenReason::Network, "tcp replay write error")?;
+            let copied = copy_tcp(&mut f, &mut sink, rate_bytes).await?;
+            if send_sentinel && conn_rows > 0 {
+                send_conn_sentinel(&addr, idx, conn_rows, conn_start).await?;
+            }
             sink.shutdown()
                 .await
                 .source_err(WfgenReason::Network, "tcp replay shutdown")?;
@@ -285,6 +354,51 @@ async fn send_arrow_copy_files(files: Vec<PathBuf>, addr: String) -> WfgenResult
         total as f64 / n as f64 / (1024.0 * 1024.0),
     );
     Ok(())
+}
+
+/// 大块缓冲 TCP 回放:1 MiB 读写缓冲替代 `tokio::io::copy` 的 8 KiB 栈缓冲。
+///
+/// `tokio::io::copy` 用固定 8 KiB 内部缓冲——100M 数据(7.76GB)约 100 万次
+/// 文件读,每次都是 syscall + `tokio::fs` 的 spawn_blocking 线程池交接,把注入
+/// 卡在 ~20M EPS;1 MiB 缓冲把迭代降到 ~8k 次,恢复磁盘/网络级吞吐。
+async fn copy_tcp<R, W>(reader: &mut R, writer: &mut W, rate_bytes: u64) -> WfgenResult<u64>
+where
+    R: tokio::io::AsyncRead + Unpin,
+    W: tokio::io::AsyncWrite + Unpin,
+{
+    use std::time::Instant;
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let mut buf = vec![0u8; 1 << 22]; // 4 MiB
+    let mut total = 0u64;
+    // 可选限速（rate_bytes/秒，0 = 不限速）：按目标速率控制平均注入，避免对
+    // 有状态引擎（如 qradar 450 规则）的瞬时 burst 积压。保持 raw-copy 零解码，
+    // 只在累计速率超前时 sleep 补齐——纯字节节流，不解析帧。
+    let start = Instant::now();
+    loop {
+        let n = reader
+            .read(&mut buf)
+            .await
+            .source_err(WfgenReason::Io, "read input file")?;
+        if n == 0 {
+            break;
+        }
+        writer
+            .write_all(&buf[..n])
+            .await
+            .source_err(WfgenReason::Network, "tcp replay write")?;
+        total += n as u64;
+        if rate_bytes > 0 {
+            let expect_secs = total as f64 / rate_bytes as f64;
+            let actual_secs = start.elapsed().as_secs_f64();
+            if actual_secs < expect_secs {
+                tokio::time::sleep(tokio::time::Duration::from_secs_f64(
+                    expect_secs - actual_secs,
+                ))
+                .await;
+            }
+        }
+    }
+    Ok(total)
 }
 
 /// 把一个帧文件按 key 切分成 N 个分片帧文件(键闭包:同 key 同文件)。
@@ -437,18 +551,44 @@ fn write_frame(w: &mut impl std::io::Write, payload: &[u8]) -> WfgenResult<()> {
 
 /// 原样回放:每条连接 `tokio::io::copy` 完整帧文件(零解析)。
 /// `connections=1` 为单连接基线;`connections>1` 为 C-UCP 供给档位(只适合无状态负载)。
-async fn send_arrow_raw(input: PathBuf, addr: String, connections: usize) -> WfgenResult<()> {
+/// `--sentinel` 时预 scan 文件总行数（仅统计不解析），每条连接 copy 完追加
+/// 自己的哨兵帧（round=连接号, n=文件行数, start_ns=该连接开始）。
+async fn send_arrow_raw(
+    input: PathBuf,
+    addr: String,
+    connections: usize,
+    rate_bytes: u64,
+    sentinel: Option<i64>,
+) -> WfgenResult<()> {
     use tokio::io::AsyncWriteExt;
 
     let connections = connections.max(1);
+    // --sentinel 才需要行数；默认路径保持纯 copy 零解析。
+    let file_rows: u64 = if sentinel.is_some() {
+        crate::cmd_perf_diag::scan_frames(&input)
+            .map_err(|e| {
+                crate::error::error(
+                    WfgenReason::Validation,
+                    format!("scan {}: {e}", input.display()),
+                )
+            })?
+            .iter()
+            .map(|fi| fi.rows)
+            .sum()
+    } else {
+        0
+    };
     let start = std::time::Instant::now();
 
     let mut handles: Vec<tokio::task::JoinHandle<WfgenResult<u64>>> =
         Vec::with_capacity(connections);
-    for _ in 0..connections {
+    for idx in 0..connections {
         let input = input.clone();
         let addr = addr.clone();
+        let conn_rows = file_rows;
+        let send_sentinel = sentinel.is_some();
         handles.push(tokio::spawn(async move {
+            let conn_start = crate::cmd_perf_diag::now_nanos();
             let mut file = tokio::fs::File::open(&input)
                 .await
                 .source_err(WfgenReason::Io, format!("opening {}", input.display()))?;
@@ -460,9 +600,10 @@ async fn send_arrow_raw(input: PathBuf, addr: String, connections: usize) -> Wfg
                 .set_nodelay(true)
                 .source_err(WfgenReason::Network, "set_nodelay")?;
             let mut sink = stream;
-            let copied = tokio::io::copy(&mut file, &mut sink)
-                .await
-                .source_err(WfgenReason::Network, "tcp replay write error")?;
+            let copied = copy_tcp(&mut file, &mut sink, rate_bytes).await?;
+            if send_sentinel && conn_rows > 0 {
+                send_conn_sentinel(&addr, idx, conn_rows, conn_start).await?;
+            }
             sink.shutdown()
                 .await
                 .source_err(WfgenReason::Network, "tcp replay shutdown")?;
@@ -500,6 +641,8 @@ async fn send_arrow_sharded(
     addr: String,
     connections: usize,
     key_by_stream: HashMap<String, String>,
+    _rate_bytes: u64,
+    sentinel: Option<i64>,
 ) -> WfgenResult<()> {
     let start = std::time::Instant::now();
     /// 发给 writer 的消息:分桶子批次(需编码)或原始帧字节(未分桶流直发,零解码)。
@@ -510,14 +653,18 @@ async fn send_arrow_sharded(
     let mut writer_txs: Vec<tokio::sync::mpsc::Sender<OutMsg>> = Vec::with_capacity(connections);
     let mut writer_handles: Vec<tokio::task::JoinHandle<WfgenResult<()>>> =
         Vec::with_capacity(connections);
-    for _ in 0..connections {
+    for idx in 0..connections {
         let (tx, mut rx) = tokio::sync::mpsc::channel::<OutMsg>(16);
         let addr = addr.clone();
+        let send_sentinel = sentinel.is_some();
         writer_handles.push(tokio::spawn(async move {
+            let conn_start = crate::cmd_perf_diag::now_nanos();
+            let mut sent_rows: u64 = 0;
             let mut sink = crate::tcp_send::connect_sender(&addr).await?;
             while let Some(msg) = rx.recv().await {
                 match msg {
                     OutMsg::Batch(tag, batch) => {
+                        sent_rows += batch.num_rows() as u64;
                         let payload =
                             sink.encode_batch_payload_with_tag(&tag, &batch)
                                 .map_err(|e| {
@@ -531,11 +678,16 @@ async fn send_arrow_sharded(
                         })?;
                     }
                     OutMsg::Bytes(payload) => {
+                        // 未分区流原始帧（零解码）——行数无法在不解码时统计，
+                        // 不计入该连接哨兵 n（nexmark 为 bid 之外的小流，可忽略）。
                         sink.send_payload(&payload).await.map_err(|e| {
                             crate::error::error(WfgenReason::Network, format!("send: {e}"))
                         })?;
                     }
                 }
+            }
+            if send_sentinel && sent_rows > 0 {
+                send_conn_sentinel(&addr, idx, sent_rows, conn_start).await?;
             }
             Ok(())
         }));

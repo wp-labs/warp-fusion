@@ -71,6 +71,60 @@ enum Commands {
         /// RNG seed for deterministic output
         #[arg(long, default_value_t = 1)]
         seed: u64,
+
+        /// Emit phase-major generation order instead of event-time order
+        /// (pre-2026-08-20 behavior; breaks `over`-window time eviction)
+        #[arg(long)]
+        no_sort: bool,
+
+        /// 生成自检：生成后独立检查阶段（同一 seed 重放，独立进度条），
+        /// 逐事件值域校验 + 输出字节 md5 指纹
+        /// （报告写 stderr；stdout 仍是数据流，可与 --no-sort 之外的管道共用）
+        #[arg(long)]
+        check: bool,
+    },
+    /// NEXMark 引擎结果验证：用真实 WFL 规则引擎（wf_engine）处理
+    /// wfgen 生成的事件，产出各规则应 EMIT 计数（JSON），供与引擎
+    /// daemon 实际 EMIT 对拍（nexmark_pk/bench.sh --verify）
+    VerifyNexmark {
+        /// Number of events to verify
+        count: i64,
+
+        /// RNG seed (must match `gen-nexmark` for comparable output)
+        #[arg(long, default_value_t = 1)]
+        seed: u64,
+
+        /// Directory containing the NEXMark .wfl rule files (glob *.wfl)
+        #[arg(long, default_value = "models/queries")]
+        rules_dir: PathBuf,
+
+        /// NEXMark window schema .wfs (referenced by `use` in the rules)
+        #[arg(long, default_value = "models/schemas/nexmark.wfs")]
+        schemas: PathBuf,
+
+        /// 只验证指定查询的规则文件（q1..q22；默认全部 models/queries/*.wfl）。
+        /// bench 单查询验证时传 --query 大幅提速（26 规则 → 1 个文件）。
+        #[arg(long)]
+        query: Option<String>,
+
+        /// 引擎结果对拍：目录（扫描 bench_*_replay.txt，bench.sh 用法）或单文件。
+        /// 读引擎实际 EMIT 计数，在 wfgen 内用 git-diff 同款分层方法
+        /// （L1 哈希 → L2 Myers/降级 → L3 明细）与 oracle 逐规则对拍；
+        /// 退出码 0=一致 / 1=有差异（q21 已知差异不判失败）。
+        #[arg(long)]
+        engine_emit: Option<PathBuf>,
+    },
+    /// 分层文件比对（L1 哈希相同性 → L2 Myers 差异量 → L3 --detail 定位）
+    Diff {
+        /// 第一个文件（如引擎 alerts）
+        a: PathBuf,
+
+        /// 第二个文件（如模拟器期望）
+        b: PathBuf,
+
+        /// 输出差异行明细（L3；差异大时降级为排序归并明细）
+        #[arg(long)]
+        detail: bool,
     },
     /// Lint (validate) a .wfg scenario file
     Lint {
@@ -206,6 +260,23 @@ enum Commands {
         /// raw-copy speed while preserving key closure for stateful rules.
         #[arg(long)]
         shard_files: Option<String>,
+
+        /// Target replay rate in bytes/sec. 0 = unlimited (default). When > 0,
+        /// send-arrow paces its raw-copy at ~this rate per connection, so a
+        /// stateful engine (e.g. 450-rule qradar) is not hit with an instant
+        /// burst that swamps its steady-state capacity.
+        #[arg(long, default_value_t = 0)]
+        rate_bytes: u64,
+
+        /// Enable per-connection `__wf_sentinel` completion frames: each
+        /// connection sends one after its data (round=conn id, n=that conn's
+        /// actual rows, start_ns=conn start). Single connection = one frame
+        /// (round=0). The engine writes {round,n,start_ns,emit_ns} tuples to
+        /// perf_sentinel.ndjson once data windows drain — precise EPS for bench
+        /// (multi-conn aggregate: Σn/(max emit − min start)). The value is a
+        /// switch; per-conn row counts come from frame scanning.
+        #[arg(long)]
+        sentinel: Option<i64>,
     },
     /// Split a frame file into N key-sharded frame files (one per shard;
     /// same key always lands in the same file). Send them later with
@@ -282,6 +353,40 @@ enum Commands {
         /// Event-time slice per batch (ms). Batch size = rate × slice, capped for bounded memory
         #[arg(long, default_value = "1000")]
         slice_ms: u64,
+
+        /// Event budget: stop after sending n events and append a `__wf_sentinel`
+        /// completion frame (round=0, n=sent, start_ns=stream start). Engine
+        /// writes {round,n,start_ns,emit_ns} to perf_sentinel.ndjson once data
+        /// windows drain — precise EPS for bench. Omit = keep cycling forever.
+        #[arg(long)]
+        sentinel: Option<u64>,
+    },
+    /// 性能诊断驱动（sentinel 漂流瓶协议，与 daemon 读同一份 perf-diag.toml）
+    PerfDiag {
+        /// 诊断配置（--diag conf/perf-diag.toml；[[stages]] 列表 = 轮数）
+        #[arg(long)]
+        diag: PathBuf,
+        /// 预编码帧文件（wfgen dump-frames 产物，数据部分）
+        #[arg(long)]
+        frames: PathBuf,
+        /// TCP 数据端口
+        #[arg(long, default_value = "127.0.0.1:9800")]
+        addr: String,
+        /// 数据量列表（"100k,1m,3m"；缺省 = 帧文件全部行）
+        #[arg(long)]
+        n_list: Option<String>,
+        /// 每点轮数（取 max，降负载噪声）
+        #[arg(long, default_value = "1")]
+        rounds: usize,
+        /// 哨兵记录文件（默认 data/perf_sentinel.ndjson）
+        #[arg(long)]
+        sentinels: Option<PathBuf>,
+        /// 墙表输出文件（默认 data/perf_diag_wall.txt）
+        #[arg(long)]
+        output: Option<PathBuf>,
+        /// 单次等待（切换/哨兵记录）超时秒数
+        #[arg(long, default_value = "60")]
+        timeout_secs: u64,
     },
 }
 
@@ -313,7 +418,27 @@ async fn run_cli() -> WfgenResult<()> {
             )
             .await
         }
-        Commands::GenNexmark { count, seed } => wfgen::cmd_gen_nexmark::run(count, seed),
+        Commands::GenNexmark {
+            count,
+            seed,
+            no_sort,
+            check,
+        } => wfgen::cmd_gen_nexmark::run_checked(count, seed, no_sort, check),
+        Commands::VerifyNexmark {
+            count,
+            seed,
+            rules_dir,
+            schemas,
+            query,
+            engine_emit,
+        } => wfgen::cmd_verify_nexmark::run(count, seed, rules_dir, schemas, query, engine_emit),
+        Commands::Diff { a, b, detail } => {
+            let same = wfgen::cmd_diff::run(&a.to_string_lossy(), &b.to_string_lossy(), detail)?;
+            if !same {
+                std::process::exit(1);
+            }
+            Ok(())
+        }
         Commands::Lint { scenario, ws, wfl } => wfgen::cmd_lint::run(scenario, ws, wfl),
         Commands::Verify {
             expected,
@@ -366,7 +491,20 @@ async fn run_cli() -> WfgenResult<()> {
             connections,
             shard_keys,
             shard_files,
-        } => wfgen::cmd_frames::send_arrow(input, addr, connections, shard_keys, shard_files).await,
+            rate_bytes,
+            sentinel,
+        } => {
+            wfgen::cmd_frames::send_arrow(
+                input,
+                addr,
+                connections,
+                shard_keys,
+                shard_files,
+                rate_bytes,
+                sentinel,
+            )
+            .await
+        }
         Commands::ShardFrames {
             input,
             shards,
@@ -389,7 +527,42 @@ async fn run_cli() -> WfgenResult<()> {
             interval,
             rate,
             slice_ms,
-        } => wfgen::cmd_stream::run(scenario_dir, ws, wfl, addr, interval, rate, slice_ms).await,
+            sentinel,
+        } => {
+            wfgen::cmd_stream::run(wfgen::cmd_stream::StreamOptions {
+                scenario_dir,
+                ws,
+                wfl,
+                addr,
+                interval_secs: interval,
+                rate_eps_override: rate,
+                slice_ms,
+                sentinel_n: sentinel,
+            })
+            .await
+        }
+        Commands::PerfDiag {
+            diag,
+            frames,
+            addr,
+            n_list,
+            rounds,
+            sentinels,
+            output,
+            timeout_secs,
+        } => {
+            wfgen::cmd_perf_diag::run_perf_diag(wfgen::cmd_perf_diag::PerfDiagArgs {
+                diag,
+                frames,
+                addr,
+                n_list,
+                rounds,
+                sentinels,
+                output,
+                timeout_secs,
+            })
+            .await
+        }
     }
 }
 

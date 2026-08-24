@@ -168,6 +168,10 @@ pub(crate) const TOPO_SINKS_SECURITY: TemplateFile = (
     "topology/sinks/business.d/security.toml",
     include_str!("../../templates/topology/sinks/business.d/security.toml"),
 );
+pub(crate) const TOPO_SINKS_SENTINEL: TemplateFile = (
+    "topology/sinks/business.d/sentinel.toml",
+    include_str!("../../templates/topology/sinks/business.d/sentinel.toml"),
+);
 pub(crate) const TOPO_SINKS_DEFAULT: TemplateFile = (
     "topology/sinks/infra.d/default.toml",
     include_str!("../../templates/topology/sinks/infra.d/default.toml"),

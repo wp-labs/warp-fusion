@@ -129,6 +129,18 @@ fn render(label: &str, done: u64, total: u64, elapsed: f64) {
     );
 }
 
+/// 进度条活动期间输出独立状态行（如 oracle 跳过提示）。
+///
+/// 进度条用 `\r` 原地刷新不换行，直接 `eprintln!` 会把消息粘在当前帧尾部
+/// （实测 "... 0s ETA 0soracle: 跳过..." 同行的残影）。这里先清掉当前帧再
+/// 换行打印——下一帧进度条会重绘在消息下方那行。非 TTY 时退化为普通 eprintln。
+pub(crate) fn note(msg: &str) {
+    if std::io::stderr().is_terminal() {
+        eprint!("\r\x1b[K");
+    }
+    eprintln!("{msg}");
+}
+
 /// 数字格式化：1_234_567 → "1,234,567"（报告/进度条共用）
 pub(crate) fn fmt_num(n: u64) -> String {
     let s = n.to_string();

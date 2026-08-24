@@ -179,10 +179,11 @@ where
         });
     }
     if skipped_stats > 0 {
-        eprintln!(
+        // 经 progress::note 先清进度条当前帧再打印，避免粘在 "... ETA 0s" 帧尾
+        crate::progress::note(&format!(
             "oracle: 跳过 {} 个 stats 规则（StatsExecutor 暂未接入 oracle）",
             skipped_stats
-        );
+        ));
     }
 
     // P2 (Path A): 预加载 join 目标窗口的全部行。引擎 replay 的窗口 actor

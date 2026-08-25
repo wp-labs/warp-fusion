@@ -24,6 +24,44 @@ use wf_config::FusionMode;
 #[global_allocator]
 static GLOBAL_ALLOCATOR: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
+/// 分配器内存分账 provider（`wf_runtime::metrics::alloc_stats`）：用 mimalloc 的
+/// `mi_process_info` 报告进程级 RSS/commit 峰值。
+///
+/// 存在的理由：引擎会计的 `window.memory_bytes` 与进程峰值之间长期有巨大缺口
+/// （q13 100M：窗口 5.7GB vs 峰值 26GB），而缺口的**性质**决定修复方向——
+/// `peak_commit ≫ 窗口合计` = 引擎真持有（找持有者）；`peak_commit ≈ 窗口合计`
+/// 但 `peak_rss` 远大 = 段区/OS 伪影（看归还策略）。此前只能靠外部 footprint
+/// 采样推断，且单点采样已误判过一次。macOS 上 mimalloc 精确报告 rss。
+///
+/// 见 `wp-reactor/docs/issues/q13-memory-peak-scales-with-volume.md`。
+fn mimalloc_stats() -> wf_runtime::metrics::alloc_stats::AllocStats {
+    let mut current_rss = 0usize;
+    let mut peak_rss = 0usize;
+    let mut current_commit = 0usize;
+    let mut peak_commit = 0usize;
+    let mut page_faults = 0usize;
+    // 全部为 out-param（可空）；只取内存四项 + 缺页，时间项传 null。
+    unsafe {
+        libmimalloc_sys::mi_process_info(
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            std::ptr::null_mut(),
+            &mut current_rss,
+            &mut peak_rss,
+            &mut current_commit,
+            &mut peak_commit,
+            &mut page_faults,
+        );
+    }
+    wf_runtime::metrics::alloc_stats::AllocStats {
+        current_rss: current_rss as u64,
+        peak_rss: peak_rss as u64,
+        current_commit: current_commit as u64,
+        peak_commit: peak_commit as u64,
+        page_faults: page_faults as u64,
+    }
+}
+
 // -- Top-level CLI -----------------------------------------------------------
 
 #[derive(Parser)]
@@ -88,6 +126,9 @@ async fn main() {
 }
 
 async fn run_cli() -> CliResult<()> {
+    // 分配器内存分账：尽早装入（在任何引擎/metrics 任务启动前），使
+    // metrics.ndjson 从第一个采样区间就带 alloc.* 指标。幂等（OnceLock）。
+    wf_runtime::metrics::alloc_stats::install_provider(mimalloc_stats);
     let cli = Cli::parse();
 
     match cli.command {

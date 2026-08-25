@@ -34,6 +34,11 @@ tokio-util = { version = "0.7", default-features = false, features = ["rt"] }
 # with sharded rule workers doing ~M allocs/s each, that lock dominated the
 # on-each hot path (sample showed __ulock_wait2 under _malloc_zone_realloc).
 mimalloc = "0.1"
+# 内存分账：mi_process_info（peak_rss / peak_commit）经 wf-runtime 的
+# metrics::alloc_stats provider 钩子进入 metrics.ndjson——把「进程峰值 vs 引擎
+# window_bytes 的缺口是谁持有的」变成 bench 可读数字（q13 内存 issue）。
+# 已是 mimalloc 的传递依赖，此处显式声明以直接调用 API。
+libmimalloc-sys = { version = "0.1", features = ["extended"] }
 
 [dev-dependencies]
 tempfile = "3"

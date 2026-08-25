@@ -323,7 +323,7 @@ fn now_nanos_is_positive_and_advances() {
 }
 
 #[test]
-fn prefix_for_n_picks_frames_covering_rows() {
+fn prefix_range_for_n_picks_frames_covering_rows() {
     let frames = vec![
         FrameInfo {
             offset: 0,
@@ -341,27 +341,55 @@ fn prefix_for_n_picks_frames_covering_rows() {
             rows: 8,
         },
     ];
-    let data = vec![0u8; 30];
     // 4 行 → 第一帧。
-    let (slice, rows) = prefix_for_n(&frames, &data, 4);
+    let (end, rows) = prefix_range_for_n(&frames, 4);
     assert_eq!(rows, 4);
-    assert_eq!(slice.len(), 10);
+    assert_eq!(end, 10);
     // 5 行 → 前两帧（10 行）。
-    let (slice, rows) = prefix_for_n(&frames, &data, 5);
+    let (end, rows) = prefix_range_for_n(&frames, 5);
     assert_eq!(rows, 10);
-    assert_eq!(slice.len(), 20);
+    assert_eq!(end, 20);
     // 边界 10 行 → 前两帧。
-    let (slice, rows) = prefix_for_n(&frames, &data, 10);
+    let (end, rows) = prefix_range_for_n(&frames, 10);
     assert_eq!(rows, 10);
-    assert_eq!(slice.len(), 20);
+    assert_eq!(end, 20);
     // 超界 → 全部。
-    let (slice, rows) = prefix_for_n(&frames, &data, 100);
+    let (end, rows) = prefix_range_for_n(&frames, 100);
     assert_eq!(rows, 18);
-    assert_eq!(slice.len(), 30);
-    // 空帧 → 空。
-    let (slice, rows) = prefix_for_n(&[], &data, 10);
+    assert_eq!(end, 30);
+}
+
+#[tokio::test]
+async fn send_payload_stream_sends_prefix_then_sentinel() {
+    // 正向：本地 listener 收字节，验证 = 文件前缀 [0, end) + 哨兵帧。
+    let dir = tempfile::tempdir().unwrap();
+    let frames_path = dir.path().join("data.frames");
+    let body = make_frames_file(&frames_path, 3); // 单帧，len = body.len()
+    let sentinel = b"<sentinel-frame>";
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap().to_string();
+    let server = tokio::spawn(async move {
+        let (mut sock, _) = listener.accept().await.unwrap();
+        use tokio::io::AsyncReadExt;
+        let mut buf = Vec::new();
+        sock.read_to_end(&mut buf).await.unwrap();
+        buf
+    });
+    // 只发前缀的一半（模拟 n_target 截断：end = body.len()/2）。
+    let half = body.len() / 2;
+    send_payload_stream(&addr, &frames_path, half, sentinel)
+        .await
+        .unwrap();
+    let got = server.await.unwrap();
+    assert_eq!(&got[..half], &body[..half], "文件前缀字节一致");
+    assert_eq!(&got[half..], sentinel, "哨兵帧追加在尾部");
+}
+
+#[test]
+fn prefix_range_for_n_empty_frames_returns_zero() {
+    let (end, rows) = prefix_range_for_n(&[], 10);
     assert_eq!(rows, 0);
-    assert_eq!(slice.len(), 0);
+    assert_eq!(end, 0);
 }
 
 #[test]

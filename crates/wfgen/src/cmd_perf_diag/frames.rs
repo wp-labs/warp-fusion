@@ -109,9 +109,10 @@ pub fn scan_frames(path: &Path) -> WfgenResult<Vec<FrameInfo>> {
     Ok(frames)
 }
 
-/// 取覆盖 `n_target` 行的帧前缀字节（帧行数合计 ≥ n_target；越界 = 全部）。
-/// 返回 (字节切片, 实际行数合计)。
-pub fn prefix_for_n<'a>(frames: &[FrameInfo], data: &'a [u8], n_target: u64) -> (&'a [u8], u64) {
+/// 取覆盖 `n_target` 行的帧前缀字节区间 `[0, end)`（帧行数合计 ≥ n_target；越界 = 全部）。
+/// 返回 (end 字节偏移, 实际行数合计)。发送侧从文件流式 copy 该区间，不驻留整文件内存
+/// （旧实现整文件读入 + 复制一份载荷：30M 帧 6.4GB×2 在 16GB 机器上 OOM/tcp send 失败）。
+pub fn prefix_range_for_n(frames: &[FrameInfo], n_target: u64) -> (usize, u64) {
     let mut rows = 0u64;
     let mut end = 0usize;
     for frame in frames {
@@ -129,7 +130,7 @@ pub fn prefix_for_n<'a>(frames: &[FrameInfo], data: &'a [u8], n_target: u64) -> 
         let last = frames.last().unwrap();
         end = last.offset + last.len;
     }
-    (&data[..end.min(data.len())], rows)
+    (end, rows)
 }
 
 /// 当前墙钟（epoch nanos，与引擎同机可比）。

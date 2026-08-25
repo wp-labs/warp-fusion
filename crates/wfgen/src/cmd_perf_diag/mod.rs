@@ -232,8 +232,20 @@ pub(crate) async fn send_payload_stream(
     let file = tokio::fs::File::open(frames_path)
         .await
         .source_err(WfgenReason::Io, format!("opening {}", frames_path.display()))?;
-    let mut limited = file.take(prefix_len as u64);
-    tokio::io::copy(&mut limited, &mut sink)
+    let limited = file.take(prefix_len as u64);
+    // 缓冲大小可配（WFGEN_SEND_BUF）——默认 1MB; 调优用: 8KB/64KB/256KB/1MB/4MB
+    // 对比 syscall 开销拐点（2026-08-25 实测扫描）。
+    let buf_cap = std::env::var("WFGEN_SEND_BUF")
+        .ok()
+        .and_then(|v| v.parse::<usize>().ok())
+        .unwrap_or(1024 * 1024)
+        .max(4096);
+    // `tokio::io::copy` 默认 8KB 缓冲——30M 帧 6.4GB 要 ~80 万次 read+write
+    // syscall（实测 ~620MB/s 墙, recv 档 344ns/evt 的注入侧主因）。改用大
+    // BufReader + copy_buf: 消除 wfgen 侧 chunk 开销——daemon 消化速率（TCP
+    // 背压）才是上限（2026-08-25 实测修复）。
+    let mut reader = tokio::io::BufReader::with_capacity(buf_cap, limited);
+    tokio::io::copy_buf(&mut reader, &mut sink)
         .await
         .source_err(WfgenReason::Network, "tcp send")?;
     sink.write_all(sentinel_frame)

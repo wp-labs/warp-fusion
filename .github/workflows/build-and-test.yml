@@ -1,15 +1,18 @@
 name: Build & Test
 
 on:
-  # push 只对合入目标 main 触发；其它分支（alpha/develop/feat/tasks 等）由
-  # pull_request（含 synchronize）覆盖——避免推 PR 源分支时 push + PR 双跑
-  # （GitHub 官方去重做法，PR 事件含全部分支）。
+  # push 全分支直接触发（推 alpha/develop/feat 等分支即跑 CI）。
+  # pull_request 只保留 opened/reopened：推 PR 源分支时 push 事件已覆盖，
+  # 去掉 synchronize 避免 push + PR 双跑（代价：fork PR 的后续 push 不再
+  # 触发——本仓库 PR 均为同仓分支，无此场景）。
   push:
     branches:
-      - main
+      - "*"
   pull_request:
+    types: [opened, reopened]
     branches:
       - "*"
+  workflow_dispatch:
 
 permissions:
   contents: read

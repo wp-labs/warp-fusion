@@ -5491,7 +5491,8 @@ dependencies = [
 
 [[package]]
 name = "wf-config"
-version = "2.0.5"
+version = "2.0.6"
+source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v2.0.6#bbb3611872a468435cd76d2042dbc534c3b21fbd"
 dependencies = [
  "chrono",
  "glob",
@@ -5518,7 +5519,8 @@ dependencies = [
 
 [[package]]
 name = "wf-data"
-version = "2.0.5"
+version = "2.0.6"
+source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v2.0.6#bbb3611872a468435cd76d2042dbc534c3b21fbd"
 dependencies = [
  "chrono",
  "serde_json",
@@ -5526,7 +5528,8 @@ dependencies = [
 
 [[package]]
 name = "wf-engine"
-version = "2.0.5"
+version = "2.0.6"
+source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v2.0.6#bbb3611872a468435cd76d2042dbc534c3b21fbd"
 dependencies = [
  "arrow",
  "async-trait",
@@ -5557,7 +5560,8 @@ dependencies = [
 
 [[package]]
 name = "wf-lang"
-version = "2.0.5"
+version = "2.0.6"
+source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v2.0.6#bbb3611872a468435cd76d2042dbc534c3b21fbd"
 dependencies = [
  "moju-derive",
  "orion-error",
@@ -5582,7 +5586,8 @@ dependencies = [
 
 [[package]]
 name = "wf-runtime"
-version = "2.0.5"
+version = "2.0.6"
+source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v2.0.6#bbb3611872a468435cd76d2042dbc534c3b21fbd"
 dependencies = [
  "arrow",
  "async-broadcast",

@@ -229,9 +229,10 @@ pub(crate) async fn send_payload_stream(
         .source_err(WfgenReason::Network, "set_nodelay")?;
     let mut sink = stream;
     // 文件前缀直接流式 copy（take 限长，不读入内存）。
-    let file = tokio::fs::File::open(frames_path)
-        .await
-        .source_err(WfgenReason::Io, format!("opening {}", frames_path.display()))?;
+    let file = tokio::fs::File::open(frames_path).await.source_err(
+        WfgenReason::Io,
+        format!("opening {}", frames_path.display()),
+    )?;
     let limited = file.take(prefix_len as u64);
     // 缓冲大小可配（WFGEN_SEND_BUF）——默认 1MB; 调优用: 8KB/64KB/256KB/1MB/4MB
     // 对比 syscall 开销拐点（2026-08-25 实测扫描）。

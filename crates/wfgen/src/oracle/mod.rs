@@ -253,10 +253,19 @@ where
 
         // stats 规则（fixed 窗口）: 逐事件驱动窗口推进 + 归并。行式路径——
         // oracle 逐事件无批可列式化; 计数口径 = 引擎（close 桶 × n_records）。
-        if !stats_engines.is_empty() {
+        // **按绑定窗口喂行**（2026-08-27 review）: 引擎 StatsTask 只消费规则的
+        // `window_sources`（= binds），oracle 若喂全部原始流——空键 + 无 where 度量
+        // 会被非绑定流行虚增（q15 `total` 10M 计成 1000 万而非 920 万）; 键式规则
+        // 靠键缺失跳过掩幸, 空键规则值全错且 verify 只对拍计数测不出。
+        if stats_engines
+            .iter()
+            .any(|se| se.accepts(&event.window_name))
+        {
             let row = gen_event_to_row(&event);
             for se in &mut stats_engines {
-                alerts.extend(se.feed(event_nanos, &row));
+                if se.accepts(&event.window_name) {
+                    alerts.extend(se.feed(event_nanos, &row));
+                }
             }
         }
 
@@ -358,7 +367,17 @@ where
                             .executor
                             .execute_deferred_join(join_idx, &p, windows, watermark)
                         {
-                            push_alert(record, &mut alerts);
+                            // 2026-08-27 review: 此前直接 push_alert——deferred 的中间
+                            // 输出（q4a→auction_finals）从不入 feed_queue, 下游规则
+                            // （q4b stats 绑定 auction_finals）收不到; 当时无 CEP 规则
+                            // 消费该中间窗口故未暴露。改为 record_output（= push_alert
+                            // + 中间窗口入队）, 与 each/match 中间输出同路径。
+                            record_output(
+                                record,
+                                &mut alerts,
+                                &intermediate_windows,
+                                &mut feed_queue,
+                            );
                         }
                     }
                     continue;
@@ -439,6 +458,18 @@ where
         while feed_index < feed_queue.len() {
             let (window, ev, ts) = feed_queue[feed_index].clone();
             feed_index += 1;
+            // 中间事件也须喂给绑定该中间窗口的 stats 引擎（2026-08-27 review）:
+            // q4a→auction_finals→q4b 双规则链——否则 q4b oracle 只看到原始流
+            // auction_events（auction 行有 category 建同名桶, 桶数巧合一致但
+            // avg(f.final) 缺 final 字段贡献为 0, 值全错）。
+            if stats_engines.iter().any(|se| se.accepts(&window)) {
+                let row = core_event_to_row(&ev);
+                for se in &mut stats_engines {
+                    if se.accepts(&window) {
+                        alerts.extend(se.feed(ts, &row));
+                    }
+                }
+            }
             for engine in &mut engines {
                 if let Some(record) = process_engine_event(engine, &window, &ev, ts) {
                     record_output(record, &mut alerts, &intermediate_windows, &mut feed_queue);
@@ -570,6 +601,9 @@ const FLUSH_PENDING_ROWS: usize = 100_000;
 struct StatsOracleEngine {
     name: String,
     stats: StatsExecutor,
+    /// 绑定源窗口（= plan.binds; 引擎 StatsTask 的 window_sources 同源）——
+    /// oracle 只喂这些窗口的行（含中间窗口事件）, 对齐引擎不喂非绑定流。
+    bound_windows: std::collections::HashSet<String>,
     /// 当前窗口上界（None = 尚未见事件）; bucket 对齐 `(t / dur) * dur + dur`。
     window_end: Option<i64>,
     entity_type: String,
@@ -586,14 +620,25 @@ impl StatsOracleEngine {
             wf_lang::ast::Expr::Number(n) => *n,
             _ => 10.0, // 非数字 score（罕见）: 计数不受影响
         };
+        let bound_windows = plan
+            .binds
+            .iter()
+            .map(|b| b.window.clone())
+            .collect::<std::collections::HashSet<_>>();
         Self {
             name: plan.name.clone(),
             stats: StatsExecutor::with_row_fields(stats_plan, None),
+            bound_windows,
             window_end: None,
             entity_type: plan.entity_plan.entity_type.clone(),
             score,
             pending: Vec::new(),
         }
+    }
+
+    /// 本引擎是否消费该窗口（绑定窗口匹配; 未绑定 = 不喂, 对齐引擎 window_sources）。
+    fn accepts(&self, window_name: &str) -> bool {
+        self.bound_windows.contains(window_name)
     }
 
     /// 喂一个事件: 窗口推进（跨边界先批量归并缓冲 + close）+ 缓冲本事件。
@@ -678,6 +723,15 @@ fn gen_event_to_row(event: &GenEvent) -> HashMap<String, Value> {
         }
     }
     row
+}
+
+/// 中间管道事件（yield 字段已是引擎 Value）→ stats 行。
+fn core_event_to_row(event: &Event) -> HashMap<String, Value> {
+    event
+        .fields
+        .iter()
+        .map(|(k, v)| (k.to_string(), v.clone()))
+        .collect()
 }
 
 struct RuleEngine {

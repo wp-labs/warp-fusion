@@ -32,10 +32,10 @@ use chrono::{DateTime, Utc};
 use wf_engine::alert::OutputRecord;
 use wf_engine::match_engine::{
     CepStateMachine, CloseOutput, CloseReason, DeferredPending, EngineHashMap, Event, RuleExecutor,
-    StepResult, Value, WindowLookup,
+    StatsExecutor, StepResult, Value, WindowLookup,
 };
 use wf_lang::WindowSchema;
-use wf_lang::plan::{ConvPlan, RulePlan};
+use wf_lang::plan::{ConvPlan, RulePlan, WindowSpec};
 
 use crate::datagen::stream_gen::GenEvent;
 use crate::error::WfgenResult;
@@ -128,18 +128,25 @@ where
     }
 
     // Build per-rule engines, filtering to injected rules only (SC7).
-    // Stats（`stats<...>`）规则 oracle 尚不支持（StatsExecutor 是列式批执行器，
-    // oracle 逐事件无等价路径）——跳过并计数，调用方（verify）据此把 stats 规则
-    // 标记为「oracle 未覆盖」而不是 panic（Q19 stats top 曾除零崩溃）。
+    // Stats（`stats<...>`）规则 oracle 用 StatsExecutor 逐事件驱动（2026-08-27 接入）
+    // ——fixed 窗口 bucket 对齐推进（同 StatsTask::advance_window）, 跨边界 close
+    // 计数, 流末 close 全部尾部（对齐引擎 shutdown flush 的确定性收口）。
+    // session/sliding 窗口（stats P2/P3 范围）不接入, 跳过计数。
     let mut skipped_stats = 0usize;
     let mut engines: Vec<RuleEngine> = Vec::new();
+    let mut stats_engines: Vec<StatsOracleEngine> = Vec::new();
     for plan in rule_plans.iter().filter(|plan| {
         injected_rules
             .map(|set| set.contains(&plan.name))
             .unwrap_or(true)
     }) {
-        if plan.stats_plan.is_some() {
-            skipped_stats += 1;
+        if let Some(stats_plan) = &plan.stats_plan {
+            // 仅 fixed 窗口可 oracle（bucket 对齐推进）; session/sliding 跳过。
+            if matches!(stats_plan.window_spec, WindowSpec::Fixed(_)) {
+                stats_engines.push(StatsOracleEngine::new(plan));
+            } else {
+                skipped_stats += 1;
+            }
             continue;
         }
         let alias_map = build_window_alias_map(plan);
@@ -243,6 +250,15 @@ where
 
         // 本事件的中间输出：既 push_alert（计数）又入队 feed 下游。
         let mut feed_queue: Vec<(String, Event, i64)> = Vec::new();
+
+        // stats 规则（fixed 窗口）: 逐事件驱动窗口推进 + 归并。行式路径——
+        // oracle 逐事件无批可列式化; 计数口径 = 引擎（close 桶 × n_records）。
+        if !stats_engines.is_empty() {
+            let row = gen_event_to_row(&event);
+            for se in &mut stats_engines {
+                alerts.extend(se.feed(event_nanos, &row));
+            }
+        }
 
         for engine in &mut engines {
             // P2 (Path A): maintain join-window rows ahead of this event so
@@ -524,7 +540,144 @@ where
         }
     }
 
+    // stats 规则流末收口: 引擎 replay 的 shutdown flush 确定性 close 尾部窗口
+    // （emitted_total 含尾部桶）——oracle 无条件 close 剩余（无论 close_at_eos,
+    // 与 CEP 的 replay 不推进 EOS 语义区分——stats 引擎 flush 必然收口）。
+    for se in &mut stats_engines {
+        alerts.extend(se.close_tail());
+    }
+
     Ok(OracleResult { alerts })
+}
+
+/// oracle 的 stats 规则引擎（2026-08-27 接入）: [`StatsExecutor`] 事件驱动——
+/// fixed 窗口 bucket 对齐推进（与 `StatsTask::advance_window` 同口径: 事件时间
+/// 越过 window_end 即 close 并开下一窗）。**按窗口批量归并**: 行缓冲到窗口边界
+/// 才一次 [`StatsExecutor::process_rows`]（`process_rows` 批末做
+/// `refresh_estimated_bytes` O(桶数) 遍历——逐事件调用会 O(事件×桶) 爆炸）。
+/// close 计数 = 引擎口径（每桶 × n_records, top 度量多条目）。流末
+/// [`StatsOracleEngine::close_tail`] 收口剩余窗口（引擎 shutdown flush 确定性
+/// 收口, emitted_total 含尾部桶）。
+///
+/// session/sliding 窗口（stats P2/P3）不接入（oracle 仅 fixed 推进）。
+///
+/// 窗口内行缓冲容量阈值: 达到即分批归并进桶状态（`StatsExecutor::process_rows`
+/// 批末 `refresh_estimated_bytes` 是 O(桶数) 遍历——每 10 万行一次摊薄可接受;
+/// 若不设阈值, 1d 窗口会把整窗行（10m 数据 ~920 万行 HashMap ≈ 1-2GB）全压在
+/// pending 里 → OOM（2026-08-27 实测 Killed: 9）。
+const FLUSH_PENDING_ROWS: usize = 100_000;
+
+struct StatsOracleEngine {
+    name: String,
+    stats: StatsExecutor,
+    /// 当前窗口上界（None = 尚未见事件）; bucket 对齐 `(t / dur) * dur + dur`。
+    window_end: Option<i64>,
+    entity_type: String,
+    score: f64,
+    /// 当前窗口累积行缓冲（窗口边界批量归并, 免逐事件 process_rows 的
+    /// refresh_estimated_bytes O(桶数) 开销）。
+    pending: Vec<HashMap<String, Value>>,
+}
+
+impl StatsOracleEngine {
+    fn new(plan: &RulePlan) -> Self {
+        let stats_plan = plan.stats_plan.as_ref().expect("stats 规则").clone();
+        let score = match &plan.score_plan.expr {
+            wf_lang::ast::Expr::Number(n) => *n,
+            _ => 10.0, // 非数字 score（罕见）: 计数不受影响
+        };
+        Self {
+            name: plan.name.clone(),
+            stats: StatsExecutor::with_row_fields(stats_plan, None),
+            window_end: None,
+            entity_type: plan.entity_plan.entity_type.clone(),
+            score,
+            pending: Vec::new(),
+        }
+    }
+
+    /// 喂一个事件: 窗口推进（跨边界先批量归并缓冲 + close）+ 缓冲本事件。
+    /// 返回本事件触发的 close alerts。
+    fn feed(&mut self, event_nanos: i64, row: &HashMap<String, Value>) -> Vec<OracleAlert> {
+        let mut alerts = Vec::new();
+        let dur = match self.stats.plan.window_spec {
+            WindowSpec::Fixed(d) => d.as_nanos() as i64,
+            _ => return alerts, // 非 fixed 不应构造（调用方已过滤）
+        };
+        if self.window_end.is_none() {
+            self.window_end = Some(((event_nanos / dur) * dur) + dur);
+        }
+        while let Some(end) = self.window_end {
+            if event_nanos < end {
+                break;
+            }
+            // 本事件已越过边界: 先归并缓冲（旧窗口行）+ close, 再开下一窗。
+            self.flush_pending();
+            alerts.extend(self.close_window(end));
+            self.window_end = Some(((event_nanos / dur) * dur) + dur);
+        }
+        self.pending.push(row.clone());
+        // 容量阈值分批归并（2026-08-27 OOM 修复）: 1d 窗口下 pending 会累积整窗
+        // 行（10m 数据 ~920 万行 HashMap ≈ 1-2GB）——按阈值提前归并进桶状态
+        // （同窗口行分批归并安全, 桶状态累积; close 时才收口输出）。
+        // process_rows 批末 refresh O(桶数)——每 10 万行一次, 摊薄可接受。
+        if self.pending.len() >= FLUSH_PENDING_ROWS {
+            self.flush_pending();
+        }
+        alerts
+    }
+
+    /// 批量归并当前窗口缓冲（一次 process_rows——批末 refresh O(桶数) 摊到整窗）。
+    fn flush_pending(&mut self) {
+        if self.pending.is_empty() {
+            return;
+        }
+        let rows = std::mem::take(&mut self.pending);
+        self.stats
+            .process_rows(&rows, |r, name| r.get(name).cloned());
+    }
+
+    /// close 当前窗口: 先归并缓冲, 再输出桶（标量每桶 1 alert; top 每桶 n_records）。
+    fn close_window(&mut self, window_end: i64) -> Vec<OracleAlert> {
+        self.flush_pending();
+        let buckets = self.stats.close_window_by_bucket_rows();
+        let mut alerts = Vec::with_capacity(buckets.len());
+        let emit_time = chrono::DateTime::from_timestamp_nanos(window_end).to_rfc3339();
+        for b in &buckets {
+            let n_records = b.measures.iter().map(Vec::len).max().unwrap_or(1);
+            for _ in 0..n_records {
+                alerts.push(OracleAlert {
+                    rule_name: self.name.clone(),
+                    score: self.score,
+                    entity_type: self.entity_type.clone(),
+                    entity_id: format!("{:?}", b.key),
+                    origin: "close".to_string(),
+                    emit_time: emit_time.clone(),
+                });
+            }
+        }
+        alerts
+    }
+
+    /// 流末收口剩余窗口（引擎 shutdown flush 同语义）。
+    fn close_tail(&mut self) -> Vec<OracleAlert> {
+        match self.window_end {
+            Some(end) => self.close_window(end),
+            None => Vec::new(), // 无事件: 无窗口
+        }
+    }
+}
+
+/// GenEvent → stats 行（HashMap<String, Value>）; 字段经 json_to_core_value
+/// 转引擎 Value（数字 f64 / 字符串 / 布尔; 复合类型丢弃——stats 度量不读）。
+fn gen_event_to_row(event: &GenEvent) -> HashMap<String, Value> {
+    let mut row = HashMap::new();
+    for (k, v) in &event.fields {
+        if let Some(core_v) = json_to_core_value(v) {
+            row.insert(k.clone(), core_v);
+        }
+    }
+    row
 }
 
 struct RuleEngine {

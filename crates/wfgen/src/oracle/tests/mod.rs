@@ -175,3 +175,4 @@ mod basic;
 mod conv;
 mod deferred;
 mod join;
+mod stats;

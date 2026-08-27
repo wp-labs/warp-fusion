@@ -1,0 +1,8 @@
+{"log_type":"edr_alert_log","src_ip":"10.0.0.1","dst_ip":"192.168.1.10","user":"alice","event_time":"2026-01-01T00:00:00Z"}
+{"log_type":"fw_ips_protect_log","src_ip":"10.0.0.2","dst_ip":"192.168.1.20","user":"bob","event_time":"2026-01-01T00:00:05Z"}
+{"log_type":"topas_waf_virus","src_ip":"10.0.0.3","dst_ip":"192.168.1.30","user":"carol","event_time":"2026-01-01T00:00:10Z"}
+{"log_type":"ngsoc_threat_alert_send","src_ip":"10.0.0.4","dst_ip":"192.168.1.40","user":"dave","event_time":"2026-01-01T00:00:15Z"}
+{"log_type":"edr_alert_log","src_ip":"10.0.0.5","dst_ip":"192.168.1.50","user":"erin","event_time":"2026-01-01T00:00:20Z"}
+{"log_type":"app_access_log","src_ip":"10.0.0.6","dst_ip":"192.168.1.60","user":"frank","event_time":"2026-01-01T00:00:25Z"}
+{"log_type":"db_query_log","src_ip":"10.0.0.7","dst_ip":"192.168.1.70","user":"grace","event_time":"2026-01-01T00:00:30Z"}
+{"log_type":"mail_smtp_log","src_ip":"10.0.0.8","dst_ip":"192.168.1.80","user":"heidi","event_time":"2026-01-01T00:00:35Z"}

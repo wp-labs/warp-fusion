@@ -1,0 +1,7 @@
+connect = "file_src"
+enable = true
+key = "sdm_source"
+
+path = "data/sdm_events.ndjson"
+stream_tag = "sdm"
+data_format = "ndjson"

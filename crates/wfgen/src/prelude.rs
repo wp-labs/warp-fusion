@@ -71,7 +71,7 @@ pub fn parse_rule_prelude(source: &str, path: &Path) -> WfgenResult<RulePrelude>
     })
 }
 
-/// `_global.wfl` may only declare `yield preset` blocks.
+/// `_global.wfl` may only declare `yield preset` blocks and `shared` lists.
 fn validate_prelude_only(file: &WflFile, path: &Path) -> WfgenResult<()> {
     let invalid = if !file.uses.is_empty() {
         Some("use declarations")
@@ -88,17 +88,19 @@ fn validate_prelude_only(file: &WflFile, path: &Path) -> WfgenResult<()> {
         return error::fail(
             WfgenReason::Validation,
             format!(
-                "{} is a rule prelude and only allows `yield preset` declarations; found {}",
+                "{} is a rule prelude and only allows `yield preset` and `shared` declarations; found {}",
                 path.display(),
                 kind
             ),
         );
     }
     validate_unique_yield_presets(&file.yield_presets, path, "rule prelude")?;
+    validate_unique_shared_lists(&file.shared_lists, path, "rule prelude")?;
     Ok(())
 }
 
-/// Reject a rule file that redefines a preset already provided by the prelude.
+/// Reject a rule file that redefines a preset or shared list already provided by
+/// the prelude (issue #73 全局级允许列表: `_global.wfl` 定义, 各规则文件引用)。
 pub fn validate_rule_prelude_conflicts(
     file: &WflFile,
     path: &Path,
@@ -122,15 +124,60 @@ pub fn validate_rule_prelude_conflicts(
             );
         }
     }
+    for list in &file.shared_lists {
+        if prelude
+            .file
+            .shared_lists
+            .iter()
+            .any(|prelude_list| prelude_list.name == list.name)
+        {
+            return error::fail(
+                WfgenReason::Validation,
+                format!(
+                    "{} defines shared list `{}` that already exists in prelude {}",
+                    path.display(),
+                    list.name,
+                    prelude.path.display()
+                ),
+            );
+        }
+    }
     Ok(())
 }
 
-/// Merge the prelude's presets into a rule file: prelude presets first, then
-/// the rule's own presets (which take precedence on name conflict).
+/// Merge the prelude's presets and shared lists into a rule file: prelude items
+/// first, then the rule's own items (which take precedence on name conflict).
 pub fn apply_rule_prelude(file: &mut WflFile, prelude: &RulePrelude) {
     let mut yield_presets = prelude.file.yield_presets.clone();
     yield_presets.extend(file.yield_presets.clone());
     file.yield_presets = yield_presets;
+    let mut shared_lists = prelude.file.shared_lists.clone();
+    shared_lists.extend(file.shared_lists.clone());
+    file.shared_lists = shared_lists;
+}
+
+fn validate_unique_shared_lists(
+    lists: &[wf_lang::ast::SharedListDecl],
+    path: &Path,
+    scope: &str,
+) -> WfgenResult<()> {
+    let mut seen: HashMap<&str, usize> = HashMap::new();
+    for list in lists {
+        let count = seen.entry(list.name.as_str()).or_insert(0);
+        *count += 1;
+        if *count > 1 {
+            return error::fail(
+                WfgenReason::Validation,
+                format!(
+                    "{} duplicate shared list `{}` in {}",
+                    path.display(),
+                    list.name,
+                    scope
+                ),
+            );
+        }
+    }
+    Ok(())
 }
 
 fn validate_unique_yield_presets(
@@ -228,5 +275,51 @@ mod tests {
         let err =
             validate_rule_prelude_conflicts(&rule, Path::new("rule.wfl"), &prelude).unwrap_err();
         assert!(err.to_string().contains("already exists in prelude"));
+    }
+
+    #[test]
+    fn prelude_shared_lists_merge_into_rule_file() {
+        // issue #73: `_global.wfl` 定义公共允许列表, 规则文件引用（prelude 合并）。
+        let prelude = parse_rule_prelude(
+            "shared security_log_types = (\"edr_alert_log\", \"fw_ips_protect_log\")\n",
+            Path::new("_global.wfl"),
+        )
+        .unwrap();
+        let mut rule = parse_wfl(
+            "rule r {\n    events { s : sdm_event && s.log_type in security_log_types }\n    match<:5m> { on event { s | count >= 1; } } -> score(50.0)\n    entity(ip, s.sip)\n    yield out (x = s.sip)\n}\n",
+        );
+        apply_rule_prelude(&mut rule, &prelude);
+        assert_eq!(rule.shared_lists.len(), 1, "prelude shared 列表应并入规则文件");
+        assert_eq!(rule.shared_lists[0].name, "security_log_types");
+        assert_eq!(rule.shared_lists[0].items.len(), 2);
+        assert!(
+            matches!(&rule.rules[0].events.decls[0].filter, Some(_)),
+            "规则引用 prelude 列表, 编译期展开"
+        );
+    }
+
+    #[test]
+    fn prelude_duplicate_shared_lists_rejected() {
+        let err = parse_rule_prelude(
+            "shared x = (\"a\")\nshared x = (\"b\")\n",
+            Path::new("_global.wfl"),
+        )
+        .unwrap_err();
+        assert!(err.to_string().contains("duplicate shared list `x`"), "{err}");
+    }
+
+    #[test]
+    fn rule_redefining_prelude_shared_list_is_conflict() {
+        let prelude = parse_rule_prelude(
+            "shared security_log_types = (\"edr_alert_log\")\n",
+            Path::new("_global.wfl"),
+        )
+        .unwrap();
+        let rule = parse_wfl(
+            "shared security_log_types = (\"other\")\nrule r {\n    events { s : sdm_event && s.log_type in security_log_types }\n    match<:5m> { on event { s | count >= 1; } } -> score(50.0)\n    entity(ip, s.sip)\n    yield out (x = s.sip)\n}\n",
+        );
+        let err =
+            validate_rule_prelude_conflicts(&rule, Path::new("rule.wfl"), &prelude).unwrap_err();
+        assert!(err.to_string().contains("already exists in prelude"), "{err}");
     }
 }

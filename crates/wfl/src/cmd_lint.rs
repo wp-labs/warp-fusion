@@ -48,6 +48,18 @@ pub fn run(file: PathBuf, schemas: Vec<String>, vars: Vec<String>) -> WflResult<
     // Parse
     let wfl_file = wf_lang::parse_wfl(&source).wfl()?;
 
+    // 公共允许列表引用（issue #73）先展开——checker 只见到字面 InList;
+    // 未知名/非法位置在此报错（lint 不绕过编译期展开）。
+    let wfl_file = wf_lang::compiler::shared_list::resolve_shared_list_refs(&wfl_file)
+        .map_err(|e| {
+            crate::error::error(
+                WflReason::Validation,
+                e.detail()
+                    .clone()
+                    .unwrap_or_else(|| e.to_string()),
+            )
+        })?;
+
     // Run error-level checks
     let errors = wf_lang::check_wfl(&wfl_file, &all_schemas);
 

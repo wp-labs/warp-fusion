@@ -2,6 +2,14 @@
 
 本文件记录 `wfusion` / `wfl` / `wfgen` / `wfadm` 面向使用者的变更。内部实现细节、依赖版本对齐和测试计数不在此展开。
 
+## [Unreleased]
+
+### wfl
+
+- **`shared` 公共允许列表（issue #73）**：`shared <name> = ("a", "b", ...)` 一处定义，多规则 `expr in <name>` / `expr not in <name>` 引用；编译期展开为字面列表（元素类型检查与手写列表一致）。
+  - `_global.wfl` prelude 可声明 `shared` 列表，自动并入每个规则文件（全局级复用）。
+  - `wfl lint` 对未知名列表报编译错误（带规则名+列表名）；`wfl fmt`（tree-sitter 语法）对 `shared` 语法的支持待 tree-sitter-wfl 同步更新。
+
 ## [0.3.1]
 
 ### 引擎（对齐 wp-reactor 1.0.2）

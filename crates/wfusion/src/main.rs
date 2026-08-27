@@ -136,10 +136,12 @@ async fn run_cli() -> CliResult<()> {
         .and_then(|v| v.parse().ok())
         .unwrap_or(5000);
     if collect_ms > 0 {
-        std::thread::spawn(move || loop {
-            std::thread::sleep(std::time::Duration::from_millis(collect_ms));
-            unsafe {
-                libmimalloc_sys::mi_collect(true);
+        std::thread::spawn(move || {
+            loop {
+                std::thread::sleep(std::time::Duration::from_millis(collect_ms));
+                unsafe {
+                    libmimalloc_sys::mi_collect(true);
+                }
             }
         });
     }

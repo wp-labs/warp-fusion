@@ -29,7 +29,7 @@ pub fn run(
     meta: Option<PathBuf>,
     format: String,
 ) -> WflResult<()> {
-    use wf_config::project::{load_schemas, load_wfl_with_context, parse_vars};
+    use wf_config::project::{load_schemas, parse_vars};
 
     let resolved = resolve_paths(file, case.as_deref(), &data_dir, input, expected, meta)?;
 
@@ -42,13 +42,15 @@ pub fn run(
     let color = std::io::stderr().is_terminal();
 
     let all_schemas = load_schemas(&schemas, &cwd).wfl()?;
-    let source = load_wfl_with_context(&resolved.file, &ctx, Some(&cwd)).wfl()?;
+    // 加载 + 预处理 + parse `use` imports（issue #73）
+    let wfl_file = crate::load_wfl_with_imports(&resolved.file, &ctx, &cwd)?;
 
     let reader = BufReader::new(std::fs::File::open(&resolved.input).source_err(
         WflReason::Io,
         format!("opening {}", resolved.input.display()),
     )?);
-    let replay = crate::cmd_replay::replay_events_for_verify(&source, &all_schemas, reader, color)?;
+    let replay =
+        crate::cmd_replay::replay_events_from_file(&wfl_file, &all_schemas, reader, color, true)?;
 
     let actual: Vec<ActualAlert> = replay
         .alerts

@@ -43,17 +43,15 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends cmake libssl-dev
 
-      - name: Cargo build
-        run: cargo build --all
-
-      - name: Cargo test
-        run: cargo test --all
-
-      - name: Run rule examples
-        run: examples/rules/run_all.sh
-
       - name: Cargo fmt
         run: cargo fmt --check
 
-      - name: Build release
-        run: cargo build --release
+      - name: Cargo build (release)
+        run: cargo build --release --all
+
+      - name: Cargo test (release)
+        run: cargo test --release --all
+
+      - name: Run rule examples (release)
+        # run_all.sh 默认 debug profile；CI 只构建 release，必须显式传 release。
+        run: examples/rules/run_all.sh release

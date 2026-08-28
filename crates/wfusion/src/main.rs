@@ -129,6 +129,22 @@ async fn run_cli() -> CliResult<()> {
     // 分配器内存分账：尽早装入（在任何引擎/metrics 任务启动前），使
     // metrics.ndjson 从第一个采样区间就带 alloc.* 指标。幂等（OnceLock）。
     wf_runtime::metrics::alloc_stats::install_provider(mimalloc_stats);
+    // A/B 实验(2026-08-27 q18 100M RSS 28GB): 分配器保留段(vmmap 128MB 段)是
+    // RSS 大头。周期 mi_collect 回收空闲段归还 OS(默认 5s)。WF_COLLECT_MS=0 关闭。
+    let collect_ms: u64 = std::env::var("WF_COLLECT_MS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(5000);
+    if collect_ms > 0 {
+        std::thread::spawn(move || {
+            loop {
+                std::thread::sleep(std::time::Duration::from_millis(collect_ms));
+                unsafe {
+                    libmimalloc_sys::mi_collect(true);
+                }
+            }
+        });
+    }
     let cli = Cli::parse();
 
     match cli.command {

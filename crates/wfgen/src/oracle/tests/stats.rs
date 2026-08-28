@@ -9,7 +9,7 @@ use std::time::Duration;
 use chrono::{DateTime, Utc};
 use wf_engine::match_engine::Value;
 use wf_lang::ast::{
-    Bound, BoundVal, Expr, FieldRef, JoinMode, PathSegment, ReduceClause, ReduceMeasure, WithinSpec,
+    Bound, BoundVal, Expr, FieldRef, JoinMode, ReduceClause, ReduceMeasure, WithinSpec,
 };
 use wf_lang::plan::{
     BindPlan, EachPlan, JoinCondPlan, JoinPlan, RulePlan, StatsAggPlan, StatsMeasurePlan,

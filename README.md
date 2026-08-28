@@ -26,8 +26,9 @@
 | Flink OSS（3×12 vCPU / 48GiB） | **24.3×** | 44.7×  |
 | 阿里 VVR（8 CU / 32GiB 托管集群）    | **6.8×**  | 10.1×  |
 
-在公开 NEXMark 对照中属**独一档**——其他现代引擎（Feldera 增量计算 2.2×、RisingWave 宣称 2–10× 但基准有争议）相对 Flink 仅 2–4× 量级改进。完整口径与逐查询数据见 [NEXMark PK 报告](../wf-examples/performance/nexmark_pk/NEXMARK_PK_REPORT.md)。
+在公开 NEXMark 对照中属**独一档**——其他现代引擎（Feldera 增量计算 2.2×、RisingWave 宣称 2–10× 但基准有争议）相对 Flink 仅 2–4× 量级改进。完整口径与逐查询数据见 [NEXMark PK 报告](https://github.com/wp-labs/wf-examples/blob/main/performance/nexmark_pk/NEXMARK_PK_REPORT.md)。
 
+![WarpFusion vs Flink NEXMark 对照](../images/vs-flink.jpg)
 ### 架构优势（为什么快）
 
 | 杠杆                  | 砍掉了什么                                                                |
@@ -53,4 +54,3 @@
 完整条款见 [LICENSE](./LICENSE)；版权归属 `Copyright (c) 2026 zuowenjian`。
 
 > 注：ELv2 不属于 OSI 认证的开源协议（source-available），但允许企业内部商用。
-

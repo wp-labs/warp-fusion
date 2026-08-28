@@ -77,6 +77,9 @@ fn validate_prelude_only(file: &WflFile, path: &Path) -> WfgenResult<()> {
         Some("use declarations")
     } else if !file.patterns.is_empty() {
         Some("pattern declarations")
+    } else if !file.lists.is_empty() {
+        // issue #73 定稿: 列表走 `use` 导入, prelude 只管 yield preset。
+        Some("list declarations (declare lists in a separate file and `use` it)")
     } else if !file.rules.is_empty() {
         Some("rule declarations")
     } else if !file.tests.is_empty() {
@@ -228,5 +231,16 @@ mod tests {
         let err =
             validate_rule_prelude_conflicts(&rule, Path::new("rule.wfl"), &prelude).unwrap_err();
         assert!(err.to_string().contains("already exists in prelude"));
+    }
+
+    #[test]
+    fn prelude_rejects_list_declarations() {
+        // issue #73 定稿: 列表走 `use` 导入, prelude 不接受列表声明。
+        let err = parse_rule_prelude(
+            "security_log_types = (\"edr_alert_log\")\n",
+            Path::new("_global.wfl"),
+        )
+        .unwrap_err();
+        assert!(err.to_string().contains("list declarations"), "{err}");
     }
 }

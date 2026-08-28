@@ -399,10 +399,6 @@ fn normalize_counts(
             "q12_bidder_10s_window_count",
             "fixed+close 收口（固定窗口 10s 桶）引擎多收尾部桶（10M 实测 oracle=102400 引擎=282514，多 ~176%）——fixed 收口预算/scan_timeouts 墙钟推进，oracle 事件时间到末尾即止；oracle 为理想值",
         ),
-        (
-            "q19_auction_top10_stats",
-            "stats 规则（StatsExecutor 列式批执行器）暂未接入 oracle（逐事件无等价路径）——引擎输出为实测值，对拍待 oracle stats 支持",
-        ),
     ];
     let mut rules: Vec<&String> = oracle
         .keys()

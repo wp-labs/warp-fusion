@@ -2,6 +2,15 @@
 
 本文件记录 `wfusion` / `wfl` / `wfgen` / `wfadm` 面向使用者的变更。内部实现细节、依赖版本对齐和测试计数不在此展开。
 
+## [Unreleased]
+
+### wfl
+
+- **顶层列表 + `use` 导入（issue #73）**：`name = ("a", "b", ...)` 一处定义，多规则 `expr in <name>` / `expr not in <name>` 引用；`use "lists.wfl"` include 导入目标文件全部顶层列表（无可见性控制，全部可见）。
+  - 编译期展开为字面列表 + **InList 类型检查**（元素-左值类型比对，字面与命名列表统一；混合类型/不兼容报错）。
+  - 错误面：未知名 / use 目标缺失 / 循环引用 / 重名 → 报错（lint 与 compile 同一条路径）。
+  - `wfl lint`/`test`/`replay`/`explain` 四命令统一走 `load_wfl_with_imports`（use 解析）；`wfl fmt`（tree-sitter 语法）对列表声明的支持待 tree-sitter-wfl 同步更新。
+
 ## [0.3.1]
 
 ### 引擎（对齐 wp-reactor 1.0.2）

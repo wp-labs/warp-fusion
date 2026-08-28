@@ -1,0 +1,41 @@
+// 安全事件流（日志类型由列表文件 security_log_types 定义）
+window sdm_event {
+    stream_tag = "sdm"
+    time = event_time
+    over = 1h
+    fields {
+        log_type: chars
+        src_ip: ip
+        dst_ip: ip
+        user: chars
+        event_time: time
+    }
+}
+
+// 告警输出（alert_rule: log_type 命中列表）
+window security_alerts {
+    over = 0
+    fields {
+        log_type: chars
+        src_ip: ip
+        detail: chars
+    }
+}
+
+// 实体输出（alert_entity_rule: log_type 命中列表, 按 src_ip 聚合）
+window alert_entities {
+    over = 0
+    fields {
+        src_ip: ip
+        log_type: chars
+    }
+}
+
+// 证据输出（event_evidence_rule: log_type 不在列表）
+window event_evidence {
+    over = 0
+    fields {
+        log_type: chars
+        src_ip: ip
+    }
+}

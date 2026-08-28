@@ -40,6 +40,21 @@ pub fn load_wfl_files(paths: &[PathBuf]) -> WfgenResult<Vec<wf_lang::ast::WflFil
             prelude::validate_rule_prelude_conflicts(&parsed, path, &prelude)?;
             prelude::apply_rule_prelude(&mut parsed, &prelude);
         }
+        // issue #73: `use "file.wfl"` 导入顶层列表（include 语义, 递归/循环/重名报错）。
+        parsed = wf_lang::compiler::lists::resolve_imports(&parsed, path, &mut |import_path| {
+            std::fs::read_to_string(import_path)
+                .source_err(
+                    WfgenReason::Io,
+                    format!("reading imported wfl: {}", import_path.display()),
+                )
+                .map_err(|e| {
+                    wf_lang::error::error(
+                        wf_lang::LangReason::Compile,
+                        e.detail().clone().unwrap_or_else(|| e.to_string()),
+                    )
+                })
+        })
+        .wfgen()?;
         files.push(parsed);
     }
     Ok(files)

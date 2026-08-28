@@ -1,0 +1,31 @@
+// 告警规则: log_type 命中安全日志允许列表 → 出告警（每条命中事件一条）。
+//
+// issue #73: 列表在 shared/security_log_types.wfl 定义, 这里 use 导入后
+// `in security_log_types` 引用——与其它规则共享同一份列表。
+use "shared/security_log_types.wfl"
+
+rule alert_rule {
+    events { s : sdm_event && s.log_type in security_log_types }
+    match<:1m> { on event { s | count >= 1; } } -> score(80.0)
+    entity(ip, s.src_ip)
+    yield security_alerts (
+        log_type = s.log_type,
+        src_ip = s.src_ip,
+        detail = fmt("security log: {}", s.log_type)
+    )
+
+    limits {
+        max_memory = "64MB";
+        max_instances = 10000;
+        on_exceed = throttle;
+    }
+}
+
+test hit_only_listed_log_types for alert_rule {
+  input {
+    row(s, log_type = "edr_alert_log", src_ip = "10.0.0.1", dst_ip = "192.168.1.10", user = "alice", event_time = "2026-01-01T00:00:00Z");
+    row(s, log_type = "app_access_log", src_ip = "10.0.0.2", dst_ip = "192.168.1.20", user = "bob", event_time = "2026-01-01T00:00:01Z");
+    row(s, log_type = "topas_waf_virus", src_ip = "10.0.0.3", dst_ip = "192.168.1.30", user = "carol", event_time = "2026-01-01T00:00:02Z");
+  }
+  expect { hits == 2; }
+}

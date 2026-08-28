@@ -1,8 +1,0 @@
-[[connectors]]
-id = "file_json"
-type = "file"
-allow_override = ["file"]
-
-[connectors.params]
-fmt = "json"
-file = "data/out_dat/default.jsonl"

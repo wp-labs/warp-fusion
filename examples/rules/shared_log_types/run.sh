@@ -4,6 +4,10 @@
 # 演示: 三个规则（告警/实体/证据）以 `use "../lists/security_log_types.wfl"`
 # 导入同一份日志类型允许列表, 分别用 `in` / `not in` 引用——列表只维护一处,
 # 三个规则无需重复编辑。
+#
+# 工程布局（wp-pipeline 标准）:
+#   models/{wfl,schemas,lists,windows.toml}   模型（规则/schema/列表/窗口）
+#   wfusion/{conf,topology}                   引擎配置与拓扑（相对路径以 wfusion/ 为基准）
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")"
 
@@ -17,17 +21,17 @@ echo "profile: $PROFILE"
 
 echo ""
 echo "1> wfl lint + test（use 导入在 lint/compile 同一条路径解析）"
-for r in rules/*.wfl; do
+for r in models/wfl/*.wfl; do
   echo "  -- $r"
-  "$WFL_BIN" lint "$r" -s "schemas/*.wfs"
-  "$WFL_BIN" test "$r" -s "schemas/*.wfs"
+  "$WFL_BIN" lint "$r" -s "models/schemas/*.wfs"
+  "$WFL_BIN" test "$r" -s "models/schemas/*.wfs"
 done
 
 echo ""
 echo "2> wfusion batch（读 data/sdm_events.ndjson → 三规则 → 三输出）"
 mkdir -p data/out_dat
 rm -f data/out_dat/*.ndjson
-"$WFUSION_BIN" batch -c ./wfusion.toml
+(cd wfusion && "$WFUSION_BIN" batch -c conf/wfusion.toml)
 
 echo ""
 echo "== 输出（预期: 告警 5 / 实体 5 / 证据 3）=="

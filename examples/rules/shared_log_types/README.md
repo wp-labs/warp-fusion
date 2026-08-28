@@ -11,21 +11,26 @@
 
 ## 本示例的写法
 
+工程布局遵循 wp-pipeline 标准：`models/` 放模型（规则/schema/列表/窗口），`wfusion/` 放引擎配置与拓扑（配置相对路径以 `wfusion/` 为基准）：
+
 ```
 examples/rules/shared_log_types/
-├── lists/security_log_types.wfl      # ★ 列表只定义一处
-├── rules/
-│   ├── alert_rule.wfl                # use + `in` → 告警
-│   ├── alert_entity_rule.wfl         # use + `in` → 实体（按 src_ip）
-│   └── event_evidence_rule.wfl       # use + `not in` → 证据
-├── schemas/sdm.wfs
-├── topology/                         # source + 3 个业务 sink
-├── data/sdm_events.ndjson            # 8 条事件（5 安全 + 3 普通）
-├── windows.toml / wfusion.toml
-└── run.sh                            # 一键：lint + test + batch
+├── models/
+│   ├── lists/security_log_types.wfl      # ★ 列表只定义一处
+│   ├── wfl/
+│   │   ├── alert_rule.wfl                # use + `in` → 告警
+│   │   ├── alert_entity_rule.wfl         # use + `in` → 实体（按 src_ip）
+│   │   └── event_evidence_rule.wfl       # use + `not in` → 证据
+│   ├── schemas/sdm.wfs
+│   └── windows.toml
+├── wfusion/
+│   ├── conf/wfusion.toml
+│   └── topology/                         # source + 3 个业务 sink
+├── data/sdm_events.ndjson                # 8 条事件（5 安全 + 3 普通）
+└── run.sh                                # 一键：lint + test + batch
 ```
 
-**列表文件**（`lists/security_log_types.wfl`）——顶层裸绑定，无关键字、无可见性控制（WFL 规模小，`use` 导入的文件其全部顶层列表都可见）：
+**列表文件**（`models/lists/security_log_types.wfl`）——顶层裸绑定，无关键字、无可见性控制（WFL 规模小，`use` 导入的文件其全部顶层列表都可见）：
 
 ```wfl
 security_log_types = (
@@ -36,7 +41,7 @@ security_log_types = (
 )
 ```
 
-**规则文件**（`rules/alert_rule.wfl`）——`use` 导入后直接引用：
+**规则文件**（`models/wfl/alert_rule.wfl`）——`use` 导入后直接引用（`use` 相对路径以规则文件所在目录为基准）：
 
 ```wfl
 use "../lists/security_log_types.wfl"
@@ -53,7 +58,7 @@ rule alert_rule {
 }
 ```
 
-`alert_entity_rule`（`in` + 按 src_ip 聚合）、`event_evidence_rule`（`not in`）引用**同一份**列表——改 `lists/security_log_types.wfl` 一处，三条规则同时生效。
+`alert_entity_rule`（`in` + 按 src_ip 聚合）、`event_evidence_rule`（`not in`）引用**同一份**列表——改 `models/lists/security_log_types.wfl` 一处，三条规则同时生效。
 
 ## 语言能力（issue #73）
 
@@ -72,9 +77,9 @@ rule alert_rule {
 ./run.sh
 
 # 分步
-wfl lint rules/alert_rule.wfl -s "schemas/*.wfs"
-wfl test rules/alert_rule.wfl -s "schemas/*.wfs"
-wfusion batch -c ./wfusion.toml
+wfl lint models/wfl/alert_rule.wfl -s "models/schemas/*.wfs"
+wfl test models/wfl/alert_rule.wfl -s "models/schemas/*.wfs"
+(cd wfusion && wfusion batch -c conf/wfusion.toml)
 ```
 
 需要先构建：`cargo build -p wfl -p wfusion`（或 `run_all.sh release` 用 release 二进制）。
@@ -89,4 +94,4 @@ wfusion batch -c ./wfusion.toml
 | `alert_entities.ndjson` | alert_entity_rule | `in` 列表（按 src_ip） | **5** 条 |
 | `event_evidence.ndjson` | event_evidence_rule | `not in` 列表 | **3** 条 |
 
-> 修改 `lists/security_log_types.wfl` 增删日志类型 → 三个输出同时变化，无需编辑任何规则文件。
+> 修改 `models/lists/security_log_types.wfl` 增删日志类型 → 三个输出同时变化，无需编辑任何规则文件。

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # shared_log_types — 顶层列表 + use 导入（issue #73）
 #
-# 演示: 三个规则（告警/实体/证据）以 `use "../lists/security_log_types.wfl"`
+# 演示: 三个规则（告警/实体/证据）以 `use "shared/security_log_types.wfl"`
 # 导入同一份日志类型允许列表, 分别用 `in` / `not in` 引用——列表只维护一处,
 # 三个规则无需重复编辑。
 #

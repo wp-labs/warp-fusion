@@ -16,11 +16,11 @@
 ```
 examples/rules/shared_log_types/
 ├── models/
-│   ├── lists/security_log_types.wfl      # ★ 列表只定义一处
 │   ├── wfl/
 │   │   ├── alert_rule.wfl                # use + `in` → 告警
 │   │   ├── alert_entity_rule.wfl         # use + `in` → 实体（按 src_ip）
-│   │   └── event_evidence_rule.wfl       # use + `not in` → 证据
+│   │   ├── event_evidence_rule.wfl       # use + `not in` → 证据
+│   │   └── shared/security_log_types.wfl # ★ 列表只定义一处
 │   ├── schemas/sdm.wfs
 │   └── windows.toml
 ├── wfusion/
@@ -30,7 +30,7 @@ examples/rules/shared_log_types/
 └── run.sh                                # 一键：lint + test + batch
 ```
 
-**列表文件**（`models/lists/security_log_types.wfl`）——顶层裸绑定，无关键字、无可见性控制（WFL 规模小，`use` 导入的文件其全部顶层列表都可见）：
+**列表文件**（`models/wfl/shared/security_log_types.wfl`）——顶层裸绑定，无关键字、无可见性控制（WFL 规模小，`use` 导入的文件其全部顶层列表都可见）：
 
 ```wfl
 security_log_types = (
@@ -44,7 +44,7 @@ security_log_types = (
 **规则文件**（`models/wfl/alert_rule.wfl`）——`use` 导入后直接引用（`use` 相对路径以规则文件所在目录为基准）：
 
 ```wfl
-use "../lists/security_log_types.wfl"
+use "shared/security_log_types.wfl"
 
 rule alert_rule {
     events { s : sdm_event && s.log_type in security_log_types }
@@ -58,7 +58,7 @@ rule alert_rule {
 }
 ```
 
-`alert_entity_rule`（`in` + 按 src_ip 聚合）、`event_evidence_rule`（`not in`）引用**同一份**列表——改 `models/lists/security_log_types.wfl` 一处，三条规则同时生效。
+`alert_entity_rule`（`in` + 按 src_ip 聚合）、`event_evidence_rule`（`not in`）引用**同一份**列表——改 `models/wfl/shared/security_log_types.wfl` 一处，三条规则同时生效。
 
 ## 语言能力（issue #73）
 
@@ -94,4 +94,4 @@ wfl test models/wfl/alert_rule.wfl -s "models/schemas/*.wfs"
 | `alert_entities.ndjson` | alert_entity_rule | `in` 列表（按 src_ip） | **5** 条 |
 | `event_evidence.ndjson` | event_evidence_rule | `not in` 列表 | **3** 条 |
 
-> 修改 `models/lists/security_log_types.wfl` 增删日志类型 → 三个输出同时变化，无需编辑任何规则文件。
+> 修改 `models/wfl/shared/security_log_types.wfl` 增删日志类型 → 三个输出同时变化，无需编辑任何规则文件。

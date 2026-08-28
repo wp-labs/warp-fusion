@@ -1,7 +1,7 @@
 // 证据规则: log_type **不在**安全日志允许列表 → 普通日志出证据（每条一条）。
 //
 // 同样 use 导入同一份列表——`not in` 引用与 `in` 引用共享同一数据源。
-use "../lists/security_log_types.wfl"
+use "shared/security_log_types.wfl"
 
 rule event_evidence_rule {
     events { s : sdm_event && s.log_type not in security_log_types }

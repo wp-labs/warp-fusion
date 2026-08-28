@@ -1,8 +1,8 @@
 // 告警规则: log_type 命中安全日志允许列表 → 出告警（每条命中事件一条）。
 //
-// issue #73: 列表在 ../lists/security_log_types.wfl 定义, 这里 use 导入后
+// issue #73: 列表在 shared/security_log_types.wfl 定义, 这里 use 导入后
 // `in security_log_types` 引用——与其它规则共享同一份列表。
-use "../lists/security_log_types.wfl"
+use "shared/security_log_types.wfl"
 
 rule alert_rule {
     events { s : sdm_event && s.log_type in security_log_types }

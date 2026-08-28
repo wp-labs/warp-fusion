@@ -28,7 +28,7 @@
 
 在公开 NEXMark 对照中属**独一档**——其他现代引擎（Feldera 增量计算 2.2×、RisingWave 宣称 2–10× 但基准有争议）相对 Flink 仅 2–4× 量级改进。完整口径与逐查询数据见 [NEXMark PK 报告](https://github.com/wp-labs/wf-examples/blob/main/performance/nexmark_pk/NEXMARK_PK_REPORT.md)。
 
-![WarpFusion vs Flink NEXMark 对照](../images/vs-flink.jpg)
+![WarpFusion vs Flink NEXMark 对照](images/vs-flink.jpg)
 ### 架构优势（为什么快）
 
 | 杠杆                  | 砍掉了什么                                                                |

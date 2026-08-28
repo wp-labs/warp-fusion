@@ -1,0 +1,14 @@
+// ---------------------------------------------------------------------------
+// wfadm service — admin CLI binary
+// ---------------------------------------------------------------------------
+
+service wfadm {
+  kind bin<cli>
+  uses module Admin.AdminCli
+  uses module Admin.ConfOps
+  uses module Admin.EngineOps
+  uses module Admin.Check
+  uses module Admin.SelfUpdate
+  uses module Config.ConfigLoader
+  uses module Project.RemoteUpdate
+}

@@ -1,0 +1,37 @@
+// Verify event processing flow
+
+verify ProcessEventsOk for flow ProcessEvents {
+  given {
+    IncomingBatch.stream_name = "auth_events"
+  }
+
+  when IncomingBatch
+
+  expect {
+    OutputRecord.rule_name == "auth_events"
+  }
+}
+
+verify EvictWindowOk for flow EvictWindow {
+  given {
+    MemoryPressure.window_name = "auth_events"
+  }
+
+  when MemoryPressure
+
+  expect {
+    EvictReport.windows_scanned == "auth_events"
+  }
+}
+
+verify StateMachineOk for flow StateMachineStep {
+  given {
+    NewEvents.rule_name = "e1"
+  }
+
+  when NewEvents
+
+  expect {
+    MatchedContext.rule_name == "e1"
+  }
+}

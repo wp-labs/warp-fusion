@@ -7,7 +7,7 @@
 - 攻击者使用 hydra / medusa 等工具对多台服务器尝试弱口令
 - 同一源 IP 在 5 分钟内产生 ≥ 10 次 SSH 失败登录
 - 通过 `join anti` 排除已知漏扫器 IP
-- 在告警中输出统计证据和事件/窗口时间边界，便于下游解释触发原因
+- 在告警中输出统计证据、相关 event_id 集合和事件/窗口时间边界，便于下游解释触发原因
 
 ## 运行
 
@@ -43,6 +43,7 @@ rule ssh_brute_force {
         window_events = stat.count(window_event(e)),
         matched_events = stat.count(match_event(failures)),
         trigger_count = stat.value(trigger(failures)),
+        evidence_event_ids = collect_set(e.event_id),
         first_seen = @event_first_time,
         last_seen = @event_last_time,
         rule_window_start = @window_start_time,
@@ -59,11 +60,12 @@ rule ssh_brute_force {
   - `window_events = stat.count(window_event(e))`: 当前 rule instance/window 内进入 `e` 的候选事件数
   - `matched_events = stat.count(match_event(failures))`: `failures` 这个 `on event` step 接受为证据的事件数
   - `trigger_count = stat.value(trigger(failures))`: 触发阈值时的聚合值
+  - `evidence_event_ids = collect_set(e.event_id)`: 当前 rule instance 内相关失败登录事件 ID 去重集合
 - **时间字段**:
   - `first_seen` / `last_seen`: 本次命中证据的首尾事件时间
   - `rule_window_start` / `rule_window_end`: 当前规则窗口边界
   - `latest_analysis_time`: 本次输出记录的稳定产出时间
-- **产出**: 攻击源 IP、目标 IP、用户名、统计证据和时间边界
+- **产出**: 攻击源 IP、目标 IP、用户名、统计证据、相关 event_id 集合和时间边界
 
 ## 测试
 

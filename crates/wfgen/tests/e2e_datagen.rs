@@ -104,7 +104,7 @@ async fn e2e_datagen_brute_force() {
 
     // ---- Validate scenario ----
     let validation_errors =
-        wfgen::validate::validate_wfg(&loaded.wfg, &loaded.schemas, &loaded.wfl_files);
+        wfgen::validate::validate_wfg(&loaded.wfg, &loaded.schemas, &loaded.wfl_files, false);
     assert!(
         validation_errors.is_empty(),
         "scenario validation failed: {:?}",
@@ -200,8 +200,13 @@ FAIL_THRESHOLD = "3"
     let raw = RawFusionConfigTree::from_toml_str(&toml_str, &base_dir).expect("parse raw toml");
 
     // ---- Convert GenEvents → typed Arrow batches → framed Arrow file ----
-    let batches = wfgen::output::arrow_ipc::events_to_typed_batches(&events, &loaded.schemas)
-        .expect("events_to_typed_batches failed");
+    let batches = wfgen::output::arrow_ipc::events_to_typed_batches(
+        &events,
+        &loaded.schemas,
+        wfgen::output::arrow_ipc::DEFAULT_MAX_FRAME_BYTES,
+        wfgen::output::arrow_ipc::DEFAULT_MAX_FRAME_ROWS,
+    )
+    .expect("events_to_typed_batches failed");
     let mut framed = Vec::new();
     for (stream_name, batch) in &batches {
         for offset in (0..batch.num_rows()).step_by(ARROW_FRAME_CHUNK_ROWS) {
@@ -209,7 +214,9 @@ FAIL_THRESHOLD = "3"
             let chunk = batch.slice(offset, len);
             let ipc_payload = wp_arrow::ipc::encode_ipc(stream_name, &chunk)
                 .unwrap_or_else(|e| panic!("encode_ipc failed for '{stream_name}': {e}"));
-            framed.extend_from_slice(&(ipc_payload.len() as u32).to_be_bytes());
+            // Wire framing must match the TCP sink `len` mode / wf-runtime receiver:
+            // `<ascii digits> <payload>` (decimal byte count + space + payload).
+            framed.extend_from_slice(format!("{} ", ipc_payload.len()).as_bytes());
             framed.extend_from_slice(&ipc_payload);
         }
     }

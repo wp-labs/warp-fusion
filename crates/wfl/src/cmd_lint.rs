@@ -8,7 +8,7 @@ use crate::error::{WflReason, WflResult, WflStructExt};
 use wf_lang::{CheckError, Severity};
 
 use wf_config::ConfigVarContext;
-use wf_config::project::{load_schemas, load_wfl_with_context, parse_vars};
+use wf_config::project::{load_schemas, parse_vars};
 
 fn print_diag(diag: &CheckError, color: bool) {
     let (prefix, code) = match diag.severity {
@@ -42,11 +42,16 @@ pub fn run(file: PathBuf, schemas: Vec<String>, vars: Vec<String>) -> WflResult<
     // Load schemas
     let all_schemas = load_schemas(&schemas, &cwd).wfl()?;
 
-    // Load and preprocess the .wfl file
-    let source = load_wfl_with_context(&file, &ctx, Some(&cwd)).wfl()?;
-
-    // Parse
-    let wfl_file = wf_lang::parse_wfl(&source).wfl()?;
+    // Load and preprocess the .wfl file + parse `use` imports (issue #73)
+    let wfl_file = crate::load_wfl_with_imports(&file, &ctx, &cwd)?;
+    // 列表引用展开——lint 只跑 check_wfl（不经 compile_wfl 的展开）, 必须显式
+    // 展开, 否则 checker 只见 ListRef（infer None）跳过类型/未知名检查。
+    let wfl_file = wf_lang::compiler::lists::resolve_list_refs(&wfl_file).map_err(|e| {
+        crate::error::error(
+            WflReason::Validation,
+            e.detail().clone().unwrap_or_else(|| e.to_string()),
+        )
+    })?;
 
     // Run error-level checks
     let errors = wf_lang::check_wfl(&wfl_file, &all_schemas);

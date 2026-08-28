@@ -8,6 +8,7 @@ use wf_config::ConfigVarContext;
 use wf_config::load_wfl_with_context;
 
 use crate::error::{self, WfgenReason, WfgenResult, WfgenStructExt};
+use crate::prelude;
 use crate::wfg_ast::WfgFile;
 use crate::wfg_parser::parse_wfg;
 
@@ -34,7 +35,7 @@ pub fn load_scenario(
     let wfg = parse_wfg(&wfg_content)
         .map_err(|err| err.with_context(OperationContext::at(wfg_path.display().to_string())))?;
 
-    let (schemas, wfl_files) = load_from_uses(&wfg, wfg_path, vars)?;
+    let (schemas, wfl_files) = load_from_uses(&wfg, wfg_path, vars, false)?;
 
     let mut rule_plans = Vec::new();
     for wfl_file in &wfl_files {
@@ -55,10 +56,15 @@ pub fn load_scenario(
 /// Paths in `use` declarations are resolved relative to `wfg_path`'s directory.
 /// `.wfl` sources are preprocessed with `vars` (and environment variable
 /// fallback) via [`wf_lang::preprocess_vars_with_env`] before parsing.
+///
+/// When `skip_wfl` is true, `.wfl` entries in `use` declarations are skipped
+/// entirely (no parsing, no `_global.wfl` / yield-preset evaluation), so only
+/// `.wfs` schemas are loaded.
 pub fn load_from_uses(
     wfg: &WfgFile,
     wfg_path: &Path,
     vars: &HashMap<String, String>,
+    skip_wfl: bool,
 ) -> WfgenResult<(Vec<wf_lang::WindowSchema>, Vec<wf_lang::ast::WflFile>)> {
     let base_dir = wfg_path.parent().unwrap_or_else(|| Path::new("."));
     let mut wfl_vars = vars.clone();
@@ -84,8 +90,21 @@ pub fn load_from_uses(
                 schemas.extend(parsed);
             }
             "wfl" => {
+                if skip_wfl {
+                    continue;
+                }
                 let source = load_wfl_with_context(&resolved, &wfl_ctx, Some(base_dir)).wfgen()?;
-                let parsed = wf_lang::parse_wfl(&source).wfgen()?;
+                let mut parsed = wf_lang::parse_wfl(&source).wfgen()?;
+                // Merge `_global.wfl` yield presets next to the rule file, matching
+                // wf-runtime's project prelude convention. Skip when the file
+                // being loaded is the prelude itself.
+                if let Some(prelude_path) = prelude::prelude_path_for(&resolved)
+                    && !prelude::is_prelude_file(&resolved, &prelude_path)
+                {
+                    let prelude = prelude::load_rule_prelude(&prelude_path, &wfl_ctx, base_dir)?;
+                    prelude::validate_rule_prelude_conflicts(&parsed, &resolved, &prelude)?;
+                    prelude::apply_rule_prelude(&mut parsed, &prelude);
+                }
                 wfl_files.push(parsed);
             }
             other => {

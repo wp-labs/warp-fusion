@@ -75,3 +75,38 @@ yield scan_alerts : base_alerts (
   会覆盖先引用 preset 中的同名字段，普通 `yield (...)` 中的显式字段最后合并。
 - `_global.wfl` 和普通规则文件中不能定义同名 `yield preset`。
 - 如果规则目录只有 `_global.wfl`，运行时返回 0 条规则。
+
+### 参数化 yield preset 设计草案
+
+> 状态：设计草案，当前版本尚未实现。
+
+后续可以扩展 `yield preset` 支持调用方传入参数，便于在 `_global.wfl` 中保留公共输出结构，
+同时由每条规则传入 `severity`、`source` 等差异化值：
+
+```wfl
+yield preset base_alerts <
+    severity,
+    source = "wfusion"
+> (
+    rule_name = @__wfu_rule_name,
+    severity = $severity,
+    source = $source
+)
+```
+
+引用方式：
+
+```wfl
+yield security_alerts : base_alerts<"high"> (
+    entity_id = e.sip
+)
+```
+
+约定：
+
+- `<...>` 是 preset 的参数列表，`(...)` 仍是输出字段 body。
+- 无默认值参数必填，带默认值参数可省略。
+- preset body 内通过 `$severity`、`$source` 引用参数。
+- 参数展开后继续沿用现有 preset 合并和显式字段覆盖规则。
+
+完整语法和诊断约定见 `docs/useage/rules.md` 的“参数化 yield preset 设计草案”。

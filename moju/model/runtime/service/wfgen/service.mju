@@ -1,0 +1,14 @@
+// ---------------------------------------------------------------------------
+// wfgen service — scenario generator / verifier binary
+// ---------------------------------------------------------------------------
+
+service wfgen {
+  kind bin<cli>
+  uses module Generator.GenCli
+  uses module Generator.ScenarioLoad
+  uses module Generator.DataGen
+  uses module Generator.Oracle
+  uses module Generator.Verify
+  uses module Lang.LangWfg
+  uses module Engine.MatchEngine
+}

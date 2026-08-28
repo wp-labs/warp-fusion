@@ -1,0 +1,232 @@
+// ---------------------------------------------------------------------------
+// generator domain — wfgen: WFG scenario generation, oracle, verify, datagen
+// Crate: wfgen (vendored wfg_ast modeled via the Lang domain)
+// ---------------------------------------------------------------------------
+
+// -- Trigger commands -------------------------------------------------------
+
+command GenCommand {
+  scenario: String
+}
+
+command VerifyCommand {
+  wfg: String
+}
+
+// -- CLI types --------------------------------------------------------------
+
+state Commands {
+  Gen
+  GenNexmark
+  Lint
+  Verify
+  Send
+  DumpFrames
+  SendArrow
+  Bench
+  Stream
+}
+
+struct Cli {
+  command: Commands
+}
+
+// -- Scenario load & prelude ------------------------------------------------
+
+struct LoadedScenario {
+  name: String
+  wfg: Lang.WfgFile
+  rule_plans: List<Lang.RulePlan>
+}
+
+struct RulePrelude {
+  path: String
+  file: Lang.WflFile
+}
+
+// -- Oracle (rule engine in replay) -----------------------------------------
+
+struct RuleEngine {
+  sm: Engine.CepStateMachine
+  executor: Engine.RuleExecutor
+  conv_plan: Lang.ConvPlan?
+  alias_map: Map<String, List<String>>
+}
+
+struct OracleAlert {
+  rule_name: String
+  score: Float
+  entity_type: String
+  entity_id: String
+  origin: String
+  emit_time: String
+}
+
+struct OracleResult {
+  alerts: List<OracleAlert>
+}
+
+struct OracleTolerances {
+  time_tolerance_secs: Float
+  score_tolerance: Float
+}
+
+// -- Verify -----------------------------------------------------------------
+
+struct ValidationError {
+  code: String
+  message: String
+}
+
+struct ActualAlert {
+  rule_name: String
+  score: Float
+  entity_type: String
+  entity_id: String
+  origin: String
+  fired_at: String
+}
+
+struct VerifySummary {
+  oracle_total: Int
+  actual_total: Int
+  matched: Int
+  missing: Int
+  unexpected: Int
+  field_mismatch: Int
+}
+
+struct AlertDetail {
+  rule_name: String
+  entity_type: String
+  entity_id: String
+  score: Float
+  time: String
+}
+
+struct MismatchDetail {
+  rule_name: String
+  entity_type: String
+  entity_id: String
+  expected_score: Float
+  actual_score: Float
+  expected_time: String
+  actual_time: String
+}
+
+struct MatchResult {
+  matched: Int
+  mismatches: List<Map<String, String>>
+  missing_indices: List<Int>
+  unexpected_indices: List<Int>
+}
+
+struct VerifyReport {
+  status: String
+  summary: VerifySummary
+  missing_details: List<AlertDetail>
+  unexpected_details: List<AlertDetail>
+  mismatch_details: List<MismatchDetail>
+}
+
+// -- Data generation --------------------------------------------------------
+
+struct GenEvent {
+  stream_name: String
+  window_name: String
+  timestamp: String
+  fields: String
+}
+
+struct GenResult {
+  events: List<GenEvent>
+}
+
+struct FaultResult {
+  events: List<GenEvent>
+  stats: FaultStats
+}
+
+struct FaultStats {
+  out_of_order: Int
+  late: Int
+  duplicate: Int
+  dropped: Int
+  clean: Int
+}
+
+state Assignment {
+  Clean
+  Fault
+}
+
+struct UseStepPlan {
+  rule_step_idx: Int
+  count: Int
+  predicates: Map<String, String>
+}
+
+struct InjectGenResult {
+  events: List<GenEvent>
+  inject_counts: Map<String, Int>
+}
+
+struct RuleStructure {
+  keys: List<String>
+  window_dur: Int
+  steps: List<StepInfo>
+  entity_id_field: String?
+}
+
+struct StepInfo {
+  bind_alias: String
+  scenario_alias: String
+  window_name: String
+  measure: Lang.Measure
+  threshold: Int
+  filter_overrides: Map<String, String>
+}
+
+struct AliasMap {
+  bind_to_scenario: List<Map<String, String>>
+}
+
+struct InjectOverrides {
+  entity_field: String?
+  count_per_entity: Int?
+  steps_completed: Int?
+  within: Int?
+  use_steps: List<InjectUseStepOverrides>
+}
+
+struct InjectUseStepOverrides {
+  count: Int
+  predicates: Map<String, String>
+}
+
+// -- Output -----------------------------------------------------------------
+
+state ColumnBuilder {
+  Utf8
+  Int64
+  Float64
+  Bool
+  TimeNanos
+}
+
+// -- Error state ------------------------------------------------------------
+
+state WfgenReason {
+  Parse
+  Validation
+  Generation
+  Oracle
+  Io
+  Serialization
+  Network
+  Lang
+  Config
+  Core
+  Vars
+  General
+}

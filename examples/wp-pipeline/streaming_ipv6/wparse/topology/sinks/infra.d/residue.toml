@@ -1,0 +1,11 @@
+
+[sink_group]
+name = "residue"
+batch_size = 1
+batch_timeout_ms = 300
+
+[[sink_group.sinks]]
+connect = "file_json_sink"
+
+[sink_group.sinks.params]
+file = "residue.dat"

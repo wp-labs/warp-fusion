@@ -172,7 +172,7 @@ stream_tag = "netflow"
 format = "ndjson"
 ```
 
-> 需 `rdkafka` crate，当前为占位实现。
+> 由 `wp-connectors` 的 kafka 连接器实现（源 + 汇），非占位。
 
 ## 多源
 
@@ -200,4 +200,4 @@ format = "ndjson"
 |------|-----------|------|
 | `file` | `wp_core_connectors` | `FileBatchSource` → NDJSON → Arrow RecordBatch |
 | `tcp` | `wp_core_connectors` | `TcpBatchSource` → Arrow IPC |
-| `kafka` | 规划中 | 通过 `wp_core_connectors` 扩展 |
+| `kafka` | `wp-connectors` kafka 连接器 | rdkafka 实现，含 source + sink |

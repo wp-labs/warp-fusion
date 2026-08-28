@@ -6,7 +6,7 @@ use orion_error::conversion::SourceErr;
 
 use crate::error::{self, WflReason, WflResult, WflStructExt};
 use wf_config::ConfigVarContext;
-use wf_config::project::{load_schemas, load_wfl_with_context, parse_vars};
+use wf_config::project::{load_schemas, parse_vars};
 use wf_engine::match_engine::contract::run_test;
 use wf_lang::ast::PermutationMode;
 
@@ -38,11 +38,8 @@ pub fn run(
     // Load schemas
     let all_schemas = load_schemas(&schemas, &cwd).wfl()?;
 
-    // Load and preprocess the .wfl file
-    let source = load_wfl_with_context(&file, &ctx, Some(&cwd)).wfl()?;
-
-    // Parse
-    let wfl_file = wf_lang::parse_wfl(&source).wfl()?;
+    // Load and preprocess the .wfl file + parse `use` imports (issue #73)
+    let wfl_file = crate::load_wfl_with_imports(&file, &ctx, &cwd)?;
 
     // Compile rules into plans
     let plans = wf_lang::compile_wfl(&wfl_file, &all_schemas).wfl()?;

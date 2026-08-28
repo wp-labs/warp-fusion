@@ -1,0 +1,39 @@
+// ---------------------------------------------------------------------------
+// engine domain — modules
+// ---------------------------------------------------------------------------
+
+module EventIngress {
+  layer Interface
+  owns IncomingBatch
+  responsible_for "Accepts incoming Arrow RecordBatch data and streams to window routing"
+}
+
+module WindowManager {
+  layer DataFusion
+  owns Window, TimedBatch, WindowParams, WindowRegistry, WindowDef, Subscription, Router, ParsedRoute, ParsedWindow, RouteReport, WindowRouteOutcome, Evictor, EvictReport, WindowEvictCount, ProviderWindow, RuleFanout, RulePush, FanoutMode, FanoutSubscription, AppendOutcome, JoinIndex
+  responsible_for "Time-sorted window buffers, routing, byte accounting, eviction and rule-task fanout"
+}
+
+module MatchEngine {
+  layer DataFusion
+  owns Event, Value, JoinKey, ValueKey, InstanceKey, StepResult, StepProgress, StepOutcome, StepData, BindData, MatchedContext, CloseReason, CloseOutput, RollingStats, BranchState, AliasState, StepState, Instance, NegCheck, SeqRuntime, CepStateMachine, OutputStatic, RuleExecutorOptions, RuleExecutor, YieldMeta, StatSelector, CoreReason
+  responsible_for "NFA/CEP state machine matching, rule execution and match-context materialization"
+}
+
+module AlertOutput {
+  layer DataFusion
+  owns OutputRecord, AlertOrigin
+  responsible_for "Produces normalized alert records (wfx_id, score, origin) from match results"
+}
+
+module SinkDispatch {
+  layer DataFusion
+  owns SinkDispatcher, SinkRuntime, SinkRouteBinding, WildmatchMatcher, WfMetaDisableMatcher
+  responsible_for "Routes alert records to configured sinks by wildcard yield-target, with default/error/monitor escalation"
+}
+
+module PipeRelay {
+  layer DataFusion
+  owns Pipe, PipeRegistry
+  responsible_for "Relays intermediate (non-final) yield output between pipeline stages"
+}

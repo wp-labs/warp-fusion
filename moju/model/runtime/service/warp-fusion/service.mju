@@ -1,0 +1,13 @@
+// ---------------------------------------------------------------------------
+// warp-fusion service — the product daemon (wfusion binary)
+// ---------------------------------------------------------------------------
+
+service warp-fusion {
+  kind bin<cli>
+  uses module Fusion.FusionCli
+  uses module Fusion.AdminApi
+  uses module Project.RemoteUpdate
+  uses module Orchestra.ReactorLifecycle
+  uses module Config.ConfigLoader
+  uses module Engine.MatchEngine
+}

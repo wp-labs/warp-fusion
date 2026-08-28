@@ -1,102 +1,195 @@
 # Changelog (English)
 
-## [0.1.22] — 2026-07-07
+This file records user-facing changes to `wfusion` / `wfl` / `wfgen` / `wfadm`.
+Internal implementation details, dependency alignment, and test counts are not covered here.
 
-### wfusion — admin API binding and TLS loading
+## [0.3.1]
 
-- **Fixed**: allow `admin_api.bind = "0.0.0.0:..."` with `admin_api.tls.enabled = false`; non-loopback admin listeners no longer require TLS.
-- **Fixed**: initialize the rustls ring `CryptoProvider` from the production TLS loading path, avoiding TLS startup panics when the provider was not installed elsewhere.
-- **Tests**: added coverage for non-loopback admin API startup with TLS disabled and kept HTTPS coverage for non-loopback binds.
+### Engine (aligned with wp-reactor 1.0.2)
+
+- Aligned to `wp-reactor` v1.0.2; the preread budget (`parse_buffer_bytes`) now accounts in content bytes:
+  - **Accounting fix**: the budget no longer charges decoded Arrow allocation size (IPC decode structurally over-counts real memory ~10× and starved the pipeline slots); it now charges content bytes (≈ wire), matching the window accounting.
+  - **Default 256MB → 128MB**: avoids the 12–14GB RSS plateau at 256MB while slightly improving throughput (q1 100M: 6.13M EPS / RSS 5.88GB); raise explicitly for more throughput (512MB–2GB sweet spot; 4GB over-buffers and regresses).
 
 ### wfgen
 
-- **Added**: top-level `wfgen --version` output.
-- **Tests**: added a regression test for the clap version flag.
+- **`shard-frames` shard files + multi-connection replay**: `shard-frames` splits one frame file into N key-sharded files (`--shards` / `--shard-keys`, the same key always lands in the same file); `send-arrow --shard-files` raw-copies one shard file per TCP connection with zero decode, keeping key closure so stateful rules stay correct — the right way to scale supply across connections (C-UCP).
+- **Fix dropping the final partial frame**: rows left over at the end of a stream (less than a full frame) were previously tagged `tail`, and the engine dropped the whole frame when routing by tag — 100M lost 1.4M rows and the bench hung until timeout. Those rows now keep the original stream tag, so no data is lost.
 
-## [Unreleased] — 2026-07-06
+## [0.3.0 Unreleased]
 
-### wfusion — path base changed from config-file-relative to working-dir-relative
+### Engine (aligned with wp-reactor 1.0.0)
 
-- **Break**: Default `runtime_base_dir` changed from `config_path.parent()` (the `conf/` dir containing the config file) to `current_dir()` (process working directory). `wfadm check` updated accordingly.
-- Impact: all relative paths in `wfusion.toml` (`sources_dir` / `sinks` / `schemas` / `rules`) must remove one `..` level.
-  - Before: `"../topology/sources"` → After: `"topology/sources"`
-  - Before: `"../../../models/schemas/"` → After: `"../../models/schemas/"`
-- `base` paths in `business.d/*.toml` also remove one `..` level (`"../../data/alerts"` → `"../data/alerts"`).
-- Unifies path resolution with wparse (both now working-dir-relative), eliminating inconsistent `..` counts within the same project.
-- `--work-dir` CLI flag behavior unchanged (explicit override takes priority).
+- Aligned to `wp-reactor` v1.0.0, gaining sharded rule aggregation and shared resource limits:
+  - **`conv` rules can aggregate across shards**: fixed-window `conv` (sort/top/dedup/where) rules are now shardable; each shard's close output is merged across shards via a watermark barrier and `apply_conv` runs on the merged batch (global top-N / sort), then a shared rate limit applies before emitting. EOS/drained flush is the correct exit for complete data; cancel drops unsealed (partial) buckets.
+  - **Cross-shard shared rate limit / budget**: `max_throttle` / `max_instances` / `max_memory_bytes` are enforced collectively across shards via shared `SharedLimits` atomics (shared sliding-window throttle, exact CAS instance reservation, rule-wide FailRule latch) instead of per-shard limits; the `rule_instances` metric sums across shards.
+  - Semantics fixes: `max_instances` is now exact under sharding (the old read-then-act could overshoot by ≤ shard_count-1); conv-stage throttle overflow dispatches per `on_exceed` (FailRule latches correctly); `shards=1` behavior is unchanged.
 
-### Example pipelines — fixed
+### Language (WFL)
 
-- **streaming**: Added missing `protocol = "arrow"` in `parsed_netflow.toml` to fix Arrow IPC decode errors.
-- **streaming**: Added `[models].wpl` in `wpgen.toml` to share models directory with `wparse.toml`.
-- **streaming / kafka**: Changed `wpgen sample` output port to integer (avoids connector param type mismatch), replaced fixed `sleep` with `wait_port` readiness probes in `run.sh`.
-- **kafka**: Changed wfusion source `data_format` from `arrow_framed` to `ndjson` to match wparse kafka sink's JSON output.
-- **kafka**: Removed `demo.toml` (debug sink whose `oml = ["*"]` matched first in OML routing, preventing kafka sink from receiving records).
+- `on event<accu>` within-window accumulation: after the threshold is met, the window's count and evidence keep accumulating without reset, and each subsequent qualifying event re-fires with the running cumulative values and full evidence, until the window expires (aligned with `wp-reactor` v0.4.0).
 
-## [Unreleased] — 2026-06-22
+### Examples
 
-### Dependencies — Centralized & Upgraded
+- The `ssh_brute_force` example now uses `on event<accu>`: after brute force is detected (count >= 10), every subsequent failed login re-fires with the running cumulative count and the accumulating evidence.
 
-- **arrow** 54 → 59 (IPC encoding compatibility)
-- **wp-arrow** 0.1 → 0.2 (arrow 59 support)
-- **wp-core-connectors** 0.5.5 → 0.5.6
-- **toml** 0.9 → 1.0
-- **wf-connector-api** 0.1 → 0.2
-- **sha2** 0.10 → 0.11
-- **rand** pinned to `=0.9.0` (prevents 0.10 upgrade breaking `random_range` API)
+### wfgen
 
-### Workspace — Dependency Centralization
+- `--no-wfl` skips the entire WFL pipeline (no rule load/compile, no injection) and generates pure baseline random events.
+- `--no-oracle` still compiles WFL (keeping injection `use()` fixed values) and only skips oracle/expected output (no `.except.*` sidecars).
+- `yield preset` declared in a rule-directory `_global.wfl` is auto-merged, so `yield <target> : <preset>` reuses common output fields.
 
-All crate-level dependency versions moved to `[workspace.dependencies]`:
+### wfusion
 
-| Dependency | Crates |
-|-----------|--------|
-| `serde_json`, `chrono`, `clap`, `tokio`, `rand` | wfgen, wfl, wfusion |
-| `wp-arrow`, `wp-connector-api`, `tracing` | wfgen, wfusion |
+- `[metrics] console_output = false` disables the periodic console stats log.
 
-This ensures a single source of truth for version management and prevents
-drift between crates.
+## [0.1.43]
 
-### wfgen — Deterministic Scenario Timestamps
+- Version bump; aligned to `wp-reactor` v0.1.42 (includes its internal engine fixes).
 
-- Default scenario start time changed from `Utc::now()` to fixed
-  `"2026-01-01T00:00:00Z"`. Fixes non-deterministic test failures
-  (`test_fault_deterministic`) and ensures reproducible data generation.
+## [0.1.42]
 
-### wfgen — Chunked TCP Send in Stream Mode
+- Version bump (alpha); aligned to `wp-reactor` internal fixes; no new user-facing features.
 
-- Stream command splits generated events into 1000-row chunks before
-  sending via `TcpArrowSink`. Prevents wfusion's TCP source (64KB
-  batch cap) from choking on single giant frames.
+## [0.1.41]
 
-### Tests — e2e Tests Self-Contained
+### Language (WFL)
 
-- Copied schemas, rules, sinks, and connectors from `wp-reactor/examples/`
-  into `crates/wfgen/examples/`. e2e tests no longer require `wp-reactor`
-  to be checked out alongside `warp-fusion`. CI can now build and test
-  with only the `warp-fusion` repository.
-- Updated all `.wfg` scenario files to use local relative paths
-  (`../schemas/`, `../rules/`).
+- `on event seq { ... }` ordered sequences and `on event any { ... }` unordered co-occurrence: attack-chain detection with per-step `within` gaps, `not has ... within` negation steps, and `consec` strict adjacency (`skip = to_next` deferred to L3).
 
-### Docs — AI Agent Skills Guide
+### wfusion
 
-- Added `skills/test-pipeline-guide.md`: an AI-agent-oriented
-  troubleshooting guide covering the wf-rules test pipeline
-  (wfgen → wfusion → alerts). Documents common failure modes,
-  diagnostic techniques, and quick verification commands.
+- Rule instances auto-expire by their window TTL when input is idle, instead of lingering.
 
----
+## [0.1.40]
+
+### wfusion
+
+- `[logging] level` is the single source of truth for the log level and is no longer overridden by `RUST_LOG`; use `[logging].modules` for per-module overrides.
+
+## [0.1.39]
+
+### wfgen
+
+- `--out` is now optional and decoupled from `--send` (four combinations; a clear usage error when neither is given).
+- `--no-oracle` renamed to `--no-wfl` (skips the whole WFL pipeline); `--no-oracle` retained as a backward-compatible alias.
+
+## [0.1.38]
+
+### Language (WFL)
+
+- Project `_global.wfl` rule prelude: declare shared `yield preset`, reuse via `yield <target> : <preset>`.
+- String helpers: `sha1_n(text, n)`, `join(...)`, `join_by(sep, ...)`.
+- DEBUG funnel logs and state-machine progress diagnostics for rules (locate which step a rule is stuck on).
+
+### wfusion
+
+- Stream windows accept `object` / `array` / `array/T` input fields; `merge()` for shallow object enrichment.
+
+## [0.1.35-alpha] — 2026-07-22
+
+### Language (WFL)
+
+- `object { ... }` / `array [ ... ]` structured literals and `merge()`; structured input fields on stream windows.
+
+### wfadm
+
+- `wfadm self update` (incl. `self check`), installing the warp-fusion suite.
+
+## [0.1.34-alpha] — 2026-07-20
+
+### wfadm
+
+- `self update` installs the full warp-fusion binaries; manifest channel selection fix.
+
+## [0.1.32-alpha] — 2026-07-20
+
+### wfadm
+
+- `self update` picks the remote manifest URL by channel (`alpha` / `beta`), avoiding reading another branch's manifest.
+
+## [0.1.31-alpha] — 2026-07-19
+
+### wfadm
+
+- `self update` aligned with `wpadm`: new `--channel` / `--updates-base-url` / `--updates-root` / `--json` / `--yes` / `--dry-run` / `--force`; update source uses the manifest canonical target triple, fixing macOS arm64 short-name 404s.
+
+## [0.1.30-alpha] — 2026-07-19
+
+### wfusion
+
+- Built-in `__window_miss` diagnostic window: unknown stream schema / missing stream-tag field observable via the monitor sink.
+
+## [0.1.29-alpha] — 2026-07-14
+
+### wfusion
+
+- Sink groups support `wf_meta_disable` with wildmatch patterns (`__wfu_*`, etc.) to suppress metadata fields.
+- Admin API reload semantics: requires-restart changes return `restart_required` instead of a 409 failure.
+
+## [0.1.28] — 2026-07-13
+
+### Language (WFL)
+
+- Helpers: `now()` / `now_s()` / `now_ms()` / `now_us()` / `now_ns()`, `is_blank()` / `null_if_blank()` / `default_if_blank()`, `md5()` / `sha1()` / `sha256()` / `hex()` / `stable_id()`.
+- Source-aware WFL parse/compile diagnostics (file, line/column, source snippet on error).
+
+### wfusion
+
+- `.wfs` uses `window.stream_tag` as the distribution key (replacing the old `stream`); upstream carrier unified to `wp_oml_name`.
+
+## [0.1.24] — 2026-07-09
+
+### wfusion — Admin API publish protocol aligned with wparse (Break)
+
+- `POST /admin/v1/reloads/model` params now `wait` / `update` / `version` / `group` / `timeout_ms` / `reason`; old `full` / `update_remote` semantics removed.
+- Non-loopback `admin_api.bind` must enable TLS; `admin_api.auth.mode` accepts only `bearer_token`.
+
+## [0.1.23] — 2026-07-08
+
+### wfusion / wfadm
+
+- daemon supports `update=true` remote update (git fetch + version resolution + managed-dir sync) followed by hot reload, with automatic rollback on failure.
+- `wfadm conf update` delegates to the remote-update API.
+
+## [0.1.22] — 2026-07-07
+
+### wfusion / wfgen
+
+- Fixed: non-loopback admin API can start with TLS disabled.
+- `wfgen --version`.
+
+## [0.1.21] — 2026-07-06
+
+### wfusion — path base change (Break)
+
+- Relative paths are now resolved against the **working directory**, not the config file's directory. Relative paths in `wfusion.toml` (`schemas` / `rules` / `sinks` / `sources_dir`, etc.) must drop one `..` level; `business.d/*.toml` `base` paths likewise. An explicit `--work-dir` takes priority.
+
+## [0.1.17] — 2026-07-01
+
+### wfusion
+
+- Online hot reload via the admin API: `POST /admin/v1/reloads/model` (L1 rule swap / L2 add window / L3 partial rebuild / L4 restart).
+- **Break**: `wfusion config` subcommand removed (moved to `wfadm config`).
+
+### wfadm
+
+- `conf update` (remote rule-source sync), `init --repo` (project bootstrap from a remote template).
+
+## [0.1.16] — 2026-06-28
+
+### wfusion
+
+- **Break**: `wfusion run` split into `wfusion daemon` / `wfusion batch`; `mode` is set by the CLI, not the config.
+- **Break**: `wfusion rule` removed (duplicated `wfl`).
+- Admin API HTTP server (`GET /admin/v1/runtime/status`).
+
+### wfadm
+
+- `check` (deep WFL/WFS/WFG validation), `conf diff`, `engine status` / `engine reload`, `self-update`.
 
 ## [0.1.11] — 2026-06-21
 
-### wfgen — Use wp-core-connectors TcpArrowSink for TCP Send
+### wfgen
 
-- **Dependencies**: Added `wp-core-connectors`, `wp-connector-api`, `tokio`
-- **Refactor**: `tcp_send.rs` rewritten from raw `TcpStream` + manual Arrow IPC
-  encoding → `TcpArrowSink::connect()` + `encode_batch_payload_with_tag()` +
-  `send_payload()`
-  - Arrow IPC encoding via `encode_ipc_frame` (compatible with `wp_arrow::ipc::encode_ipc`)
-  - Framing: RFC6587 octet-counted (`<len> <payload>`), matching wfusion `tcp_src` `framing = "len"`
-  - Transport: `NetWriter` with backpressure
-- **Async**: `cmd_stream`, `cmd_send`, `cmd_bench`, `cmd_gen` all converted to `async fn`
-- **Dependency**: `wp-core-connectors` 0.5.2 → 0.5.5 (exposes `encode_batch_payload_with_tag` as public API)
+- Send data via `wp-core-connectors` TcpArrowSink (RFC6587 framing, matching wfusion `tcp_src`).

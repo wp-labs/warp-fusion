@@ -1,0 +1,13 @@
+// Verify wfl replay flow
+
+verify ReplayOk for flow ReplayRun {
+  given {
+    ReplayCommand.file = "events.ndjson"
+  }
+
+  when ReplayCommand
+
+  expect {
+    ReplayResult.event_count == "events.ndjson"
+  }
+}

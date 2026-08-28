@@ -1,0 +1,24 @@
+version = "1.0"
+
+[models]
+wpl = "../models/wpl"
+
+[generator]
+count = 1000
+speed = 1000
+parallel = 1
+
+[output]
+connect = "tcp_sink"
+
+[output.params]
+addr = "127.0.0.1"
+port = 9801
+framing = "line"
+
+[logging]
+level = "info"
+output = "file"
+file_path = "../data/logs"
+
+[presets]

@@ -1,0 +1,7 @@
+// ---------------------------------------------------------------------------
+// project domain — implementation bindings
+// ---------------------------------------------------------------------------
+// Snapshots bind to the lock file and project-remote git repo state.
+
+bind Project.ProjectRemoteLockGuard to LockFile with storage
+bind Project.ProjectRemoteSnapshot to RemoteRepoState with storage

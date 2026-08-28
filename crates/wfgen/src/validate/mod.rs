@@ -30,15 +30,20 @@ impl std::fmt::Display for ValidationError {
 /// Validate a parsed `.wfg` file against schemas and WFL rules.
 ///
 /// Returns a list of validation errors (empty if valid).
+///
+/// When `skip_wfl` is true, validations that require WFL rules to exist
+/// (expect / inject referencing rules) are skipped, so a scenario can be
+/// generated as baseline events without any rule files.
 pub fn validate_wfg(
     wfg: &WfgFile,
     schemas: &[WindowSchema],
     wfl_files: &[WflFile],
+    skip_wfl: bool,
 ) -> Vec<ValidationError> {
     let all_rules: Vec<_> = wfl_files.iter().flat_map(|f| f.rules.iter()).collect();
 
     if wfg.syntax.is_some() {
-        return syntax::validate_syntax(wfg, schemas, &all_rules);
+        return syntax::validate_syntax(wfg, schemas, &all_rules, skip_wfl);
     }
 
     let mut errors = Vec::new();
@@ -52,7 +57,9 @@ pub fn validate_wfg(
     errors.extend(stream_rule::validate_stream_rule_bindings(
         scenario, &all_rules,
     ));
-    errors.extend(inject::validate_inject_blocks(scenario, &all_rules));
+    if !skip_wfl {
+        errors.extend(inject::validate_inject_blocks(scenario, &all_rules));
+    }
     errors.extend(oracle::validate_oracle_params(scenario));
 
     errors

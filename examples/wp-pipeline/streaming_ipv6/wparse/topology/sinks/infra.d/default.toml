@@ -1,0 +1,7 @@
+[sink_group]
+name = "default"
+batch_size = 1024
+[[sink_group.sinks]]
+connect = "file_json_sink"
+[sink_group.sinks.params]
+file = "default.ndjson"

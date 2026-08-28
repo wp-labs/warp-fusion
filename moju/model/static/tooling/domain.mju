@@ -1,0 +1,79 @@
+// ---------------------------------------------------------------------------
+// tooling domain — wfl: rule tooling CLI (explain / lint / replay / verify / test)
+// Crate: wfl
+// ---------------------------------------------------------------------------
+
+// -- Trigger command --------------------------------------------------------
+
+command ReplayCommand {
+  file: String
+}
+
+// -- CLI types --------------------------------------------------------------
+
+state Commands {
+  Explain
+  Lint
+  Fmt
+  Replay
+  ReplayVerify
+  Test
+}
+
+struct Cli {
+  command: Commands
+}
+
+// -- Replay engine ----------------------------------------------------------
+
+struct ResolvedPaths {
+  file: String
+  input: String
+  expected: String
+  meta: String?
+}
+
+struct ReplayEngine {
+  machine: Engine.CepStateMachine
+  executor: Engine.RuleExecutor
+  conv_plan: Lang.ConvPlan?
+}
+
+struct ReplayResult {
+  alerts: List<Engine.OutputRecord>
+  event_count: Int
+  match_count: Int
+  error_count: Int
+}
+
+state ReplayEofAction {
+  CloseAllEos
+  SweepTimeoutAtLastWatermark
+}
+
+struct ReplayExecOptions {
+  scan_expired_each_event: Bool
+  eof_action: ReplayEofAction
+}
+
+struct ConsumerRoute {
+  engine_idx: Int
+  bind_alias: String
+}
+
+// -- Error state ------------------------------------------------------------
+
+state WflReason {
+  Format
+  Parse
+  Validation
+  Replay
+  Verify
+  Io
+  Serialization
+  Lang
+  Config
+  Core
+  Wfgen
+  General
+}

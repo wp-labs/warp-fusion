@@ -1,0 +1,83 @@
+// ---------------------------------------------------------------------------
+// WP-Reactor layered architecture — canonical layers and cross-domain rules
+// ---------------------------------------------------------------------------
+
+layer Interface
+layer Application
+layer DataFusion
+layer Infrastructure
+
+dependency_rule LayerDirection {
+  Interface -> Application
+  Application -> DataFusion
+  DataFusion -> Infrastructure
+}
+
+dependency_rule CrossDomainDeps {
+  // CLI triggers config loading
+  Orchestra.EngineEntry -> Config.ConfigLoader
+
+  // Reactor lifecycle orchestrates config, engine and language
+  Orchestra.ReactorLifecycle -> Config.ConfigLoader
+  Orchestra.ReactorLifecycle -> Engine.WindowManager
+  Orchestra.ReactorLifecycle -> Engine.MatchEngine
+  Orchestra.ReactorLifecycle -> Lang.LangCompile
+
+  // Task orchestration drives rule tasks over the engine
+  Orchestra.TaskOrchestration -> Engine.MatchEngine
+  Orchestra.TaskOrchestration -> Engine.WindowManager
+
+  // Hot reload re-loads config and re-compiles rules
+  Orchestra.HotReload -> Config.ConfigLoader
+  Orchestra.HotReload -> Lang.LangCompile
+
+  // Config depends on the language for rule/schema compilation
+  Config.ConfigLoader -> Lang.LangCompile
+
+  // Engine depends on config for window/output shape and lang for plans
+  Engine.MatchEngine -> Lang.LangCompile
+  Engine.MatchEngine -> Config.WindowConfig
+  Engine.WindowManager -> Config.WindowConfig
+  Engine.SinkDispatch -> Config.SinkConfig
+  Engine.AlertOutput -> Config.OutputConfig
+
+  // Infra adapters
+  Orchestra.Receiver -> Engine.WindowManager
+  Orchestra.SinkFactory -> Config.SinkConfig
+  Orchestra.SinkFactory -> Engine.SinkDispatch
+  Orchestra.RuntimeMetrics -> Engine.WindowManager
+  Orchestra.ExternalBridge -> Engine.MatchEngine
+}
+
+dependency_rule ProductDeps {
+  // warp-fusion daemon drives the reactor
+  Fusion.FusionCli -> Config.ConfigLoader
+  Fusion.FusionCli -> Orchestra.ReactorLifecycle
+  Fusion.AdminApi -> Orchestra.ReactorLifecycle
+  Fusion.AdminApi -> Project.RemoteUpdate
+
+  // generator builds on the language and engine
+  Generator.GenCli -> Lang.LangWfg
+  Generator.ScenarioLoad -> Lang.LangWfg
+  Generator.DataGen -> Engine.MatchEngine
+  Generator.DataGen -> Lang.LangCompile
+  Generator.Oracle -> Engine.MatchEngine
+  Generator.Oracle -> Lang.LangCompile
+  Generator.Verify -> Generator.Oracle
+
+  // rule tooling uses the compiler and engine
+  Tooling.WflCli -> Lang.LangCompile
+  Tooling.WflCli -> Lang.LangChecker
+  Tooling.Replay -> Engine.MatchEngine
+  Tooling.Replay -> Lang.LangCompile
+
+  // admin ops drive the daemon and project remote
+  Admin.AdminCli -> Config.ConfigLoader
+  Admin.EngineOps -> Fusion.AdminApi
+  Admin.Check -> Config.ConfigLoader
+  Admin.Check -> Lang.LangChecker
+  Admin.SelfUpdate -> Project.RemoteUpdate
+
+  // project remote resolves config-driven tags
+  Project.RemoteUpdate -> Config.ConfigLoader
+}

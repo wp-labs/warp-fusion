@@ -19,17 +19,74 @@ use crate::wfg_parser::parse_wfg;
 use crate::cmd_helpers::{load_wfl_files, load_ws_files};
 use crate::tcp_send::send_events;
 
-#[allow(clippy::too_many_arguments)]
-pub async fn run(
-    scenario: PathBuf,
-    format: String,
-    out: PathBuf,
-    ws: Vec<PathBuf>,
-    wfl: Vec<PathBuf>,
-    no_oracle: bool,
-    send: bool,
-    addr: String,
-) -> WfgenResult<()> {
+/// `wfgen gen` 参数：从 .wfg scenario 生成测试数据。
+#[derive(clap::Args)]
+pub struct Args {
+    /// Path to the .wfg scenario file
+    #[arg(long)]
+    pub scenario: PathBuf,
+
+    /// Output format: "jsonl" or "arrow" ("arrow-ipc"/"ipc" aliases)
+    #[arg(long, default_value = "jsonl")]
+    pub format: String,
+
+    /// Output directory. Optional when --send is used; at least one of
+    /// --out / --send must be given.
+    #[arg(long)]
+    pub out: Option<PathBuf>,
+
+    /// Additional .wfs schema files (beyond those in `use` declarations)
+    #[arg(long)]
+    pub ws: Vec<PathBuf>,
+
+    /// Additional .wfl rule files (beyond those in `use` declarations)
+    #[arg(long)]
+    pub wfl: Vec<PathBuf>,
+
+    /// Skip the entire WFL pipeline: no rule loading, no `_global.wfl` /
+    /// yield-preset evaluation, no compilation, no injection-aware event
+    /// generation, and no oracle/expected output. Generation falls back to
+    /// baseline background events.
+    #[arg(long)]
+    pub no_wfl: bool,
+
+    /// Skip oracle/expected output only: WFL is still compiled, so
+    /// injection `use()` fixed values apply and generated events are
+    /// inject-aware; no `.except.jsonl` / `.except.meta.jsonl` sidecars
+    /// are written. Use `--no-wfl` to also drop rule compilation.
+    #[arg(long)]
+    pub no_oracle: bool,
+
+    /// Send generated events to wfusion over TCP + Arrow IPC
+    #[arg(long)]
+    pub send: bool,
+
+    /// Runtime TCP address used with --send, e.g. 127.0.0.1:9800
+    #[arg(long, default_value = "127.0.0.1:9800")]
+    pub addr: String,
+}
+
+pub async fn run(args: Args) -> WfgenResult<()> {
+    let Args {
+        scenario,
+        format,
+        out,
+        ws,
+        wfl,
+        no_wfl,
+        no_oracle,
+        send,
+        addr,
+    } = args;
+    // At least one sink must be requested: write files via --out, stream via
+    // --send, or both. Having neither is a usage error, not a silent no-op.
+    if out.is_none() && !send {
+        return error::fail(
+            WfgenReason::Validation,
+            "no output target: specify --out to write files, --send to stream over TCP, or both",
+        );
+    }
+
     let normalized_format = match format.as_str() {
         "jsonl" => "jsonl",
         "arrow" | "arrow-ipc" | "ipc" => "arrow",
@@ -56,11 +113,20 @@ pub async fn run(
         .filter(|s| !s.is_empty())
         .unwrap_or_else(|| wfg.scenario.name.clone());
 
-    let (mut schemas, mut wfl_files) = load_from_uses(&wfg, &scenario, &HashMap::new())?;
-    schemas.extend(load_ws_files(&ws)?);
-    wfl_files.extend(load_wfl_files(&wfl)?);
+    // `--no-wfl` skips the entire WFL pipeline: no rule loading, no
+    // `_global.wfl` / yield-preset evaluation, no compilation, no injection, no
+    // oracle / expected output. Generation falls back to baseline events.
+    // `--no-oracle` keeps the pipeline (injection fixed values still apply) and
+    // only skips oracle / expected output.
+    let skip_wfl = no_wfl;
 
-    let errors = validate_wfg(&wfg, &schemas, &wfl_files);
+    let (mut schemas, mut wfl_files) = load_from_uses(&wfg, &scenario, &HashMap::new(), skip_wfl)?;
+    schemas.extend(load_ws_files(&ws)?);
+    if !skip_wfl {
+        wfl_files.extend(load_wfl_files(&wfl)?);
+    }
+
+    let errors = validate_wfg(&wfg, &schemas, &wfl_files, skip_wfl);
     if !errors.is_empty() {
         eprintln!("Validation errors:");
         for e in &errors {
@@ -72,18 +138,6 @@ pub async fn run(
         );
     }
 
-    // Compile WFL rules
-    let mut rule_plans = Vec::new();
-    let mut compile_errors = Vec::new();
-    for wfl_file in &wfl_files {
-        match wf_lang::compile_wfl(wfl_file, &schemas) {
-            Ok(plans) => rule_plans.extend(plans),
-            Err(e) => {
-                compile_errors.push(e);
-            }
-        }
-    }
-
     // Expected output is requested by either:
     // - legacy oracle block, or
     // - new syntax expect block.
@@ -93,20 +147,41 @@ pub async fn run(
         .as_ref()
         .and_then(|s| s.expect.as_ref())
         .is_some();
-    let expected_requested = (wfg.scenario.oracle.is_some() || expect_requested) && !no_oracle;
-    if !compile_errors.is_empty() {
-        if expected_requested {
-            for e in &compile_errors {
-                eprintln!("Error: WFL compilation failed: {}", e.report().render());
+    // `--no-oracle` disables oracle / expected output but keeps the WFL pipeline
+    // (so injection fixed values still apply). `--no-wfl` skips everything, so
+    // in either case `expected_requested` stays false (and `rule_plans` stays
+    // empty under `--no-wfl`).
+    let expected_requested =
+        (wfg.scenario.oracle.is_some() || expect_requested) && !skip_wfl && !no_oracle;
+
+    // Compile WFL rules. Skipped entirely by `--no-wfl`; `--no-oracle` still
+    // compiles so injection-aware generation works, and only oracle/expected
+    // output is suppressed. `rule_plans` stays empty only under `--no-wfl`,
+    // which falls back to baseline background events.
+    let mut rule_plans = Vec::new();
+    if !skip_wfl {
+        let mut compile_errors = Vec::new();
+        for wfl_file in &wfl_files {
+            match wf_lang::compile_wfl(wfl_file, &schemas) {
+                Ok(plans) => rule_plans.extend(plans),
+                Err(e) => compile_errors.push(e),
             }
-            return error::fail(
-                WfgenReason::Validation,
-                "WFL compilation failed while expected output is enabled; \
-                 fix the WFL errors or use --no-oracle",
-            );
-        } else {
-            for e in &compile_errors {
-                eprintln!("Warning: WFL compilation failed: {}", e.report().render());
+        }
+
+        if !compile_errors.is_empty() {
+            if expected_requested {
+                for e in &compile_errors {
+                    eprintln!("Error: WFL compilation failed: {}", e.report().render());
+                }
+                return error::fail(
+                    WfgenReason::Validation,
+                    "WFL compilation failed while expected output is enabled; \
+                     fix the WFL errors or use --no-oracle / --no-wfl to skip expected output",
+                );
+            } else {
+                for e in &compile_errors {
+                    eprintln!("Warning: WFL compilation failed: {}", e.report().render());
+                }
             }
         }
     }
@@ -116,8 +191,16 @@ pub async fn run(
 
     // Expected alert generation (on CLEAN events, before faults).
     let expected_enabled = expected_requested && !rule_plans.is_empty();
-    let mut expected_alert_count = 0;
-    if expected_enabled {
+    // Oracle/expected output was requested, not opted out (--no-wfl /
+    // --no-oracle) but there is nowhere to write it (--send only, no --out).
+    // Warn rather than silently drop it.
+    if expected_requested && out.is_none() {
+        eprintln!(
+            "Warning: oracle/expected output requested but --out not set; \
+             skipping expected generation"
+        );
+    }
+    if expected_enabled && let Some(out) = out.as_ref() {
         let start = wfg.scenario.time_clause.start.parse().map_err(|e| {
             error::error(
                 WfgenReason::Generation,
@@ -139,7 +222,6 @@ pub async fn run(
             &duration,
             Some(&injected_rules),
         )?;
-        expected_alert_count = expected_result.alerts.len();
 
         let expected_file = out.join(format!("{}.except.jsonl", output_case));
         write_oracle_jsonl(&expected_result.alerts, &expected_file)?;
@@ -165,7 +247,6 @@ pub async fn run(
             .source_err(WfgenReason::Io, format!("writing {}", meta_file.display()))?;
         println!("Expected meta -> {}", meta_file.display());
     }
-    let _ = expected_alert_count;
 
     // Apply faults (after oracle, on clean events)
     let has_faults = wfg.scenario.faults.is_some();
@@ -180,7 +261,10 @@ pub async fn run(
 
     // Post-fault expected generation (M33 P2): run oracle again on faulted events
     // so verify can compare clean vs faulted outcomes.
-    if expected_enabled && has_faults {
+    if expected_enabled
+        && has_faults
+        && let Some(out) = out.as_ref()
+    {
         let start = wfg.scenario.time_clause.start.parse().map_err(|e| {
             error::error(
                 WfgenReason::Generation,
@@ -212,26 +296,28 @@ pub async fn run(
     }
 
     // Write output
-    match normalized_format {
-        "jsonl" => {
-            let output_file = out.join(format!("{}.jsonl", output_case));
-            write_jsonl(&output_events, &output_file)?;
-            println!(
-                "Generated {} events -> {}",
-                output_events.len(),
-                output_file.display()
-            );
+    if let Some(out) = out.as_ref() {
+        match normalized_format {
+            "jsonl" => {
+                let output_file = out.join(format!("{}.jsonl", output_case));
+                write_jsonl(&output_events, &output_file)?;
+                println!(
+                    "Generated {} events -> {}",
+                    output_events.len(),
+                    output_file.display()
+                );
+            }
+            "arrow" => {
+                let output_file = out.join(format!("{}.arrow", output_case));
+                write_arrow_ipc(&output_events, &output_file)?;
+                println!(
+                    "Generated {} events -> {}",
+                    output_events.len(),
+                    output_file.display()
+                );
+            }
+            _ => unreachable!(),
         }
-        "arrow" => {
-            let output_file = out.join(format!("{}.arrow", output_case));
-            write_arrow_ipc(&output_events, &output_file)?;
-            println!(
-                "Generated {} events -> {}",
-                output_events.len(),
-                output_file.display()
-            );
-        }
-        _ => unreachable!(),
     }
 
     if send {
@@ -245,4 +331,35 @@ pub async fn run(
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // The arg-validation check is the very first thing `run` does, before any
+    // file IO, so a nonexistent scenario path is fine here — the function must
+    // return the usage error without touching the filesystem.
+    #[tokio::test]
+    async fn run_requires_out_or_send() {
+        let err = run(Args {
+            scenario: PathBuf::from("nonexistent.wfg"),
+            format: "jsonl".to_string(),
+            out: None,
+            ws: Vec::new(),
+            wfl: Vec::new(),
+            no_wfl: false,
+            no_oracle: false,
+            send: false,
+            addr: "127.0.0.1:1".to_string(),
+        })
+        .await;
+        let err = err.unwrap_err();
+        let msg = err.report().render();
+        assert!(
+            msg.contains("no output target"),
+            "expected 'no output target' error, got: {}",
+            msg
+        );
+    }
 }

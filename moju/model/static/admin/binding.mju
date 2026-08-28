@@ -1,0 +1,8 @@
+// ---------------------------------------------------------------------------
+// admin domain — implementation bindings
+// ---------------------------------------------------------------------------
+// Engine ops bind to the fusion AdminApi over HTTP; conf ops bind to the
+// reactor ConfigLoader source resolution.
+
+bind Admin.EngineReloadResponse to FusionAdminApi with storage
+bind Admin.LoadCtx to ConfigLoader with config

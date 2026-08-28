@@ -1,0 +1,10 @@
+// ---------------------------------------------------------------------------
+// fusion domain — implementation bindings
+// ---------------------------------------------------------------------------
+// The daemon admin API binds to HTTP; reload flows route through the reactor
+// RuntimeControlHandle; config source binds to the same file+overlay sources
+// as the reactor Config domain.
+
+bind Fusion.AdminApiRuntime to HttpServer with storage
+bind Fusion.AppState to ReactorControl with storage
+bind Fusion.ReloadConfigSource to ConfigLoader with config

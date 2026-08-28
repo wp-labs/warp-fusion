@@ -1,0 +1,11 @@
+// ---------------------------------------------------------------------------
+// Reactor subsystem — the composable rule-processing runtime
+// ---------------------------------------------------------------------------
+
+subsystem Reactor {
+  uses service reactor
+  uses module Config.ConfigLoader
+  uses module Lang.LangCompile
+  uses module Engine.MatchEngine
+  uses module Orchestra.ReactorLifecycle
+}

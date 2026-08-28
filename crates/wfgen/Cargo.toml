@@ -1,6 +1,6 @@
 [package]
 name = "wfgen"
-version = "0.1.36" #@gxl:set(version)
+version = "0.5.3" #@gxl:set(version)
 edition.workspace = true
 license.workspace = true
 
@@ -20,13 +20,17 @@ winnow = { workspace = true }
 orion-error = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+rayon = { workspace = true }
 clap = { workspace = true }
 rand = { workspace = true }
 chrono = { workspace = true }
+similar = "3.2.0"
+rustc-hash = "2.1"
+md-5 = "0.10"
 arrow = { workspace = true }
 wp-arrow = { workspace = true }
 wp-core-connectors.workspace = true
-tokio = { workspace = true }
+tokio = { workspace = true, features = ["io-util"] }
 wp-connector-api = { workspace = true }
 
 [dev-dependencies]

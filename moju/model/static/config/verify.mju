@@ -1,0 +1,37 @@
+// Verify config loading flow
+
+verify LoadConfigOk for flow LoadConfig {
+  given {
+    ConfigLoadRequest.path = "wfusion.toml"
+  }
+
+  when ConfigLoadRequest
+
+  expect {
+    FusionConfig.mode == "wfusion.toml"
+  }
+}
+
+verify ResolveVarsOk for flow ResolveVars {
+  given {
+    ResolveVarRequest.raw = "${DATADIR:./data}"
+  }
+
+  when ResolveVarRequest
+
+  expect {
+    ExpandedToml.value == "${DATADIR:./data}"
+  }
+}
+
+verify ClassifyChangesOk for flow ClassifyChanges {
+  given {
+    ConfigSnapshot.before = "tree"
+  }
+
+  when ConfigSnapshot
+
+  expect {
+    FusionReloadPlan.hot_reload == "tree"
+  }
+}

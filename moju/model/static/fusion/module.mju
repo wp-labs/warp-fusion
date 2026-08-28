@@ -1,0 +1,15 @@
+// ---------------------------------------------------------------------------
+// fusion domain — modules
+// ---------------------------------------------------------------------------
+
+module FusionCli {
+  layer Interface
+  owns Cli, ConfigLoadArgs, ResolvedConfigLoad, Commands, CliReason
+  responsible_for "warp-fusion daemon CLI — daemon/batch/version dispatch and config resolution"
+}
+
+module AdminApi {
+  layer Application
+  owns AdminApiRuntime, AppState, ReloadConfigSource, ReloadState, ProjectRemoteReloadContext, RuntimeStatusResponse, ReloadResponse, ReloadRequest, ErrorResponse, ReadBodyError
+  responsible_for "Admin HTTP API — runtime status, config reload and project-remote update control"
+}

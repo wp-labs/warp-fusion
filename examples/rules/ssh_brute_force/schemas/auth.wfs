@@ -9,6 +9,7 @@ window auth_events {
         service: chars
         user: chars
         result: chars
+        event_id: chars
         event_time: time
     }
 }
@@ -24,6 +25,7 @@ window security_alerts {
         window_events: digit
         matched_events: digit
         trigger_count: float
+        evidence_event_ids: array/chars
         first_seen: time
         last_seen: time
         rule_window_start: time

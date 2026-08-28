@@ -1,0 +1,150 @@
+// ---------------------------------------------------------------------------
+// fusion domain — warp-fusion daemon: CLI + admin HTTP API
+// Crate: wfusion
+// ---------------------------------------------------------------------------
+
+// -- Trigger commands -------------------------------------------------------
+
+// wfusion CLI 调用：Daemon / Batch 子命令的完整参数（main.rs run_cli）
+command WfusionRun {
+  mode: Config.FusionMode
+  config: String
+  overlay: List<String>
+  var: List<String>
+  work_dir: String?
+  metrics: Bool
+  metrics_interval: String?
+  metrics_listen: String?
+}
+
+command ReloadCommand {
+  wait: Bool
+  update: Bool
+  version: String?
+  group: String?
+  reason: String?
+}
+
+// -- CLI types --------------------------------------------------------------
+
+state Commands {
+  Daemon
+  Batch
+  Version
+}
+
+struct Cli {
+  command: Commands
+}
+
+struct ConfigLoadArgs {
+  config: String
+  overlay: List<String>
+  var: List<String>
+  work_dir: String?
+}
+
+struct ResolvedConfigLoad {
+  config_path: String
+  overlay_paths: List<String>
+  runtime_base_dir: String
+  config_ctx: Config.ConfigVarContext
+}
+
+// -- Admin API --------------------------------------------------------------
+
+struct AdminApiRuntime {
+  local_addr: String
+  shutdown_tx: String?
+  task: String
+}
+
+struct AppState {
+  bearer_token: String
+  instance_id: String
+  version: String
+  control: Orchestra.RuntimeControlHandle
+  config_source: ReloadConfigSource
+  request_timeout: Int
+  max_body_bytes: Int
+  work_root: String
+}
+
+struct ReloadConfigSource {
+  config_path: String
+  overlay_paths: List<String>
+  config_ctx: Config.ConfigVarContext
+  work_dir: String
+  mode_override: Config.FusionMode?
+  metrics_override: Config.MetricsConfig?
+}
+
+struct ReloadState {
+  current_request_id: String?
+  last_reload_request_id: String?
+  last_reload_result: String?
+  last_reload_started_at: String?
+  last_reload_finished_at: String?
+}
+
+struct ProjectRemoteReloadContext {
+  snapshot: Project.ProjectRemoteSnapshot
+  runtime_snapshot: Project.ProjectRuntimeArtifactSnapshot
+  update_result: Project.ProjectRemoteUpdateResult?
+}
+
+struct RuntimeStatusResponse {
+  instance_id: String
+  version: String
+  project_version: String?
+  accepting_commands: Bool
+  reloading: Bool
+  current_request_id: String?
+  last_reload_request_id: String?
+  last_reload_result: String?
+  last_reload_started_at: String?
+  last_reload_finished_at: String?
+}
+
+struct ReloadResponse {
+  request_id: String
+  accepted: Bool
+  result: String
+  update: Bool?
+  requested_version: String?
+  current_version: String?
+  resolved_tag: String?
+  group: String?
+  force_replaced: Bool?
+  warning: String?
+  error: String?
+}
+
+struct ReloadRequest {
+  wait: Bool
+  update: Bool
+  version: String?
+  group: String?
+  timeout_ms: Int?
+  reason: String?
+}
+
+struct ErrorResponse {
+  request_id: String
+  accepted: Bool
+  result: String
+  error: String
+}
+
+state ReadBodyError {
+  TooLarge
+  InvalidJson
+  Read
+}
+
+// -- Error state ------------------------------------------------------------
+
+state CliReason {
+  Engine
+  General
+}

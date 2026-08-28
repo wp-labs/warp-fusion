@@ -5633,7 +5633,7 @@ dependencies = [
 
 [[package]]
 name = "wfadm"
-version = "0.5.2"
+version = "0.5.3"
 dependencies = [
  "clap",
  "comfy-table",
@@ -5655,7 +5655,7 @@ dependencies = [
 
 [[package]]
 name = "wfgen"
-version = "0.5.2"
+version = "0.5.3"
 dependencies = [
  "arrow",
  "chrono",
@@ -5684,7 +5684,7 @@ dependencies = [
 
 [[package]]
 name = "wfl"
-version = "0.5.2"
+version = "0.5.3"
 dependencies = [
  "chrono",
  "clap",
@@ -5702,7 +5702,7 @@ dependencies = [
 
 [[package]]
 name = "wfusion"
-version = "0.5.2"
+version = "0.5.3"
 dependencies = [
  "chrono",
  "clap",

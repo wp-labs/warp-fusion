@@ -127,7 +127,7 @@ pub struct Args {
     /// 字段级明细对拍：指向引擎文件源输出 `data/alerts/benchmark.ndjson`。
     /// oracle 侧输出每条 alert 的 yield 字段值（字段级；oracle 未求值 yield
     /// 字段的规则——stats 路径——自动跳过），与引擎逐行规范化后排序 diff。
-    /// 2026-08-30 新增：verify_file.sh 用它把内容验证从计数级提升到字段级。
+    /// 2026-08-30 新增：verify_daemon.sh 用它把内容验证从计数级提升到字段级。
     #[arg(long)]
     pub detail_diff: Option<PathBuf>,
 }
@@ -287,7 +287,7 @@ pub fn run(args: Args) -> WfgenResult<()> {
     // 4b) 字段级明细对拍（--detail-diff <engine benchmark.ndjson>，2026-08-30）
     // oracle 侧只对**已求值 yield 字段**的规则（CEP/on-each/match/deferred 路径）
     // 产出明细行；stats 规则（oracle 未求值 yield）自动跳过（保持计数对拍 +
-    // verify_file.sh 的 CHECKS 内容断言）。引擎侧从 benchmark.ndjson 提取
+    // verify_daemon.sh 的 CHECKS 内容断言）。引擎侧从 benchmark.ndjson 提取
     // 非 __wfu_* 字段，两侧按相同规范化行排序后 diff。
     if let Some(detail_path) = detail_diff {
         let known_rules: std::collections::HashSet<&str> =
@@ -439,7 +439,7 @@ fn read_engine_emits(path: &std::path::Path) -> WfgenResult<HashMap<String, u64>
 
 /// oracle alert → 字段级明细行 `规则名\tentity_id\t字段名=值;...`（字段按名
 /// 排序）。oracle 未求值 yield 字段的规则（stats 路径）fields 为空 → None
-/// （该规则跳过明细对拍，保持计数对拍 + verify_file.sh CHECKS 内容断言）。
+/// （该规则跳过明细对拍，保持计数对拍 + verify_daemon.sh CHECKS 内容断言）。
 fn alert_detail_line(a: &crate::oracle::OracleAlert) -> Option<String> {
     if a.fields.is_empty() || a.intermediate {
         return None;

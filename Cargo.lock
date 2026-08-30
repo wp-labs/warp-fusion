@@ -892,9 +892,9 @@ dependencies = [
 
 [[package]]
 name = "comfy-table"
-version = "7.2.2"
+version = "8.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "958c5d6ecf1f214b4c2bbbbf6ab9523a864bd136dcf71a7e8904799acfe1ad47"
+checksum = "136c8c4c3823846e8ba6d4bda011b4e5d5827b8bb0ac26c31f9ab31abe9f54f2"
 dependencies = [
  "unicode-segmentation",
  "unicode-width",
@@ -2469,6 +2469,16 @@ checksum = "d89e7ee0cfbedfc4da3340218492196241d89eefb6dab27de5df917a6d2e78cf"
 dependencies = [
  "cfg-if",
  "digest 0.10.7",
+]
+
+[[package]]
+name = "md-5"
+version = "0.11.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "69b6441f590336821bb897fb28fc622898ccceb1d6cea3fde5ea86b090c4de98"
+dependencies = [
+ "cfg-if",
+ "digest 0.11.3",
 ]
 
 [[package]]
@@ -4458,7 +4468,7 @@ dependencies = [
  "hmac",
  "itoa",
  "log",
- "md-5",
+ "md-5 0.10.6",
  "memchr",
  "once_cell",
  "percent-encoding",
@@ -4527,7 +4537,7 @@ dependencies = [
  "ipnet",
  "itoa",
  "log",
- "md-5",
+ "md-5 0.10.6",
  "memchr",
  "num-bigint 0.4.8",
  "once_cell",
@@ -5500,8 +5510,8 @@ dependencies = [
 
 [[package]]
 name = "wf-config"
-version = "2.0.10"
-source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v2.0.10#7f0eaa2f3f777daee70859749e7e1e6c8cb37c9c"
+version = "2.0.11"
+source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v2.0.11#39062d897d6d62345ab01f13b0741b658a9801f4"
 dependencies = [
  "chrono",
  "glob",
@@ -5528,8 +5538,8 @@ dependencies = [
 
 [[package]]
 name = "wf-data"
-version = "2.0.10"
-source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v2.0.10#7f0eaa2f3f777daee70859749e7e1e6c8cb37c9c"
+version = "2.0.11"
+source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v2.0.11#39062d897d6d62345ab01f13b0741b658a9801f4"
 dependencies = [
  "chrono",
  "serde_json",
@@ -5537,17 +5547,17 @@ dependencies = [
 
 [[package]]
 name = "wf-engine"
-version = "2.0.10"
-source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v2.0.10#7f0eaa2f3f777daee70859749e7e1e6c8cb37c9c"
+version = "2.0.11"
+source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v2.0.11#39062d897d6d62345ab01f13b0741b658a9801f4"
 dependencies = [
  "arrow",
  "async-trait",
  "chrono",
  "derive_more",
- "foldhash 0.1.5",
+ "foldhash 0.2.0",
  "hex",
  "log",
- "md-5",
+ "md-5 0.10.6",
  "moju-derive",
  "orion-error",
  "parking_lot",
@@ -5555,7 +5565,7 @@ dependencies = [
  "regex",
  "serde",
  "serde_json",
- "sha1 0.10.7",
+ "sha1 0.11.0",
  "sha2 0.11.0",
  "smol_str",
  "thiserror 2.0.20",
@@ -5565,13 +5575,13 @@ dependencies = [
  "wf-lang",
  "wildmatch",
  "wp-connector-api",
- "wp-model-core 0.9.0",
+ "wp-model-core",
 ]
 
 [[package]]
 name = "wf-lang"
-version = "2.0.10"
-source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v2.0.10#7f0eaa2f3f777daee70859749e7e1e6c8cb37c9c"
+version = "2.0.11"
+source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v2.0.11#39062d897d6d62345ab01f13b0741b658a9801f4"
 dependencies = [
  "moju-derive",
  "orion-error",
@@ -5596,8 +5606,8 @@ dependencies = [
 
 [[package]]
 name = "wf-runtime"
-version = "2.0.10"
-source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v2.0.10#7f0eaa2f3f777daee70859749e7e1e6c8cb37c9c"
+version = "2.0.11"
+source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v2.0.11#39062d897d6d62345ab01f13b0741b658a9801f4"
 dependencies = [
  "arrow",
  "async-broadcast",
@@ -5628,12 +5638,12 @@ dependencies = [
  "wp-connector-api",
  "wp-core-connectors",
  "wp-knowledge",
- "wp-model-core 0.9.0",
+ "wp-model-core",
 ]
 
 [[package]]
 name = "wfadm"
-version = "0.5.3"
+version = "0.5.4"
 dependencies = [
  "clap",
  "comfy-table",
@@ -5655,12 +5665,12 @@ dependencies = [
 
 [[package]]
 name = "wfgen"
-version = "0.5.3"
+version = "0.5.4"
 dependencies = [
  "arrow",
  "chrono",
  "clap",
- "md-5",
+ "md-5 0.11.0",
  "orion-error",
  "rand 0.9.5",
  "rayon",
@@ -5684,7 +5694,7 @@ dependencies = [
 
 [[package]]
 name = "wfl"
-version = "0.5.3"
+version = "0.5.4"
 dependencies = [
  "chrono",
  "clap",
@@ -5702,7 +5712,7 @@ dependencies = [
 
 [[package]]
 name = "wfusion"
-version = "0.5.3"
+version = "0.5.4"
 dependencies = [
  "chrono",
  "clap",
@@ -6064,13 +6074,14 @@ checksum = "1ebf944e87a7c253233ad6766e082e3cd714b5d03812acc24c318f549614536e"
 
 [[package]]
 name = "wp-arrow"
-version = "0.2.0"
+version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cf82d3a769af26412f41540ebf89f7fb15f17feeba781b814889f5ef61894dad"
+checksum = "270eccebb38d8d03d09237d2f141da0d40d2b8a5de7c56d548eac43a5c5c2481"
 dependencies = [
  "arrow",
  "chrono",
- "wp-model-core 0.8.9",
+ "num-bigint 0.4.8",
+ "wp-model-core",
 ]
 
 [[package]]
@@ -6089,7 +6100,7 @@ dependencies = [
  "toml",
  "winnow",
  "wp-connector-api",
- "wp-model-core 0.9.0",
+ "wp-model-core",
 ]
 
 [[package]]
@@ -6108,7 +6119,7 @@ dependencies = [
  "smallvec",
  "smol_str",
  "toml",
- "wp-model-core 0.9.0",
+ "wp-model-core",
  "wp-source-types",
 ]
 
@@ -6123,7 +6134,7 @@ dependencies = [
  "orion-error",
  "serde_json",
  "wp-connector-api",
- "wp-model-core 0.9.0",
+ "wp-model-core",
 ]
 
 [[package]]
@@ -6169,7 +6180,7 @@ dependencies = [
  "wp-data-fmt",
  "wp-error",
  "wp-log",
- "wp-model-core 0.9.0",
+ "wp-model-core",
  "wp-parse-api",
  "wp-specs",
 ]
@@ -6206,7 +6217,7 @@ dependencies = [
  "wp-connector-utils",
  "wp-data-fmt",
  "wp-log",
- "wp-model-core 0.9.0",
+ "wp-model-core",
 ]
 
 [[package]]
@@ -6219,7 +6230,7 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror 2.0.20",
- "wp-model-core 0.9.0",
+ "wp-model-core",
 ]
 
 [[package]]
@@ -6272,7 +6283,7 @@ dependencies = [
  "tokio",
  "toml",
  "wp-log",
- "wp-model-core 0.9.0",
+ "wp-model-core",
 ]
 
 [[package]]
@@ -6296,20 +6307,6 @@ dependencies = [
  "thiserror 2.0.20",
  "toml",
  "unicode-segmentation",
-]
-
-[[package]]
-name = "wp-model-core"
-version = "0.8.9"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5f83b80e35ad6c94ef72fea7f4f59e4cf3271f2946539d95b755aeea3446c589"
-dependencies = [
- "bytes",
- "chrono",
- "serde",
- "serde_derive",
- "smol_str",
- "thiserror 2.0.20",
 ]
 
 [[package]]
@@ -6339,7 +6336,7 @@ dependencies = [
  "serde",
  "serde_derive",
  "thiserror 2.0.20",
- "wp-model-core 0.9.0",
+ "wp-model-core",
 ]
 
 [[package]]
@@ -6374,7 +6371,7 @@ dependencies = [
  "serde",
  "smallvec",
  "smol_str",
- "wp-model-core 0.9.0",
+ "wp-model-core",
 ]
 
 [[package]]

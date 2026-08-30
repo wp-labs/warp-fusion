@@ -1128,7 +1128,7 @@ fn build_detail_table(
     display_root: &str,
 ) -> Table {
     let mut table = Table::new();
-    table.load_preset(UTF8_FULL);
+    table.load_style(UTF8_FULL);
     table.set_content_arrangement(ContentArrangement::Dynamic);
     table.set_header(vec![
         TCell::new("Category"),

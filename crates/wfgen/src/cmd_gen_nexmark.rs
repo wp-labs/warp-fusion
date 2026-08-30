@@ -405,7 +405,10 @@ pub fn run_checked(args: Args, force_check: bool) -> WfgenResult<()> {
             .map(|h| {
                 use md5::Digest;
                 let digest = h.lock().unwrap().clone().finalize();
-                format!("{:x}", digest)
+                digest
+                    .iter()
+                    .map(|b| format!("{:02x}", b))
+                    .collect::<String>()
             })
             .unwrap_or_default();
         eprintln!(

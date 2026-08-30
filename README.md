@@ -29,15 +29,26 @@
 在公开 NEXMark 对照中属**独一档**——其他现代引擎（Feldera 增量计算 2.2×、RisingWave 宣称 2–10× 但基准有争议）相对 Flink 仅 2–4× 量级改进。完整口径与逐查询数据见 [NEXMark PK 报告](https://github.com/wp-labs/wf-examples/blob/main/performance/nexmark_pk/NEXMARK_PK_REPORT.md)。
 
 ![WarpFusion vs Flink NEXMark 对照](images/vs-flink.jpg)
+### WFL 表达能力
+
+WFL 是面向「安全检测 + 实体行为分析」的专用 DSL，在这一类中表达力最强——高于 YARA-L / EQL / Sigma 一个量级；相对 SPL / KQL 等通用查询语言，差距已从「远弱」收窄到「通用函数库丰富度」这一设计边界。
+
+![WFL 五原语 Core IR](images/wfl-five-primitives.svg)
+
+- **五原语内核（Bind / Match / Stats / Join / Yield）**：所有语法糖编译期归一为唯一语义内核。既能写逐事件流式检测，也能写声明式窗口统计（`stats<dur> [group by] { 聚合 }` + 分档）。
+- **检测表达力是核心差异化**：时序链 + OR 分支 + 双阶段匹配（实时求值 / 窗口关闭求值），缺失检测（A→NOT B）语义清晰；一等实体声明 `entity()` 驱动跨规则评分累加——SPL / KQL / YARA-L 在语言层都没有。
+- **覆盖范围（v2.2 扩展）**：相较早期版本补齐哈希族、网络 `cidr_match`、多精度时间、对象 `merge`、HOP 跳窗、`anti` / 延迟触发 join、规则级 `let` 等 20+ 函数与语法；与 SPL Top50 高频函数对齐率 100%（50/50），并额外覆盖安全检测专有族。
+- **诚实边界**：三角函数、行保留聚合（eventstats 类）等通用计算不在主战场，交下游 SIEM；分项可解释评分等为规划项，当前以单通道评分 + 条件表达式替代。
+
 ### 架构优势（为什么快）
 
-| 杠杆                  | 砍掉了什么                                                                |
-| ------------------- | -------------------------------------------------------------------- |
-| **列式批式向量化**         | 逐事件对象分配 + 解释器分发                                                      |
-| **数据零拷贝**           | 消灭 Event→Record→DataRecord 多层拷贝                                      |
-| **内存精确控制**          | 窗口数据仅过期且被下游全部消费后才释放、数据预读总量设上限                                        |
-| **Rust vs Java**    | 免去 Java 系引擎（Flink 等）的 JVM GC 停顿、RocksDB/Hummock 磁盘 I/O、checkpoint 屏障 |
-| **WFL 五原语 → 计划期优化** | 运行期逐事件解释（Stats/Match 编译期定型，常量作 `Arc` 计划常量）                           |
+| 杠杆               | 砍掉了什么                                                 |
+| ------------------ | ---------------------------------------------------------- |
+| **列式批式向量化** | 逐事件对象分配 + 解释器分发                                |
+| **数据零拷贝**     | 消灭 Event→Record→DataRecord 多层拷贝                      |
+| **内存精确控制**   | 窗口数据仅过期且被下游全部消费后才释放、数据预读总量设上限 |
+| **Rust vs Java**   | 免去 Java 系引擎（Flink 等）的 JVM GC 停顿                 |
+| **规则即规划**     | 运行期逐事件解释（Stats/Match 编译期定型为执行计划）       |
 
 ### 边界声明（重要）
 

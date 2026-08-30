@@ -5500,8 +5500,8 @@ dependencies = [
 
 [[package]]
 name = "wf-config"
-version = "2.0.9"
-source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v2.0.9#f7295fc05d0becab5cfbd72811762062937aadaf"
+version = "2.0.10"
+source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v2.0.10#7f0eaa2f3f777daee70859749e7e1e6c8cb37c9c"
 dependencies = [
  "chrono",
  "glob",
@@ -5528,8 +5528,8 @@ dependencies = [
 
 [[package]]
 name = "wf-data"
-version = "2.0.9"
-source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v2.0.9#f7295fc05d0becab5cfbd72811762062937aadaf"
+version = "2.0.10"
+source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v2.0.10#7f0eaa2f3f777daee70859749e7e1e6c8cb37c9c"
 dependencies = [
  "chrono",
  "serde_json",
@@ -5537,8 +5537,8 @@ dependencies = [
 
 [[package]]
 name = "wf-engine"
-version = "2.0.9"
-source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v2.0.9#f7295fc05d0becab5cfbd72811762062937aadaf"
+version = "2.0.10"
+source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v2.0.10#7f0eaa2f3f777daee70859749e7e1e6c8cb37c9c"
 dependencies = [
  "arrow",
  "async-trait",
@@ -5570,8 +5570,8 @@ dependencies = [
 
 [[package]]
 name = "wf-lang"
-version = "2.0.9"
-source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v2.0.9#f7295fc05d0becab5cfbd72811762062937aadaf"
+version = "2.0.10"
+source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v2.0.10#7f0eaa2f3f777daee70859749e7e1e6c8cb37c9c"
 dependencies = [
  "moju-derive",
  "orion-error",
@@ -5596,8 +5596,8 @@ dependencies = [
 
 [[package]]
 name = "wf-runtime"
-version = "2.0.9"
-source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v2.0.9#f7295fc05d0becab5cfbd72811762062937aadaf"
+version = "2.0.10"
+source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v2.0.10#7f0eaa2f3f777daee70859749e7e1e6c8cb37c9c"
 dependencies = [
  "arrow",
  "async-broadcast",

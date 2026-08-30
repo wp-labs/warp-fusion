@@ -11,6 +11,16 @@ pub struct OracleAlert {
     pub origin: String,
     /// ISO 8601 — logical time (triggering event's timestamp).
     pub emit_time: String,
+    /// Evaluated `yield (...)` field values (name → formatted string), in
+    /// yield-definition order. 2026-08-30: added for field-level detail diff
+    /// (verify-nexmark --detail-diff vs engine benchmark.ndjson). Empty for
+    /// oracle paths that do not evaluate yield fields yet.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub fields: Vec<(String, String)>,
+    /// 中间管道输出（yield target 被下游 bind，如 q4a/q13a）——不写引擎
+    /// benchmark.ndjson，字段级明细对拍必须排除（2026-08-30）。
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub intermediate: bool,
 }
 
 /// Result of oracle evaluation.
@@ -298,7 +308,12 @@ where
                 // Hop 窗口：每 slide 边界恰一个窗口到期，用无界预算一次性收口
                 // （1024 预算会把同一窗口关闭拆多批，inline conv 逐批 top-1 重复
                 // EMIT）；fixed/sliding/session 保持预算扫描（对齐引擎行为）。
-                let expired = if engine.hop_unbounded {
+                // 2026-08-30 修复（q7）：**有 conv 的 fixed 规则也用无界预算**——
+                // 引擎的 conv 在 conv_sink 任务层跨批聚合（同桶全部 close 一次
+                // top_ties），oracle 无 conv_sink，若用 1024 预算拆批 → 每批
+                // 单独 top_ties(1) → 同桶多输出（q7 桶[0,10) 输出 5 条 vs 引擎
+                // 1 条，oracle 把非最高价 auction 也输出了）。
+                let expired = if engine.hop_unbounded || engine.conv_plan.is_some() {
                     engine
                         .sm
                         .scan_expired_at_with_conv_skip_non_alerting_unbounded(
@@ -491,7 +506,7 @@ where
     // [数据末尾, slice 边界] 的挂起实例到期（Q8 实证 10M 差 185 条尾部桶），
     // oracle 也按 eos 水位 pop_due；close_at_eos 时才 flush 全部剩余（i64::MAX）。
     for engine in &mut engines {
-        let expired = if engine.hop_unbounded {
+        let expired = if engine.hop_unbounded || engine.conv_plan.is_some() {
             engine
                 .sm
                 .scan_expired_at_with_conv_skip_non_alerting_unbounded(
@@ -698,6 +713,11 @@ impl StatsOracleEngine {
                     entity_id: format!("{:?}", b.key),
                     origin: "close".to_string(),
                     emit_time: emit_time.clone(),
+                    // 2026-08-30: stats 路径的 yield 字段求值待接入
+                    // （AlertColumnBuilder 复用 execute_stats_close_batch_columnar）——
+                    // 暂空 → 明细对拍跳过 stats 规则（计数对拍 + CHECKS 覆盖）。
+                    fields: Vec::new(),
+                    intermediate: false,
                 });
             }
         }
@@ -787,6 +807,8 @@ fn push_alert(alert_record: wf_engine::alert::OutputRecord, alerts: &mut Vec<Ora
         entity_id: alert_record.entity_id,
         origin: alert_record.origin.as_str().to_string(),
         emit_time: alert_record.fired_at.clone(),
+        fields: yield_fields(&alert_record.yield_fields),
+        intermediate: false,
     });
 }
 
@@ -799,7 +821,8 @@ fn record_output(
     intermediate: &std::collections::HashSet<String>,
     feed: &mut Vec<(String, Event, i64)>,
 ) {
-    if intermediate.contains(&*record.yield_target) {
+    let is_inter = intermediate.contains(&*record.yield_target);
+    if is_inter {
         let ts = record.event_time_nanos;
         feed.push((
             record.yield_target.to_string(),
@@ -807,7 +830,16 @@ fn record_output(
             ts,
         ));
     }
-    push_alert(record, alerts);
+    alerts.push(OracleAlert {
+        rule_name: record.rule_name.to_string(),
+        score: record.score,
+        entity_type: record.entity_type.to_string(),
+        entity_id: record.entity_id,
+        origin: record.origin.as_str().to_string(),
+        emit_time: record.fired_at.clone(),
+        fields: yield_fields(&record.yield_fields),
+        intermediate: is_inter,
+    });
 }
 
 /// OutputRecord → Event（中间管道 feed）：yield 字段作为事件字段。
@@ -817,6 +849,48 @@ fn record_to_event(record: &OutputRecord) -> Event {
         fields.insert(name.to_string().into(), value.clone());
     }
     Event { fields }
+}
+
+/// OutputRecord.yield_fields → (名, 格式化值) 列表（字段级明细对拍用；顺序 =
+/// yield 定义序）。Value → 字符串与引擎 file_json_sink 的模型值输出同构：
+/// Number 原样（f64 → 尽量整数打印）、Str 原样、Bool true/false。
+fn yield_fields(
+    fields: &[(std::sync::Arc<str>, wf_engine::match_engine::Value)],
+) -> Vec<(String, String)> {
+    fields
+        .iter()
+        .map(|(name, value)| (name.to_string(), format_yield_value(value)))
+        .collect()
+}
+
+/// Value → 对拍用字符串（引擎 JSON 输出的模型值同构）。
+pub fn format_yield_value(v: &wf_engine::match_engine::Value) -> String {
+    match v {
+        wf_engine::match_engine::Value::Number(n) => format_f64(*n),
+        wf_engine::match_engine::Value::Str(s) => s.to_string(),
+        wf_engine::match_engine::Value::Bool(b) => b.to_string(),
+        wf_engine::match_engine::Value::Array(items) => {
+            let parts: Vec<String> = items.iter().map(format_yield_value).collect();
+            format!("[{}]", parts.join(","))
+        }
+        wf_engine::match_engine::Value::Object(m) => {
+            let mut parts: Vec<String> = m
+                .iter()
+                .map(|(k, v)| format!("{k}={}", format_yield_value(v)))
+                .collect();
+            parts.sort();
+            format!("{{{}}}", parts.join(","))
+        }
+    }
+}
+
+/// f64 → 对拍字符串：整数精度时打印整数（对齐 JSON 序列化的 Number 输出）。
+pub fn format_f64(n: f64) -> String {
+    if n.fract() == 0.0 && n.abs() < 1e15 {
+        format!("{}", n as i64)
+    } else {
+        format!("{n}")
+    }
 }
 
 /// 处理一个事件对单个引擎（each 或 match），返回输出记录（可能为 None）。
@@ -903,6 +977,8 @@ fn collect_close_alerts(
                 entity_id: alert_record.entity_id,
                 origin: alert_record.origin.as_str().to_string(),
                 emit_time: alert_record.fired_at.clone(),
+                fields: yield_fields(&alert_record.yield_fields),
+                intermediate: false,
             });
         }
     }

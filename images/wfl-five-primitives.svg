@@ -1,0 +1,66 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 680 250" font-family="-apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif">
+  <rect x="0" y="0" width="680" height="250" fill="#ffffff"/>
+  <text x="340" y="30" text-anchor="middle" font-size="16" font-weight="700" fill="#1f2328">Core IR：五原语（编译期归一）</text>
+
+  <!-- Bind -->
+  <g>
+    <rect x="20" y="52" width="118" height="168" rx="8" fill="#f6f8fa" stroke="#d0d7de" stroke-width="1"/>
+    <rect x="20" y="52" width="118" height="6" rx="3" fill="#2563eb"/>
+    <text x="79" y="88" text-anchor="middle" font-size="15" font-weight="700" fill="#1f2328">Bind</text>
+    <text x="79" y="108" text-anchor="middle" font-size="12" fill="#57606a">绑定</text>
+    <line x1="34" y1="120" x2="124" y2="120" stroke="#d0d7de" stroke-width="1"/>
+    <text x="79" y="142" text-anchor="middle" font-size="11" fill="#57606a">声明事件源与</text>
+    <text x="79" y="158" text-anchor="middle" font-size="11" fill="#57606a">字段映射</text>
+    <text x="79" y="182" text-anchor="middle" font-size="11" font-family="ui-monospace,monospace" fill="#0969da">events { … }</text>
+  </g>
+
+  <!-- Match -->
+  <g>
+    <rect x="150" y="52" width="118" height="168" rx="8" fill="#f6f8fa" stroke="#d0d7de" stroke-width="1"/>
+    <rect x="150" y="52" width="118" height="6" rx="3" fill="#16a34a"/>
+    <text x="209" y="88" text-anchor="middle" font-size="15" font-weight="700" fill="#1f2328">Match</text>
+    <text x="209" y="108" text-anchor="middle" font-size="12" fill="#57606a">匹配</text>
+    <line x1="164" y1="120" x2="254" y2="120" stroke="#d0d7de" stroke-width="1"/>
+    <text x="209" y="142" text-anchor="middle" font-size="11" fill="#57606a">时序窗口 +</text>
+    <text x="209" y="158" text-anchor="middle" font-size="11" fill="#57606a">条件链</text>
+    <text x="209" y="182" text-anchor="middle" font-size="11" font-family="ui-monospace,monospace" fill="#0969da">match&lt;k:dur&gt;</text>
+  </g>
+
+  <!-- Stats -->
+  <g>
+    <rect x="280" y="52" width="118" height="168" rx="8" fill="#f6f8fa" stroke="#d0d7de" stroke-width="1"/>
+    <rect x="280" y="52" width="118" height="6" rx="3" fill="#d97706"/>
+    <text x="339" y="88" text-anchor="middle" font-size="15" font-weight="700" fill="#1f2328">Stats</text>
+    <text x="339" y="108" text-anchor="middle" font-size="12" fill="#57606a">统计 v2.2</text>
+    <line x1="294" y1="120" x2="384" y2="120" stroke="#d0d7de" stroke-width="1"/>
+    <text x="339" y="142" text-anchor="middle" font-size="11" fill="#57606a">声明式窗口聚合</text>
+    <text x="339" y="158" text-anchor="middle" font-size="11" fill="#57606a">+ 分档 tier</text>
+    <text x="339" y="182" text-anchor="middle" font-size="11" font-family="ui-monospace,monospace" fill="#0969da">stats&lt;dur&gt;{ }</text>
+  </g>
+
+  <!-- Join -->
+  <g>
+    <rect x="410" y="52" width="118" height="168" rx="8" fill="#f6f8fa" stroke="#d0d7de" stroke-width="1"/>
+    <rect x="410" y="52" width="118" height="6" rx="3" fill="#9333ea"/>
+    <text x="469" y="88" text-anchor="middle" font-size="15" font-weight="700" fill="#1f2328">Join</text>
+    <text x="469" y="108" text-anchor="middle" font-size="12" fill="#57606a">关联</text>
+    <line x1="424" y1="120" x2="514" y2="120" stroke="#d0d7de" stroke-width="1"/>
+    <text x="469" y="142" text-anchor="middle" font-size="11" fill="#57606a">实体快照 /</text>
+    <text x="469" y="158" text-anchor="middle" font-size="11" fill="#57606a">时点关联</text>
+    <text x="469" y="182" text-anchor="middle" font-size="11" font-family="ui-monospace,monospace" fill="#0969da">join asof</text>
+  </g>
+
+  <!-- Yield -->
+  <g>
+    <rect x="540" y="52" width="118" height="168" rx="8" fill="#f6f8fa" stroke="#d0d7de" stroke-width="1"/>
+    <rect x="540" y="52" width="118" height="6" rx="3" fill="#dc2626"/>
+    <text x="599" y="88" text-anchor="middle" font-size="15" font-weight="700" fill="#1f2328">Yield</text>
+    <text x="599" y="108" text-anchor="middle" font-size="12" fill="#57606a">产出</text>
+    <line x1="554" y1="120" x2="644" y2="120" stroke="#d0d7de" stroke-width="1"/>
+    <text x="599" y="142" text-anchor="middle" font-size="11" fill="#57606a">告警字段 /</text>
+    <text x="599" y="158" text-anchor="middle" font-size="11" fill="#57606a">评分</text>
+    <text x="599" y="182" text-anchor="middle" font-size="11" font-family="ui-monospace,monospace" fill="#0969da">yield out</text>
+  </g>
+
+  <text x="340" y="240" text-anchor="middle" font-size="11" fill="#8b949e">所有语法糖编译期 desugar 到这五个原语，是唯一语义内核</text>
+</svg>

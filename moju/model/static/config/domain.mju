@@ -215,7 +215,7 @@ struct FusionConfigLoader {
 
 struct RuntimeConfig {
   parse_parallelism: Int
-  rule_parallelism: Int
+  rule_shards: Int
   rule_exec_timeout: HumanDuration
   max_ingest_rate: Int?
   parse_buffer_bytes: Int

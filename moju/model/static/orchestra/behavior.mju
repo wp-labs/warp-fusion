@@ -131,7 +131,7 @@ flow ReactorStart {
   step BuildPipeRegistry {
   }
 
-  // 11. rule: spawn_rule_tasks（rule_parallelism 分片；match 按 key shard、
+  // 11. rule: spawn_rule_tasks（rule_shards 分片；match 按 key shard、
   //     stateless each 按 round-robin）→ rule 任务组（可热替换）
   step SpawnRules {
     create TaskGroup {

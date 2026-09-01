@@ -1,0 +1,4 @@
+{"_stream":"security","sip":"10.0.0.8","tenant_id":"t1","log_type":"login","occur_time":"2026-01-01T00:00:01Z","severity":"crit","action":"failed","event_time":"2026-01-01T00:00:01Z"}
+{"_stream":"security","sip":"10.0.0.9","tenant_id":"t1","log_type":"login","occur_time":"2026-01-01T00:00:02Z","severity":"error","action":"failed","event_time":"2026-01-01T00:00:02Z"}
+{"_stream":"security","sip":"10.0.0.10","tenant_id":"t1","log_type":"login","occur_time":"2026-01-01T00:00:03Z","severity":"warning","action":"failed","event_time":"2026-01-01T00:00:03Z"}
+{"_stream":"security","sip":"10.0.0.11","tenant_id":"t1","log_type":"login","occur_time":"2026-01-01T00:00:04Z","severity":"info","action":"login","event_time":"2026-01-01T00:00:04Z"}

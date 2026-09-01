@@ -1,0 +1,27 @@
+window security_events {
+    stream_tag = "security"
+    time = event_time
+    over = 24h
+    fields {
+        sip: ip
+        tenant_id: chars
+        log_type: chars
+        occur_time: chars
+        severity: chars
+        action: chars
+        event_time: time
+    }
+}
+
+window security_alerts {
+    over = 0
+    fields {
+        tenant_id: chars
+        dedup_key: chars
+        alert_id: chars
+        severity: chars
+        sip: ip
+        alert_type: chars
+        detail: chars
+    }
+}

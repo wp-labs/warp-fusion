@@ -190,6 +190,7 @@ run_script_case "./single_stream_multi_window" "" "偶发 got 0 alerts（2026-08
 run_script_case "./sqli_probe"
 run_script_case "./ssh_brute_force"
 run_script_case "./function_demo"
+run_script_case "./match_let_demo"
 run_script_case "./two_window_pipeline"
 run_script_case "./window_miss"
 run_script_case "./weak_password"

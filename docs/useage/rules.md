@@ -3,6 +3,83 @@
 `.wfl` 文件用于声明检测规则、规则输出以及规则内联测试。运行时通过
 `wfusion.toml` 的 `[runtime].rules` glob 加载规则文件。
 
+## case 模式匹配表达式
+
+枚举值归一化时，多层 `if/else` 可用 `case` 表达式替代（issue #79 Issue 2）。
+`case` 是**值分派表达式**，与规则级 CEP 子句 `match<keys:window> { ... }`
+（事件模式匹配触发）区分——`match` 留给事件匹配，`case` 做枚举归一化：
+
+```wfl
+severity = case s.severity {
+    "emerg" | "alert" | "crit" => "CRITICAL",
+    "error" => "HIGH",
+    "warning" => "MEDIUM",
+    "notice" => "LOW",
+    "info" | "debug" => "INFO",
+    _ => s.severity,
+}
+```
+
+语义约定：
+
+- 语法：`case <subject> { <pattern> [ | <pattern> ...] => <value>, ..., [ _ => <default>, ] }`。
+- **多模式**：`|` 表示同一分支匹配多个值（分支内任一命中即取该分支值）。
+- **默认分支**：`_ => <expr>` 兜底未匹配值；无 `_` 且全部未命中 → 求值 None
+  （yield 中回退空串，与字段缺失同语义）。
+- **短路**：按书写顺序逐分支比较，命中即返回，不继续求值后续分支/模式。
+- **比较语义**：与 `in` 列表一致——数字按值比较、字符串/布尔按相等比较
+  （`values_equal`）。模式可以是字面量，也可以是字段/函数表达式（求值后比较）。
+- 分支值可以是任意表达式（字段引用/函数调用/嵌套 case/if）。
+- `|` 在模式中是**多模式分隔符**（不是逻辑或）；分支间以 `,` 分隔，允许尾逗号。
+- 类型检查宽松：subject/模式/分支值递归检查字段引用，分支类型不强制统一
+  （引擎求值 None 兜底）。
+- 性能：case 表达式走行式求值（列式 gate 不识别，yield cell 自动回落解释器）；
+  枚举归一化场景若在热路径且可接受，也可用 `in` + `if/else` 保持列式。
+
+## let 派生字段
+
+一条规则内多个输出字段依赖同一段复杂逻辑时，可以用 `let <name> = <expr>`
+声明**只读派生字段**（在 `events` 块之后、`match`/`on each`/`stats` 之前），
+同规则内后续表达式按裸名引用（issue #79）：
+
+```wfl
+rule sdm_alert {
+    events { s : auth_events }
+    let tenant = s.tenant_id
+    let dedup_key = join_by("|", tenant, s.log_type, s.occur_time)
+    let alert_id = join_by("", "alert_", substr(sha256(dedup_key), 0, 24))
+    match<s.tenant_id:10m> {
+        on event { s | count >= 1; }
+    } -> score(50.0)
+    entity(chars, tenant)
+    yield out (
+        tenant_id = tenant,
+        dedup_key = dedup_key,
+        alert_id = alert_id
+    )
+}
+```
+
+> 注：per-event 上下文取事件字段直接写 `s.tenant_id`——`first()` 是收集类函数
+> （依赖实例收集的事件集合），per-event 求值返回 None。
+
+语义约定：
+
+- `let` 绑定在**规则内**按**声明顺序**求值一次（每次输出上下文：每事件/每次
+  match/close），后声明的 `let` 可以引用先声明的（链式派生）。
+- 引用方式为裸名（`dedup_key`），与字段引用同解析优先级——`let` 名在
+  checker 的作用域中注册，yield/where/score/entity 均可引用。
+- `let` 求值失败（如引用的字段缺失）→ 不注入 → 后续引用读到空/缺省，与
+  事件字段缺失语义一致。
+- 求值路径：`on each`、`match`（on-event）、deferred join（`emit at`）、
+  `close`（2026-08-31 issue #79 补齐 match/close）；`close` 上下文无触发事件，
+  引用窗口聚合字段（`close_ctx_fields`）的 `let` 有值，引用事件字段的求值为空。
+- **stats 规则**（`stats<...>` 声明式窗口统计）暂不支持 `let`——checker 显式
+  报错（stats 未接入 per-event let 求值）。
+- 列式路径（on-each 批量 emit）在编译期内联展开 `let` 引用（`inline_lets`），
+  与解释路径逐行注入语义等价；含 `let` 的 match/close 规则暂回落行式求值
+  （正确性优先，列式内联为后续优化）。
+
 ## 字符串 helper
 
 WFL 提供几个常用字符串 helper，适合在 `yield` 中生成稳定字段：

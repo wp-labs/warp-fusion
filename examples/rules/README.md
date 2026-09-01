@@ -9,6 +9,7 @@
 | 多 stream 多 window | `multi_stream_multi_window/` | 路由演示 | 一个 source 中的 netflow / dns `wp_oml_name` 分别进入两个 window |
 | Window miss | `window_miss/` | 路由诊断 | unknown / missing `wp_oml_name` 进入内置 miss 诊断，合法 stream 继续处理 |
 | 函数 demo | `function_demo/` | 输出字段演示 | `sha1_n(@__wfu_id, 8)`、`join(...)`、`join_by(...)` |
+| let + case 表达式 | `match_let_demo/` | 新语法演示（issue #79） | `let` 派生字段链式复用 + `case` 枚举归一化 |
 | 两窗口 Pipeline | `two_window_pipeline/` | 中间 window 演示 | `auth_events` → `|>` 内部 window → `security_alerts` |
 | 远控扩散（凭据窃取） | `rat_propagation/` | 攻击链 | 多步匹配 scan→login→xfer |
 | 远控扩散（漏洞利用） | `rat_propagation/` | 攻击链 | 多步匹配 scan→xfer |

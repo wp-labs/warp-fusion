@@ -5510,8 +5510,8 @@ dependencies = [
 
 [[package]]
 name = "wf-config"
-version = "2.0.11"
-source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v2.0.11#39062d897d6d62345ab01f13b0741b658a9801f4"
+version = "2.0.12"
+source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v2.0.12#93e1569fc00fb2f98a5553d952e61790aa06eae0"
 dependencies = [
  "chrono",
  "glob",
@@ -5538,8 +5538,8 @@ dependencies = [
 
 [[package]]
 name = "wf-data"
-version = "2.0.11"
-source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v2.0.11#39062d897d6d62345ab01f13b0741b658a9801f4"
+version = "2.0.12"
+source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v2.0.12#93e1569fc00fb2f98a5553d952e61790aa06eae0"
 dependencies = [
  "chrono",
  "serde_json",
@@ -5547,8 +5547,8 @@ dependencies = [
 
 [[package]]
 name = "wf-engine"
-version = "2.0.11"
-source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v2.0.11#39062d897d6d62345ab01f13b0741b658a9801f4"
+version = "2.0.12"
+source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v2.0.12#93e1569fc00fb2f98a5553d952e61790aa06eae0"
 dependencies = [
  "arrow",
  "async-trait",
@@ -5580,8 +5580,8 @@ dependencies = [
 
 [[package]]
 name = "wf-lang"
-version = "2.0.11"
-source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v2.0.11#39062d897d6d62345ab01f13b0741b658a9801f4"
+version = "2.0.12"
+source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v2.0.12#93e1569fc00fb2f98a5553d952e61790aa06eae0"
 dependencies = [
  "moju-derive",
  "orion-error",
@@ -5606,8 +5606,8 @@ dependencies = [
 
 [[package]]
 name = "wf-runtime"
-version = "2.0.11"
-source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v2.0.11#39062d897d6d62345ab01f13b0741b658a9801f4"
+version = "2.0.12"
+source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v2.0.12#93e1569fc00fb2f98a5553d952e61790aa06eae0"
 dependencies = [
  "arrow",
  "async-broadcast",
@@ -5643,7 +5643,7 @@ dependencies = [
 
 [[package]]
 name = "wfadm"
-version = "0.5.4"
+version = "0.5.5"
 dependencies = [
  "clap",
  "comfy-table",
@@ -5665,7 +5665,7 @@ dependencies = [
 
 [[package]]
 name = "wfgen"
-version = "0.5.4"
+version = "0.5.5"
 dependencies = [
  "arrow",
  "chrono",
@@ -5694,7 +5694,7 @@ dependencies = [
 
 [[package]]
 name = "wfl"
-version = "0.5.4"
+version = "0.5.5"
 dependencies = [
  "chrono",
  "clap",
@@ -5712,7 +5712,7 @@ dependencies = [
 
 [[package]]
 name = "wfusion"
-version = "0.5.4"
+version = "0.5.5"
 dependencies = [
  "chrono",
  "clap",

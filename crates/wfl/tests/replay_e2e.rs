@@ -1,8 +1,8 @@
 use std::io::BufReader;
 use std::time::Duration;
 
-use wf_lang::{BaseType, FieldDef, FieldType, WindowSchema};
 use wf_engine::match_engine::Value;
+use wf_lang::{BaseType, FieldDef, FieldType, WindowSchema};
 use wfl::cmd_replay::{replay_events, replay_events_for_verify};
 
 fn make_auth_events_schema() -> WindowSchema {
@@ -202,9 +202,16 @@ rule let_derive {
     assert_eq!(result.error_count, 0);
     assert_eq!(result.alerts.len(), 1);
     let alert = &result.alerts[0];
-    assert_eq!(alert.entity_id, "admin", "entity(chars, tenant) → let 派生值");
+    assert_eq!(
+        alert.entity_id, "admin",
+        "entity(chars, tenant) → let 派生值"
+    );
     assert_eq!(alert.yield_fields.len(), 2);
-    assert_eq!(alert.yield_fields[0].1, Value::Str("admin".into()), "tenant 派生值");
+    assert_eq!(
+        alert.yield_fields[0].1,
+        Value::Str("admin".into()),
+        "tenant 派生值"
+    );
     assert_eq!(
         alert.yield_fields[1].1,
         Value::Str("admin|failed".into()),
@@ -228,7 +235,7 @@ rule sev_map {
         on event { e | count >= 1; }
     } -> score(50.0)
     entity(ip, e.sip)
-    yield security_alerts (sip = e.sip, fail_count = match e.action {
+    yield security_alerts (sip = e.sip, fail_count = case e.action {
         "failed" => 5,
         "locked" | "disabled" => 9,
         _ => 1,

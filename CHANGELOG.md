@@ -2,6 +2,22 @@
 
 本文件记录 `wfusion` / `wfl` / `wfgen` / `wfadm` 面向使用者的变更。内部实现细节、依赖版本对齐和测试计数不在此展开。
 
+## [0.5.5]
+
+### 语言（WFL）
+
+- **`let` 派生字段（issue #79）**：规则内多处输出共享的复杂逻辑一处定义、链式引用（如 `dedup_key` → `alert_id`），`entity` / `yield` / `where` / `score` 均可按裸名引用；支持 match / close / on-each / deferred 路径，stats 规则暂不支持（checker 报错）。
+- **`case` 值分派表达式（issue #79）**：`case x { "crit" | "alert" => "CRITICAL", _ => x }` 替代多层 if/else 做枚举归一化（多模式 `|` / 默认 `_` / 短路求值）；关键字用 `case`，`match` 保留给规则级 CEP 子句。
+- 示例：`examples/rules/match_let_demo`（let 链式派生 + case 归一化）。
+
+### 引擎（对齐 wp-reactor 2.0.12）
+
+- 对齐 `wp-reactor` v2.0.12：`rule_parallelism` → `rule_shards`（无状态 each 规则整批分片，输出链并行）；`parse_parallelism` / `parse_buffer_bytes` 废弃（引擎忽略）。
+
+### wfgen
+
+- **`verify-nexmark --detail-diff`**：oracle 字段级明细对拍——每条告警的 yield 字段值与引擎输出逐行比较，验证从计数级提升到字段级。
+
 ## [0.5.4]
 
 ### 引擎（对齐 wp-reactor 2.0.10）

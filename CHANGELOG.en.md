@@ -3,6 +3,22 @@
 This file records user-facing changes to `wfusion` / `wfl` / `wfgen` / `wfadm`.
 Internal implementation details, dependency alignment, and test counts are not covered here.
 
+## [0.5.5]
+
+### Language (WFL)
+
+- **`let` derived fields (issue #79)**: complex logic shared by multiple output fields defined once and referenced by bare name (e.g. `dedup_key` → `alert_id`); referenceable from `entity` / `yield` / `where` / `score`. Supported on match / close / on-each / deferred paths; stats rules not yet supported (checker errors).
+- **`case` value-dispatch expression (issue #79)**: `case x { "crit" | "alert" => "CRITICAL", _ => x }` replaces nested if/else for enum normalization (multi-pattern `|` / default `_` / short-circuit). Keyword finalized as `case`, leaving `match` to the rule-level CEP clause.
+- Example: `examples/rules/match_let_demo` (let chain + case normalization).
+
+### Engine (aligned with wp-reactor 2.0.12)
+
+- Aligned to `wp-reactor` v2.0.12: `rule_parallelism` → `rule_shards` (stateless each rules shard whole batches — output-chain parallelism); `parse_parallelism` / `parse_buffer_bytes` deprecated (ignored by the engine).
+
+### wfgen
+
+- **`verify-nexmark --detail-diff`**: oracle field-level detail diff — each alert's yield field values compared row-by-row against engine output, upgrading verification from count-level to field-level.
+
 ## [0.5.4]
 
 ### Engine (aligned with wp-reactor 2.0.10)

@@ -10,6 +10,8 @@ fn exact_match_passes() {
         entity_id: "10.0.0.1".to_string(),
         origin: "event".to_string(),
         emit_time: "2024-01-01T00:05:00Z".to_string(),
+        fields: vec![],
+        intermediate: false,
     }];
 
     let actual = vec![ActualAlert {
@@ -38,6 +40,8 @@ fn missing_alert_fails() {
         entity_id: "10.0.0.1".to_string(),
         origin: "event".to_string(),
         emit_time: "2024-01-01T00:05:00Z".to_string(),
+        fields: vec![],
+        intermediate: false,
     }];
 
     let actual = vec![];
@@ -74,6 +78,8 @@ fn score_mismatch_fails() {
         entity_id: "10.0.0.1".to_string(),
         origin: "event".to_string(),
         emit_time: "2024-01-01T00:05:00Z".to_string(),
+        fields: vec![],
+        intermediate: false,
     }];
 
     let actual = vec![ActualAlert {
@@ -99,6 +105,8 @@ fn score_within_tolerance_passes() {
         entity_id: "10.0.0.1".to_string(),
         origin: "event".to_string(),
         emit_time: "2024-01-01T00:05:00Z".to_string(),
+        fields: vec![],
+        intermediate: false,
     }];
 
     let actual = vec![ActualAlert {
@@ -131,6 +139,8 @@ fn missing_alert_has_details() {
         entity_id: "10.0.0.1".to_string(),
         origin: "event".to_string(),
         emit_time: "2024-01-01T00:05:00Z".to_string(),
+        fields: vec![],
+        intermediate: false,
     }];
 
     let report = verify(&expected, &[], 0.01, 1.0);
@@ -164,6 +174,8 @@ fn score_mismatch_has_details() {
         entity_id: "10.0.0.1".to_string(),
         origin: "event".to_string(),
         emit_time: "2024-01-01T00:05:00Z".to_string(),
+        fields: vec![],
+        intermediate: false,
     }];
 
     let actual = vec![ActualAlert {
@@ -190,6 +202,8 @@ fn test_markdown_report_format() {
         entity_id: "10.0.0.1".to_string(),
         origin: "event".to_string(),
         emit_time: "2024-01-01T00:05:00Z".to_string(),
+        fields: vec![],
+        intermediate: false,
     }];
 
     let actual = vec![ActualAlert {
@@ -241,6 +255,8 @@ fn time_mismatch_beyond_tolerance_fails() {
         entity_id: "10.0.0.1".to_string(),
         origin: "event".to_string(),
         emit_time: "2024-01-01T00:05:00Z".to_string(),
+        fields: vec![],
+        intermediate: false,
     }];
 
     let actual = vec![ActualAlert {

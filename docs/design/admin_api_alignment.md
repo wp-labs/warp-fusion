@@ -78,7 +78,7 @@
 | `404` | `not_found` | 未知路由 |
 | `409` | `reload_in_progress` | 当前已有 reload 请求 |
 | `409` | `update_in_progress` | project remote lock 被占用 |
-| `409` | `reload_failed` | runtime 判定 requires-restart / blocked |
+| `200` | `restart_required` | project 已同步/校验通过，但 runtime 判定需要重启后生效 |
 | `413` | `payload_too_large` | 请求体超过 `max_body_bytes` |
 | `500` | `update_failed` | project remote sync / snapshot / config load 前置失败 |
 | `500` | `reload_failed` | runtime reload 执行失败 |
@@ -91,7 +91,7 @@
 | `update_remote` | 已移除，使用 `update` |
 | `full` | 已移除；Admin API 不触发进程级重启 |
 | `result:"applied"` | 改为 `reload_done` |
-| `result:"blocked"` | 改为 `reload_failed`，HTTP `409` |
+| `result:"blocked"` | 改为 `restart_required`，HTTP `200` |
 | `result:"restarting"` | 已移除 |
 | status `accepting` | 改为 `accepting_commands` |
 | 空 body 默认 reload | 不再兼容；请求体必须是合法 JSON，例如 `{}` |

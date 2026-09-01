@@ -1,0 +1,203 @@
+// ---------------------------------------------------------------------------
+// orchestra domain — flows
+// ---------------------------------------------------------------------------
+
+// Run：CLI 入口 —— 解析参数 → 加载配置 → 引导启动 → 进入服务循环
+flow Run {
+  actor Admin
+  trigger RunCli
+  creates Reactor
+
+  step ResolveConfig {
+    create ResolvedConfigLoad {
+      config_path = RunCli.config
+    }
+  }
+
+  step Bootstrap {
+    create BootstrapData {
+      schema_count = RunCli.config
+    }
+  }
+
+  step SpawnTasks {
+    create TaskGroup {
+      name = RunCli.config
+    }
+  }
+
+  step Serve {
+    create Reactor {
+      base_dir = RunCli.config
+    }
+  }
+}
+
+// ConfigRender：渲染解析后的融合配置
+flow ConfigRender {
+  actor Admin
+  trigger RenderConfigCmd
+  creates ResolvedConfigLoad
+
+  step Resolve {
+    create ResolvedConfigLoad {
+      config_path = RenderConfigCmd.config
+    }
+  }
+}
+
+// ConfigDiff：对比两份配置
+flow ConfigDiff {
+  actor Admin
+  trigger DiffCmd
+  creates ResolvedConfigLoad
+
+  step ResolveBoth {
+    create ResolvedConfigLoad {
+      config_path = DiffCmd.base_config
+    }
+  }
+}
+
+// ReactorStart：Reactor::start(config, raw, base_dir)
+//   wf-runtime/src/lifecycle/mod.rs:281
+// 两阶段：Phase 1 = load_and_compile（bootstrap.rs:33）；Phase 2 = 指标 + 拉起任务组。
+// 注：Router/WindowRegistry（Engine）、SinkDispatcher（Engine）、WindowSchema/RulePlan
+// （Lang）、FusionConfig/RawFusionConfigTree（Config）为跨域类型，无法在 orchestra
+// 域 flow 中 create，相关步骤以注释标注。
+flow ReactorStart {
+  trigger RunCommand
+  creates Reactor
+
+  // ===== Phase 1: load & compile (load_and_compile) =====
+
+  // 1. load_schemas(.wfs) + build_runtime_var_context + compile_rules(.wfl)
+  //    → all RulePlans + effective_schemas（Lang.CompileWfl）
+  step LoadAndCompile {
+    create BootstrapData {
+      schema_count = RunCommand.config_path
+    }
+  }
+
+  // 2. build_pipeline_internal_windows（yield 中间管道）+ validate over vs over_cap
+  step BuildPipelineWindows {
+  }
+
+  // 3. compute_window_field_usage → schemas_to_window_defs → WindowRegistry::build
+  //    → Router::new + configure_join_indexes（Engine.WindowManager）
+  step BuildRouter {
+  }
+
+  // 4. build_run_rules：预计算 stream_name → alias 路由（Orchestra.RunRule）
+  step BuildRunRules {
+    create RunRule {
+      kind = RunCommand.config_path
+    }
+  }
+
+  // 5. 加载 sink 配置 → SinkFactoryRegistry（File/Syslog/Tcp/BlackHole + 全局）
+  //    → build_sink_dispatcher → Engine.SinkDispatcher
+  step BuildSinkDispatcher {
+    create SinkFactoryRegistry {
+      factories = RunCommand.config_path
+    }
+  }
+
+  // 6. ExternalRuntime::default + set_external_handler（external() 桥接 wp-knowledge）
+  step InitExternalRuntime {
+  }
+
+  // ===== Phase 2: metrics + spawn task groups =====
+
+  // 7. maybe_build_metrics：按 rule/window/source 名预注册指标 → RuntimeMetrics
+  step BuildMetrics {
+    create RuntimeMetrics {
+      receiver_rows_total = RunCommand.config_path
+    }
+  }
+
+  // 8. head: spawn_alert_task → SinkFanout（按 sink 并行 writer）+ alert 任务组
+  step SpawnAlert {
+    create SinkFanout {
+      dispatcher = RunCommand.config_path
+    }
+  }
+
+  // 9. head: spawn_evictor_task（时间驱逐 + 全局内存驱逐）
+  step SpawnEvictor {
+  }
+
+  // 10. build_pipe_registry：yield target → Pipe（pipe 设计 P1）
+  step BuildPipeRegistry {
+  }
+
+  // 11. rule: spawn_rule_tasks（rule_parallelism 分片；match 按 key shard、
+  //     stateless each 按 round-robin）→ rule 任务组（可热替换）
+  step SpawnRules {
+    create TaskGroup {
+      name = RunCommand.config_path
+    }
+  }
+
+  // 12. tail: spawn_receiver_task（Batch 模式 EOS 计数，流结束触发 flush）
+  step SpawnReceiver {
+  }
+
+  // 13. tail: spawn_metrics_task（report_interval 周期采样）
+  step SpawnMetrics {
+  }
+
+  // 14. 创建 reload control channel（control_tx/control_rx，容量 RELOAD_CONTROL_CHANNEL_CAPACITY）
+  step CreateControlChannel {
+  }
+
+  // 15. 组装 Reactor handle：cancel/rule_cancel + head/tail/rule watch +
+  //     router + sink_fanout + metrics + raw/config 重载基线 + eos_tx
+  step Ready {
+    create Reactor {
+      base_dir = RunCommand.config_path
+    }
+  }
+}
+
+// ReactorShutdown：有界优雅关闭，排空各任务组
+flow ReactorShutdown {
+  trigger ShutdownSignal
+  creates TaskGroup
+
+  step Drain {
+    create TaskGroup {
+      name = ShutdownSignal.reason
+    }
+  }
+}
+
+// DataIngest：绑定输入流并进入窗口路由
+flow DataIngest {
+  trigger IncomingData
+  creates ReplayRoute
+
+  step Bind {
+    create ReplayRoute {
+      stream_name = IncomingData.stream_name
+    }
+  }
+
+  step Ingest {
+  }
+}
+
+// HotReload：配置变更 → 准备重载计划
+flow HotReload {
+  trigger ConfigChange
+  creates PreparedRuleReload
+
+  step Prepare {
+    create PreparedRuleReload {
+      next_raw = ConfigChange.new_config
+    }
+  }
+
+  step Apply {
+  }
+}

@@ -1,0 +1,369 @@
+// ---------------------------------------------------------------------------
+// orchestra domain — CLI entry, reactor lifecycle, task orchestration, adapters
+// Crate: wf-runtime (+ wf-engine CLI)
+// ---------------------------------------------------------------------------
+
+// -- Trigger commands -------------------------------------------------------
+
+command RunCli {
+  config: String
+  overlay: List<String>
+  var: List<String>
+  work_dir: String?
+}
+
+command RunCommand {
+  config_path: String
+  work_dir: String
+}
+
+command RenderConfigCmd {
+  config: String
+}
+
+command DiffCmd {
+  base_config: String
+  to_config: String
+}
+
+command ShutdownSignal {
+  reason: String
+}
+
+command ConfigChange {
+  new_config: String
+}
+
+command IncomingData {
+  stream_name: String
+}
+
+// -- Actors -----------------------------------------------------------------
+
+actor Admin {
+  can RunCli
+  can RenderConfigCmd
+  can DiffCmd
+}
+
+// -- CLI types (EngineEntry) ------------------------------------------------
+
+state Commands {
+  Run
+  Config
+}
+
+state ConfigCommands {
+  Render
+  Origins
+  Vars
+  Diff
+}
+
+struct Cli {
+  command: Commands
+}
+
+struct ConfigLoadArgs {
+  config: String
+  overlay: List<String>
+  var: List<String>
+  work_dir: String?
+}
+
+struct CompareConfigLoadArgs {
+  to_config: String?
+  to_overlay: List<String>
+  to_var: List<String>
+  to_work_dir: String?
+}
+
+struct PathFilterArgs {
+  path_prefix: List<String>
+}
+
+struct VarFilterArgs {
+  var_prefix: List<String>
+}
+
+struct ResolvedConfigLoad {
+  config_path: String
+  overlay_paths: List<String>
+  runtime_base_dir: String
+  config_ctx: Config.ConfigVarContext
+}
+
+// -- Reactor lifecycle (ReactorLifecycle) -----------------------------------
+
+struct Reactor {
+  meta {
+    label zh "反应器"
+    label en "Reactor"
+  }
+  router: Engine.Router
+  sink_fanout: SinkFanout?
+  metrics: RuntimeMetrics?
+  intermediate_targets: List<String>
+  current_raw: Config.RawFusionConfigTree
+  current_config: Config.FusionConfig
+  base_dir: String
+  reload_drain_timeout: Int
+}
+
+struct RuntimeControlHandle {
+  cancel: String
+}
+
+state ReloadOutcome {
+  Applied
+  Blocked
+}
+
+state RunOutcome {
+  Normal
+  RestartRequested
+}
+
+state ReloadRequest {
+  Reload
+  Restart
+}
+
+state ShutdownTrigger {
+  Signal
+  Internal
+}
+
+state RunRuleKind {
+  Match
+  Each
+}
+
+struct RunRule {
+  kind: RunRuleKind
+  executor: Engine.RuleExecutor
+  window_aliases: Map<String, List<String>>
+}
+
+struct TaskGroup {
+  name: String
+  handles: List<String>
+}
+
+struct BootstrapData {
+  rules: List<RunRule>
+  router: Engine.Router
+  dispatcher: Engine.SinkDispatcher
+  schema_count: Int
+  schemas: List<Lang.WindowSchema>
+  window_configs: List<Config.WindowConfig>
+  intermediate_targets: List<String>
+  external_runtime: String?
+}
+
+struct ParsedRuleFile {
+  path: String
+  source: String
+  file: String
+}
+
+// -- Hot reload (HotReload) -------------------------------------------------
+
+state ReloadPreparation {
+  Ready
+  Blocked
+}
+
+struct PreparedRuleReload {
+  plan: Config.FusionReloadPlan
+  next_raw: Config.RawFusionConfigTree
+  next_config: Config.FusionConfig
+  next_rules: List<RunRule>
+  next_intermediate_targets: List<String>
+  next_schemas: List<Lang.WindowSchema>
+  next_window_configs: List<Config.WindowConfig>
+}
+
+struct CompiledReloadArtifacts {
+  run_rules: List<RunRule>
+  intermediate_targets: List<String>
+  runtime_schemas: List<Lang.WindowSchema>
+  runtime_window_configs: List<Config.WindowConfig>
+}
+
+// -- Task orchestration (TaskOrchestration) ---------------------------------
+
+struct WindowSource {
+  window_name: String
+  aliases: List<String>
+  window: Engine.Window
+}
+
+struct RuleTaskConfig {
+  machine: Engine.CepStateMachine?
+  each_alias: String?
+  each_time_field: String?
+  executor: Engine.RuleExecutor
+  window_sources: List<WindowSource>
+  sink_fanout: SinkFanout
+  router: Engine.Router
+  metrics: RuntimeMetrics?
+  intermediate_targets: List<String>
+  pipe_registry: String
+  eos_flush: String
+  push_rx: String?
+}
+
+struct RuleTask {
+  task_id: String
+  machine: Engine.CepStateMachine?
+  each_alias: String?
+  each_time_field: String?
+  executor: Engine.RuleExecutor
+  conv_plan: Lang.ConvPlan?
+  sources: List<WindowSource>
+  aliases: Map<String, List<String>>
+  cursors: Map<String, Int>
+  sink_fanout: SinkFanout
+  router: Engine.Router
+  metrics: RuntimeMetrics?
+  intermediate_targets: List<String>
+  pipe_registry: String
+  eos_flush: String
+  last_activity_wall: String
+}
+
+// -- Receiver (Receiver) ----------------------------------------------------
+
+struct ReplayRoute {
+  stream_name: String
+  stream_tag_field: String
+}
+
+state WindowMissReason {
+  UnknownStreamSchema
+  MissingStreamTagField
+}
+
+struct WindowMiss {
+  stream_tag_field: String
+  stream_tag: String?
+  reason: WindowMissReason
+  sample_payload: String
+  payload_bytes: Int
+  rows: Int
+}
+
+// -- Sink factory & alert fanout (SinkFactory) ------------------------------
+
+struct SinkFactoryRegistry {
+  factories: Map<String, String>
+}
+
+struct SinkFanout {
+  meta {
+    label en "Sink Fanout"
+    tag "fanout"
+  }
+  dispatcher: Engine.SinkDispatcher?
+}
+
+// -- Metrics (RuntimeMetrics) -----------------------------------------------
+
+struct Histogram {
+  upper_bounds_nanos: List<Int>
+  bucket_counts: List<Int>
+  sum_nanos: Int
+}
+
+struct HistogramSnapshot {
+  upper_bounds_nanos: List<Int>
+  bucket_counts: List<Int>
+  sum_seconds: Float
+}
+
+struct IntervalRates {
+  row_s: Float
+  late_s: Float
+  rules_s: Float
+  sm_s: Float
+  out_s: Float
+  memory_bytes: Int
+}
+
+struct IntervalSnapshot {
+  rx_rows: Int
+  dropped_late: Int
+  rule_matches: Int
+  rule_instances: Int
+  alert_dispatch: Int
+  window_bytes: Int
+}
+
+struct TotalCounts {
+  rows: Int
+  late: Int
+  rules: Int
+  out: Int
+  sm_delta: Int
+}
+
+struct RunSummary {
+  interval_count: Int
+  sum_row_s: Float
+  sum_late_s: Float
+  sum_rules_s: Float
+  sum_sm_s: Float
+  sum_out_s: Float
+  sum_memory_bytes: Float
+  max_row_s: Float
+  max_late_s: Float
+  max_rules_s: Float
+  max_sm_s: Float
+  max_out_s: Float
+  max_memory_bytes: Int
+}
+
+struct RuntimeMetrics {
+  meta {
+    label zh "运行时指标"
+    label en "Runtime Metrics"
+  }
+  receiver_rows_total: Int
+  router_delivered_total: Int
+  router_dropped_late_total: Int
+  rule_matches_total: Map<String, Int>
+  alert_dispatch_total: Int
+  alert_channel_full_total: Int
+  evictor_sweeps_total: Int
+  evictor_time_evicted_total: Int
+  evictor_memory_evicted_total: Int
+  window_memory_bytes: Map<String, Int>
+  window_rows: Map<String, Int>
+  window_batches: Map<String, Int>
+  receiver_decode_seconds: Histogram
+  alert_dispatch_seconds: Histogram
+  event_e2e_latency_seconds: Histogram
+}
+
+// -- External bridge (ExternalBridge) ---------------------------------------
+
+struct ExternalRuntime {
+  redis: String
+}
+
+// -- Error state ------------------------------------------------------------
+
+state RuntimeReason {
+  Bootstrap
+  Shutdown
+  Core
+  General
+}
+
+state EngineReason {
+  Cli
+  Config
+  Runtime
+  General
+}

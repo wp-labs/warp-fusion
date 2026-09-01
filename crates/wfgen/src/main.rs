@@ -1,5 +1,3 @@
-use std::path::PathBuf;
-
 use clap::{Parser, Subcommand};
 
 use wfgen::error::WfgenResult;
@@ -16,151 +14,43 @@ struct Cli {
     command: Commands,
 }
 
+/// 每个子命令的参数定义与实现都在各自的 `cmd_*` 模块里（`cmd_*::Args` +
+/// `cmd_*::run`），这里只做命令注册与分发。
 #[derive(Subcommand)]
 enum Commands {
     /// Generate test data from a .wfg scenario file
-    Gen {
-        /// Path to the .wfg scenario file
-        #[arg(long)]
-        scenario: PathBuf,
-
-        /// Output format: "jsonl" or "arrow" ("arrow-ipc"/"ipc" aliases)
-        #[arg(long, default_value = "jsonl")]
-        format: String,
-
-        /// Output directory
-        #[arg(long)]
-        out: PathBuf,
-
-        /// Additional .wfs schema files (beyond those in `use` declarations)
-        #[arg(long)]
-        ws: Vec<PathBuf>,
-
-        /// Additional .wfl rule files (beyond those in `use` declarations)
-        #[arg(long)]
-        wfl: Vec<PathBuf>,
-
-        /// Disable oracle generation even if the .wfg has an oracle block
-        #[arg(long)]
-        no_oracle: bool,
-
-        /// Send generated events to wfusion over TCP + Arrow IPC
-        #[arg(long)]
-        send: bool,
-
-        /// Runtime TCP address used with --send, e.g. 127.0.0.1:9800
-        #[arg(long, default_value = "127.0.0.1:9800")]
-        addr: String,
-    },
+    Gen(wfgen::cmd_gen::Args),
+    /// Generate deterministic NEXMark events (Person/Auction/Bid) as JSONL
+    GenNexmark(wfgen::cmd_gen_nexmark::Args),
+    /// NEXMark 引擎结果验证：用真实 WFL 规则引擎（wf_engine）处理
+    /// wfgen 生成的事件，产出各规则应 EMIT 计数（JSON），供与引擎
+    /// daemon 实际 EMIT 对拍（nexmark_pk/bench.sh --verify）
+    VerifyNexmark(wfgen::cmd_verify_nexmark::Args),
+    /// 分层文件比对（L1 哈希相同性 → L2 Myers 差异量 → L3 --detail 定位）
+    Diff(wfgen::cmd_diff::Args),
     /// Lint (validate) a .wfg scenario file
-    Lint {
-        /// Path to the .wfg scenario file
-        scenario: PathBuf,
-
-        /// Additional .wfs schema files (beyond those in `use` declarations)
-        #[arg(long)]
-        ws: Vec<PathBuf>,
-
-        /// Additional .wfl rule files (beyond those in `use` declarations)
-        #[arg(long)]
-        wfl: Vec<PathBuf>,
-    },
+    Lint(wfgen::cmd_lint::Args),
     /// Verify actual alerts against oracle expectations
-    Verify {
-        /// Path to the oracle (expected) JSONL file
-        #[arg(long)]
-        expected: PathBuf,
-
-        /// Path to the actual alerts JSONL file
-        #[arg(long)]
-        actual: PathBuf,
-
-        /// Score tolerance for matching (overrides meta file if set)
-        #[arg(long)]
-        score_tolerance: Option<f64>,
-
-        /// Time tolerance for matching in seconds (overrides meta file if set)
-        #[arg(long)]
-        time_tolerance: Option<f64>,
-
-        /// Path to oracle meta JSON with tolerances (written by gen)
-        #[arg(long)]
-        meta: Option<PathBuf>,
-
-        /// Output format: "json" or "markdown" (default: json)
-        #[arg(long, default_value = "json")]
-        format: String,
-    },
+    Verify(wfgen::cmd_verify::Args),
     /// Send generated JSONL events to wfusion over TCP + Arrow IPC
-    Send {
-        /// Path to the .wfg scenario file (used to load schemas)
-        #[arg(long)]
-        scenario: PathBuf,
-
-        /// Path to generated events JSONL file (from `wfgen gen`)
-        #[arg(long)]
-        input: PathBuf,
-
-        /// Runtime TCP address, e.g. 127.0.0.1:9800
-        #[arg(long, default_value = "127.0.0.1:9800")]
-        addr: String,
-
-        /// Additional .wfs schema files (beyond those in `use` declarations)
-        #[arg(long)]
-        ws: Vec<PathBuf>,
-    },
+    Send(wfgen::cmd_send::Args),
+    /// Pre-encode JSONL events into Arrow frames for raw byte replay
+    DumpFrames(wfgen::cmd_frames::DumpFramesArgs),
+    /// Replay pre-encoded Arrow frame bytes over `connections` concurrent TCP
+    /// connections (no JSON parsing / Arrow encoding on the hot path).
+    /// `connections>1` is the C-UCP supply lever: the runtime's TCP source
+    /// round-robins the connections across its `instances` reader loops.
+    SendArrow(wfgen::cmd_frames::SendArrowArgs),
+    /// Split a frame file into N key-sharded frame files (one per shard;
+    /// same key always lands in the same file). Send them later with
+    /// `send-arrow --shard-files` for zero-decode multi-connection replay.
+    ShardFrames(wfgen::cmd_frames::ShardFramesArgs),
     /// Measure generation throughput (optional TCP send to wfusion)
-    Bench {
-        /// Path to the .wfg scenario file
-        #[arg(long)]
-        scenario: PathBuf,
-
-        /// Additional .wfs schema files (beyond those in `use` declarations)
-        #[arg(long)]
-        ws: Vec<PathBuf>,
-
-        /// Additional .wfl rule files (beyond those in `use` declarations)
-        #[arg(long)]
-        wfl: Vec<PathBuf>,
-
-        /// Sustained bench duration (e.g. "30s", "2m"). Omit for single-shot.
-        #[arg(long)]
-        duration: Option<String>,
-
-        /// Send generated events to wfusion over TCP + Arrow IPC
-        #[arg(long)]
-        send: bool,
-
-        /// Runtime TCP address used with --send, e.g. 127.0.0.1:9800
-        #[arg(long, default_value = "127.0.0.1:9800")]
-        addr: String,
-    },
+    Bench(wfgen::cmd_bench::Args),
     /// Continuous data generation (daemon mode)
-    Stream {
-        /// Directory containing .wfg scenario files (cycled indefinitely)
-        #[arg(long)]
-        scenario_dir: PathBuf,
-
-        /// Schema files (.wfs)
-        #[arg(long)]
-        ws: Vec<PathBuf>,
-
-        /// Rule files (.wfl) — required for injection to work correctly
-        #[arg(long, required = true)]
-        wfl: Vec<PathBuf>,
-
-        /// Target TCP address (wparse tcp_src)
-        #[arg(long, default_value = "127.0.0.1:9800")]
-        addr: String,
-
-        /// Seconds per scenario before switching
-        #[arg(long, default_value = "60")]
-        interval: u64,
-
-        /// Sleep (ms) between generate batches — controls event rate
-        #[arg(long, default_value = "100")]
-        rate_sleep: u64,
-    },
+    Stream(wfgen::cmd_stream::Args),
+    /// 性能诊断驱动（sentinel 漂流瓶协议，与 daemon 读同一份 perf-diag.toml）
+    PerfDiag(wfgen::cmd_perf_diag::Args),
 }
 
 #[tokio::main]
@@ -172,57 +62,26 @@ async fn main() {
 }
 
 async fn run_cli() -> WfgenResult<()> {
-    let cli = Cli::parse();
-
-    match cli.command {
-        Commands::Gen {
-            scenario,
-            format,
-            out,
-            ws,
-            wfl,
-            no_oracle,
-            send,
-            addr,
-        } => wfgen::cmd_gen::run(scenario, format, out, ws, wfl, no_oracle, send, addr).await,
-        Commands::Lint { scenario, ws, wfl } => wfgen::cmd_lint::run(scenario, ws, wfl),
-        Commands::Verify {
-            expected,
-            actual,
-            score_tolerance,
-            time_tolerance,
-            meta,
-            format,
-        } => wfgen::cmd_verify::run(
-            expected,
-            actual,
-            score_tolerance,
-            time_tolerance,
-            meta,
-            format,
-        ),
-        Commands::Send {
-            scenario,
-            input,
-            addr,
-            ws,
-        } => wfgen::cmd_send::run(scenario, input, addr, ws).await,
-        Commands::Bench {
-            scenario,
-            ws,
-            wfl,
-            duration,
-            send,
-            addr,
-        } => wfgen::cmd_bench::run(scenario, ws, wfl, duration, send, addr).await,
-        Commands::Stream {
-            scenario_dir,
-            ws,
-            wfl,
-            addr,
-            interval,
-            rate_sleep,
-        } => wfgen::cmd_stream::run(scenario_dir, ws, wfl, addr, interval, rate_sleep).await,
+    match Cli::parse().command {
+        Commands::Gen(a) => wfgen::cmd_gen::run(a).await,
+        Commands::GenNexmark(a) => wfgen::cmd_gen_nexmark::run_checked(a, false),
+        Commands::VerifyNexmark(a) => wfgen::cmd_verify_nexmark::run(a),
+        Commands::Diff(a) => {
+            let same = wfgen::cmd_diff::run(&a)?;
+            if !same {
+                std::process::exit(1);
+            }
+            Ok(())
+        }
+        Commands::Lint(a) => wfgen::cmd_lint::run(a),
+        Commands::Verify(a) => wfgen::cmd_verify::run(a),
+        Commands::Send(a) => wfgen::cmd_send::run(a).await,
+        Commands::DumpFrames(a) => wfgen::cmd_frames::dump_frames(a).await,
+        Commands::SendArrow(a) => wfgen::cmd_frames::send_arrow(a).await,
+        Commands::ShardFrames(a) => wfgen::cmd_frames::shard_frames(a).await,
+        Commands::Bench(a) => wfgen::cmd_bench::run(a).await,
+        Commands::Stream(a) => wfgen::cmd_stream::run(a).await,
+        Commands::PerfDiag(a) => wfgen::cmd_perf_diag::run_perf_diag(a).await,
     }
 }
 
@@ -241,5 +100,57 @@ mod tests {
         };
         assert_eq!(err.kind(), ErrorKind::DisplayVersion);
         assert!(err.to_string().contains(env!("CARGO_PKG_VERSION")));
+    }
+
+    #[test]
+    fn gen_out_optional_when_send_given() {
+        // --send without --out must parse (out is now optional).
+        let cli = Cli::try_parse_from(["wfgen", "gen", "--scenario", "x.wfg", "--send"]);
+        assert!(cli.is_ok(), "expected parse success, got: {:?}", cli.err());
+    }
+
+    #[test]
+    fn gen_no_wfl_flag_parses() {
+        let cli = Cli::try_parse_from([
+            "wfgen",
+            "gen",
+            "--scenario",
+            "x.wfg",
+            "--out",
+            "out",
+            "--no-wfl",
+        ]);
+        assert!(cli.is_ok(), "expected parse success, got: {:?}", cli.err());
+    }
+
+    #[test]
+    fn gen_no_oracle_flag_parses() {
+        // --no-oracle is a distinct flag (skip the WFL pipeline and oracle);
+        // must parse independently of --no-wfl.
+        let cli = Cli::try_parse_from([
+            "wfgen",
+            "gen",
+            "--scenario",
+            "x.wfg",
+            "--out",
+            "out",
+            "--no-oracle",
+        ]);
+        assert!(cli.is_ok(), "expected parse success, got: {:?}", cli.err());
+    }
+
+    #[test]
+    fn gen_no_wfl_and_no_oracle_both_parse() {
+        let cli = Cli::try_parse_from([
+            "wfgen",
+            "gen",
+            "--scenario",
+            "x.wfg",
+            "--out",
+            "out",
+            "--no-wfl",
+            "--no-oracle",
+        ]);
+        assert!(cli.is_ok(), "expected parse success, got: {:?}", cli.err());
     }
 }

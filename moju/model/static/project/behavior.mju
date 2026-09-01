@@ -1,0 +1,27 @@
+// ---------------------------------------------------------------------------
+// project domain — flows
+// ---------------------------------------------------------------------------
+
+// UpdateProject：解析目标版本 → 更新锁 → 产出更新结果
+flow UpdateProject {
+  trigger ProjectUpdateCommand
+  creates ProjectRemoteUpdateResult
+
+  step ResolveTag {
+    create ResolvedTag {
+      tag = ProjectUpdateCommand.version
+    }
+  }
+
+  step Lock {
+    create ProjectRemoteLockGuard {
+      file = ProjectUpdateCommand.version
+    }
+  }
+
+  step Apply {
+    create ProjectRemoteUpdateResult {
+      resolved_tag = ProjectUpdateCommand.version
+    }
+  }
+}

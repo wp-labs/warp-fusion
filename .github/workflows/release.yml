@@ -178,15 +178,16 @@ jobs:
       - name: Determine branch
         id: branch
         run: |
+          set -euo pipefail
           VERSION="${{ github.ref_name }}"
-          if [[ "$VERSION" == *"-alpha"* ]]; then
+          if [[ "$VERSION" == *"-alpha"* || "$VERSION" == *"alpha-"* ]]; then
             BRANCH="alpha"
-          elif [[ "$VERSION" == *"-beta"* ]]; then
+          elif [[ "$VERSION" == *"-beta"* || "$VERSION" == *"beta-"* || "$VERSION" == *"-pre"* || "$VERSION" == *"pre-"* ]]; then
             BRANCH="beta"
           else
             BRANCH="main"
           fi
-          echo "branch=$BRANCH" >> $GITHUB_OUTPUT
+          echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
           echo "Using branch: $BRANCH"
 
       - name: Extract changelog
@@ -283,7 +284,7 @@ jobs:
           prerelease: ${{ contains(github.ref_name, '-alpha') || contains(github.ref_name, 'alpha-') || contains(github.ref_name, '-beta') || contains(github.ref_name, 'beta-') || contains(github.ref_name, '-pre') || contains(github.ref_name, 'pre-') }}
           files: artifacts/*
 
-  update-local-manifest:
+  update-release-manifest:
     needs: [release]
     runs-on: ubuntu-22.04
     permissions:
@@ -363,6 +364,9 @@ jobs:
           fi
 
           cd repo
+          git fetch --force --no-tags origin "refs/tags/${TAG}:refs/tags/${TAG}"
+          TARGET_COMMIT="$(git rev-list -n 1 "$TAG")"
+
           MANIFEST="updates/${CHANNEL}/manifest.json"
           HISTORY="updates/${CHANNEL}/versions/${TAG}.json"
           mkdir -p "$(dirname "$MANIFEST")" "$(dirname "$HISTORY")"
@@ -379,7 +383,7 @@ jobs:
             for entry in $(jq -c 'to_entries[]' "$ASSETS_FILE"); do
               target=$(echo "$entry" | jq -r '.key')
               url=$(echo "$entry" | jq -r '.value.url')
-              sha256=$(curl -sL "$url" | sha256sum | awk '{print $1}')
+              sha256=$(curl -fsSL "$url" | sha256sum | awk '{print $1}')
               NEW_ASSETS="$(echo "$NEW_ASSETS" | jq -c --arg target "$target" --arg url "$url" --arg sha "$sha256" '. + {($target): {url: $url, sha256: $sha}}')"
             done
             echo "$NEW_ASSETS" > "$ASSETS_FILE"
@@ -394,7 +398,7 @@ jobs:
             --arg channel "$CHANNEL" \
             --arg published_at "$PUBLISHED_AT" \
             --arg git_ref "$TAG" \
-            --arg git_commit "${GITHUB_SHA}" \
+            --arg git_commit "$TARGET_COMMIT" \
             --slurpfile assets "$ASSETS_FILE" \
             '{
               version: $version,

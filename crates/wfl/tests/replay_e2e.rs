@@ -1,6 +1,7 @@
 use std::io::BufReader;
 use std::time::Duration;
 
+use wf_engine::match_engine::Value;
 use wf_lang::{BaseType, FieldDef, FieldType, WindowSchema};
 use wfl::cmd_replay::{replay_events, replay_events_for_verify};
 
@@ -85,9 +86,9 @@ fn replay_five_events_one_match() {
     assert_eq!(result.alerts.len(), 1);
 
     let alert = &result.alerts[0];
-    assert_eq!(alert.rule_name, "brute_force");
+    assert_eq!(alert.rule_name.as_ref(), "brute_force");
     assert!((alert.score - 70.0).abs() < f64::EPSILON);
-    assert_eq!(alert.entity_type, "ip");
+    assert_eq!(alert.entity_type.as_ref(), "ip");
     assert_eq!(alert.entity_id, "10.0.0.1");
 }
 
@@ -140,10 +141,133 @@ fn replay_eof_close_all_fires_alert() {
     assert_eq!(result.alerts.len(), 1);
 
     let alert = &result.alerts[0];
-    assert_eq!(alert.rule_name, "eos_close");
+    assert_eq!(alert.rule_name.as_ref(), "eos_close");
     assert!((alert.score - 80.0).abs() < f64::EPSILON);
-    assert_eq!(alert.entity_type, "ip");
+    assert_eq!(alert.entity_type.as_ref(), "ip");
     assert_eq!(alert.entity_id, "10.0.0.1");
+}
+
+// ===========================================================================
+// let 派生字段（issue #79）：match 路径 apply_lets，entity/yield 按裸名引用
+// ===========================================================================
+
+fn make_alert_out_schema() -> WindowSchema {
+    WindowSchema {
+        name: "alert_out".to_string(),
+        streams: vec![],
+        time_field: None,
+        over: Duration::from_secs(3600),
+        fields: vec![
+            FieldDef {
+                name: "tenant".to_string(),
+                field_type: FieldType::Base(BaseType::Chars),
+            },
+            FieldDef {
+                name: "dedup".to_string(),
+                field_type: FieldType::Base(BaseType::Chars),
+            },
+        ],
+    }
+}
+
+/// match 规则 + `let` 派生字段（issue #79）：`tenant = first(e.user)`、
+/// `dedup = join_by("|", tenant, first(e.action))`（链式引用），entity 与 yield
+/// 都按裸名引用派生值——验证解析 → 编译 → match 路径 apply_lets 的完整链路。
+#[test]
+fn replay_match_rule_with_lets() {
+    let schemas = vec![
+        make_auth_events_schema(),
+        make_security_alerts_schema(),
+        make_alert_out_schema(),
+    ];
+    let wfl = r#"
+rule let_derive {
+    events { e : auth_events }
+    let tenant = e.user
+    let dedup = join_by("|", tenant, e.action)
+    match<sip:5m> {
+        on event { e | count >= 2; }
+    } -> score(70.0)
+    entity(chars, tenant)
+    yield alert_out (tenant = tenant, dedup = dedup)
+}
+"#;
+    let ndjson = make_ndjson_events(2); // user=admin, action=failed
+    let reader = BufReader::new(ndjson.as_bytes());
+
+    let result = replay_events(wfl, &schemas, reader, false).expect("replay should succeed");
+
+    assert_eq!(result.event_count, 2);
+    assert_eq!(result.match_count, 1);
+    assert_eq!(result.error_count, 0);
+    assert_eq!(result.alerts.len(), 1);
+    let alert = &result.alerts[0];
+    assert_eq!(
+        alert.entity_id, "admin",
+        "entity(chars, tenant) → let 派生值"
+    );
+    assert_eq!(alert.yield_fields.len(), 2);
+    assert_eq!(
+        alert.yield_fields[0].1,
+        Value::Str("admin".into()),
+        "tenant 派生值"
+    );
+    assert_eq!(
+        alert.yield_fields[1].1,
+        Value::Str("admin|failed".into()),
+        "dedup 派生值（链式引用 tenant）"
+    );
+}
+
+// ===========================================================================
+// match 表达式（issue #79 Issue 2）：枚举归一化 + 多模式 `|` + 默认 `_`
+// ===========================================================================
+
+/// match 表达式在 yield 中做枚举归一化：`failed` → 5、`locked`/`disabled`
+/// → 9（多模式 `|`）、其余 → 1（默认 `_`）。验证解析 → 编译 → 引擎求值链路。
+#[test]
+fn replay_match_expr_severity() {
+    let schemas = vec![make_auth_events_schema(), make_security_alerts_schema()];
+    let wfl = r#"
+rule sev_map {
+    events { e : auth_events }
+    match<sip:5m> {
+        on event { e | count >= 1; }
+    } -> score(50.0)
+    entity(ip, e.sip)
+    yield security_alerts (sip = e.sip, fail_count = case e.action {
+        "failed" => 5,
+        "locked" | "disabled" => 9,
+        _ => 1,
+    })
+}
+"#;
+    let ndjson = make_ndjson_events(1); // action=failed
+    let reader = BufReader::new(ndjson.as_bytes());
+    let result = replay_events(wfl, &schemas, reader, false).expect("replay should succeed");
+    assert_eq!(result.error_count, 0);
+    assert_eq!(result.alerts.len(), 1);
+    assert_eq!(
+        result.alerts[0].yield_fields[1].1,
+        Value::Number(5.0),
+        "failed → 5"
+    );
+
+    // locked → 9（多模式第二个命中）；other → 1（默认分支）。
+    for (action, expected) in [("locked", 9.0), ("info", 1.0)] {
+        let ndjson = format!(
+            r#"{{"_stream":"auth_stream","sip":"10.0.0.1","action":"{action}","user":"admin","event_time":1700000000000000000}}"#
+        );
+        let reader = BufReader::new(ndjson.as_bytes());
+        let result = replay_events(wfl, &schemas, reader, false).expect("replay should succeed");
+        assert_eq!(result.error_count, 0);
+        assert_eq!(result.alerts.len(), 1);
+        assert_eq!(
+            result.alerts[0].yield_fields[1].1,
+            Value::Number(expected),
+            "{action} → {expected}"
+        );
+    }
 }
 
 // ===========================================================================
@@ -215,7 +339,7 @@ rule multi_src {
     assert_eq!(result.alerts.len(), 1);
 
     let alert = &result.alerts[0];
-    assert_eq!(alert.rule_name, "multi_src");
+    assert_eq!(alert.rule_name.as_ref(), "multi_src");
     // fired_at must be derived from the event time (tb), not default to 0 (1970).
     // The nanosecond timestamp 1_700_000_000_000_000_000 is ~2023-11-14.
     // Convert fired_at (ISO string) year to verify it's not 1970.
@@ -374,6 +498,17 @@ rule conv_mixed {
         ));
     }
 
+    // 水印推进事件（2026-08-24 修: q5 close_all 对齐 oracle 后, HOP/Fixed 窗口
+    // 只收口**完整窗口**——尾部未完整窗口（w_end > 最终 watermark）释放但不
+    // 发射。1h:fixed 窗口 + 14s 数据永不完整 → EOF 不产出 qualifying → conv 无
+    // 输入。此 dummy 事件把 watermark 推到窗口终点之后（w_end = base + 2800s,
+    // base mod 1h = 800s）→ 窗口完整 close; dummy IP scan=1 不 qualify, 且落入
+    // 下一窗口 EOF 不发射, 不影响断言）。
+    lines.push(format!(
+        r#"{{"_stream":"netflow","sip":"10.0.0.9","dport":9999,"action":"syn","event_time":{}}}"#,
+        base + 2_800_000_000_001i64
+    ));
+
     let ndjson = lines.join("\n");
     let reader = BufReader::new(ndjson.as_bytes());
 
@@ -423,7 +558,7 @@ rule pipe_replay {
     assert_eq!(result.match_count, 1);
     assert_eq!(result.error_count, 0);
     assert_eq!(result.alerts.len(), 1);
-    assert_eq!(result.alerts[0].rule_name, "pipe_replay");
+    assert_eq!(result.alerts[0].rule_name.as_ref(), "pipe_replay");
     assert!(
         !result.alerts[0].rule_name.starts_with("__wf_pipe_"),
         "replay must not output internal pipeline stage alerts"

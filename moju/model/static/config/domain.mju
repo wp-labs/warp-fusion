@@ -1,0 +1,423 @@
+// ---------------------------------------------------------------------------
+// config domain — configuration management for the reactor
+// Crate: wf-config
+// ---------------------------------------------------------------------------
+
+// -- Trigger commands (design-level entry points) ---------------------------
+
+command ConfigLoadRequest {
+  path: String
+  overlay_paths: List<String>
+  work_dir: String?
+}
+
+command ResolveVarRequest {
+  raw: String
+  ctx: ConfigVarContext
+}
+
+command ConfigSnapshot {
+  before: RawFusionConfigTree
+  after: RawFusionConfigTree
+}
+
+// -- Value types ------------------------------------------------------------
+
+struct ByteSize {
+  meta {
+    label en "Byte Size"
+    tag "value-type"
+  }
+  bytes: Int
+}
+
+struct HumanDuration {
+  meta {
+    label en "Human Duration"
+    tag "value-type"
+  }
+  duration: Int
+}
+
+// -- Window configuration ---------------------------------------------------
+
+struct WindowDefaults {
+  evict_interval: HumanDuration
+  max_window_bytes: ByteSize
+  max_total_bytes: ByteSize
+  evict_policy: EvictPolicy
+  watermark: HumanDuration
+  allowed_lateness: HumanDuration
+  late_policy: LatePolicy
+}
+
+struct WindowOverride {
+  mode: String
+  partition_key: String?
+  max_window_bytes: ByteSize?
+  over_cap: HumanDuration
+  evict_policy: EvictPolicy?
+  watermark: HumanDuration?
+  allowed_lateness: HumanDuration?
+  late_policy: LatePolicy?
+  table: String?
+}
+
+struct WindowConfig {
+  meta {
+    label zh "窗口配置"
+    label en "Window Config"
+  }
+  name: String
+  mode: DistMode
+  max_window_bytes: ByteSize
+  over_cap: HumanDuration
+  evict_policy: EvictPolicy
+  watermark: HumanDuration
+  allowed_lateness: HumanDuration
+  late_policy: LatePolicy
+  table: String?
+}
+
+// -- Source configuration ---------------------------------------------------
+
+struct SourceConfig {
+  meta {
+    label zh "数据源配置"
+    label en "Source Config"
+  }
+  name: String?
+  source_type: String?
+  connect: String?
+  enabled: Bool
+  params: Map<String, String>
+}
+
+// -- Sink configuration -----------------------------------------------------
+
+struct SinkConfigBundle {
+  connectors: Map<String, ConnectorDefRaw>
+  defaults: DefaultsBody
+  business: List<FlexGroup>
+  infra_default: FixedGroup?
+  infra_error: FixedGroup?
+  infra_monitor: FixedGroup?
+}
+
+struct RouteFile {
+  version: String?
+  sink_group: RouteGroup
+}
+
+struct RouteGroup {
+  name: String
+  parallel: Int?
+  windows: StringOrArray?
+  tags: List<String>?
+  wf_meta_disable: List<String>
+  expect: GroupExpectSpec?
+  sinks: List<RouteSink>
+}
+
+struct RouteSink {
+  connect: String
+  name: String?
+  fields: StringOrArray?
+  params: Map<String, String>
+  tags: List<String>?
+  expect: SinkExpectOverride?
+}
+
+struct FlexGroup {
+  name: String
+  parallel: Int
+  windows: WildArray
+  tags: List<String>
+  wf_meta_disable: List<String>
+  expect: GroupExpectSpec?
+  sinks: List<ResolvedRouteSink>
+}
+
+struct FixedGroup {
+  name: String
+  parallel: Int
+  expect: GroupExpectSpec?
+  wf_meta_disable: List<String>
+  sinks: List<ResolvedRouteSink>
+}
+
+struct ResolvedRouteSink {
+  spec: String
+  fields: List<String>?
+}
+
+struct ConnectorTomlFile {
+  connectors: List<ConnectorDefRaw>
+}
+
+struct ConnectorDefRaw {
+  id: String
+  kind: String
+  allow_override: List<String>
+  params: String?
+}
+
+struct DefaultsBody {
+  tags: List<String>
+  expect: GroupExpectSpec?
+}
+
+struct GroupExpectSpec {
+  required: Bool
+}
+
+struct SinkExpectOverride {
+  required: Bool
+}
+
+struct StringOrArray {
+  values: List<String>
+}
+
+struct WildArray {
+  patterns: List<String>
+  compiled: List<String>
+}
+
+// -- Config loader ----------------------------------------------------------
+
+struct FusionConfig {
+  meta {
+    label zh "融合配置"
+    label en "Fusion Config"
+  }
+  mode: FusionMode
+  runtime: RuntimeConfig
+  window_defaults: WindowDefaults
+  windows: List<WindowConfig>
+  sinks: String
+  work_root: String?
+  logging: LoggingConfig
+  metrics: MetricsConfig
+  output: OutputConfig
+  vars: Map<String, String>
+  sources: List<SourceConfig>
+  admin_api: AdminApiConf
+  project_remote: ProjectRemoteConf
+}
+
+struct FusionConfigLoader {
+  base_path: String
+  overlay_paths: List<String>
+  ctx: ConfigVarContext
+  work_dir: String?
+}
+
+struct RuntimeConfig {
+  parse_parallelism: Int
+  rule_parallelism: Int
+  rule_exec_timeout: HumanDuration
+  max_ingest_rate: Int?
+  parse_buffer_bytes: Int
+  schemas: String
+  rules: String
+}
+
+struct RawFusionConfigTree {
+  value: String
+  origins: Map<String, String>
+}
+
+struct RawFusionConfigChange {
+  path: String
+  old_value: String?
+  new_value: String?
+  old_origin: String?
+  new_origin: String?
+}
+
+struct ResolvedConfigVar {
+  key: String
+  value: String
+  source: String
+}
+
+// -- Config change classification -------------------------------------------
+
+struct ClassifiedFusionConfigChange {
+  change: RawFusionConfigChange
+  kind: FusionChangeKind
+  disposition: FusionReloadDisposition
+  reason: String
+}
+
+struct FusionReloadPlan {
+  hot_reload: List<ClassifiedFusionConfigChange>
+  requires_restart: List<ClassifiedFusionConfigChange>
+  unsupported: List<ClassifiedFusionConfigChange>
+}
+
+// -- Variable resolution (wf-vars) ------------------------------------------
+
+struct ConfigVarContext {
+  explicit_vars: Map<String, String>
+  env_vars: Map<String, String>
+}
+
+struct ExpandedToml {
+  value: String
+  sources: Map<String, List<SourceAtom>>
+}
+
+struct TracedValue {
+  value: String
+  sources: List<SourceAtom>
+}
+
+// -- Logging & metrics ------------------------------------------------------
+
+struct LoggingConfig {
+  level: String
+  modules: Map<String, String>
+  file: String?
+  format: LogFormat
+}
+
+struct MetricsConfig {
+  enabled: Bool
+  report_interval: HumanDuration
+  prometheus_listen: String
+  console_output: Bool
+  topn: MetricsTopNConfig
+}
+
+struct MetricsTopNConfig {
+  enabled: Bool
+  max: Int
+  queue_capacity: Int
+}
+
+// -- Output configuration ---------------------------------------------------
+
+struct OutputConfig {
+  time_format: String
+  time_zone: OutputTimeZone
+}
+
+// -- Admin API & project remote --------------------------------------------
+
+struct AdminApiConf {
+  enabled: Bool
+  bind: String
+  request_timeout_ms: Int
+  max_body_bytes: Int
+  tls: AdminApiTlsConf
+  auth: AdminApiAuthConf
+}
+
+struct AdminApiTlsConf {
+  enabled: Bool
+  cert_file: String
+  key_file: String
+}
+
+struct AdminApiAuthConf {
+  mode: String
+  token_file: String
+}
+
+struct ProjectRemoteConf {
+  enabled: Bool
+  repo: String
+  init_version: String
+  models: RepoGroupConf?
+  infra: RepoGroupConf?
+}
+
+struct RepoGroupConf {
+  repo: String
+  init_version: String
+}
+
+// -- States -----------------------------------------------------------------
+
+state FusionMode {
+  Daemon
+  Batch
+}
+
+state DistMode {
+  Local
+  Replicated
+  Partitioned
+}
+
+state EvictPolicy {
+  TimeFirst
+  Lru
+}
+
+state LatePolicy {
+  Drop
+  Revise
+  SideOutput
+}
+
+state LogFormat {
+  Plain
+  Json
+}
+
+state OutputTimeZone {
+  Utc
+}
+
+state FusionChangeKind {
+  Rules
+  Vars
+  Runtime
+  Sources
+  Windows
+  Sinks
+  Output
+  Logging
+  Metrics
+  Mode
+  Unknown
+}
+
+state FusionReloadDisposition {
+  HotReloadSupported
+  RequiresRestart
+  Unsupported
+}
+
+state SourceAtom {
+  File
+  Explicit
+  Env
+  Default
+}
+
+state TemplatePart {
+  Literal
+  Var
+}
+
+state VarsReason {
+  Resolve
+  Template
+  Toml
+  General
+}
+
+state ConfigReason {
+  Load
+  Parse
+  Validation
+  Path
+  Sink
+  Lang
+  Vars
+  General
+}

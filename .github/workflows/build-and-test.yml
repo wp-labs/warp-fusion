@@ -1,12 +1,18 @@
 name: Build & Test
 
 on:
+  # push 全分支直接触发（推 alpha/develop/feat 等分支即跑 CI）。
+  # pull_request 只保留 opened/reopened：推 PR 源分支时 push 事件已覆盖，
+  # 去掉 synchronize 避免 push + PR 双跑（代价：fork PR 的后续 push 不再
+  # 触发——本仓库 PR 均为同仓分支，无此场景）。
   push:
     branches:
       - "*"
   pull_request:
+    types: [opened, reopened]
     branches:
       - "*"
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -37,17 +43,15 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends cmake libssl-dev
 
-      - name: Cargo build
-        run: cargo build --all
-
-      - name: Cargo test
-        run: cargo test --all
-
-      - name: Run rule examples
-        run: examples/rules/run_all.sh
-
       - name: Cargo fmt
         run: cargo fmt --check
 
-      - name: Build release
-        run: cargo build --release
+      - name: Cargo build (release)
+        run: cargo build --release --all
+
+      - name: Cargo test (release)
+        run: cargo test --release --all
+
+      - name: Run rule examples (release)
+        # run_all.sh 默认 debug profile；CI 只构建 release，必须显式传 release。
+        run: examples/rules/run_all.sh release

@@ -5,7 +5,7 @@ resolver = "2"
 
 [workspace.package]
 edition = "2024"
-license = "Apache-2.0"
+license = "Elastic-2.0"
 
 [workspace.dependencies]
 serde = { version = "1.0", features = ["derive"] }
@@ -14,11 +14,11 @@ arrow = { version = "59", default-features = false, features = ["ipc"] }
 async-trait = "0.1"
 orion-error = { version = "0.8", features = ["derive", "serde_json", "toml", "tracing"] }
 # @gxl:block(remote_reactor)
-wf-engine = { git = "https://github.com/wp-labs/wp-reactor.git", tag = "v0.1.31" }
-wf-config = { git = "https://github.com/wp-labs/wp-reactor.git", tag = "v0.1.31" }
-wf-lang = { git = "https://github.com/wp-labs/wp-reactor.git", tag = "v0.1.31" }
-wf-data = { git = "https://github.com/wp-labs/wp-reactor.git", tag = "v0.1.31" }
-wf-runtime = { git = "https://github.com/wp-labs/wp-reactor.git", tag = "v0.1.31" }
+wf-engine = { git = "https://github.com/wp-labs/wp-reactor.git", tag = "v2.0.12" }
+wf-config = { git = "https://github.com/wp-labs/wp-reactor.git", tag = "v2.0.12" }
+wf-lang = { git = "https://github.com/wp-labs/wp-reactor.git", tag = "v2.0.12" }
+wf-data = { git = "https://github.com/wp-labs/wp-reactor.git", tag = "v2.0.12" }
+wf-runtime = { git = "https://github.com/wp-labs/wp-reactor.git", tag = "v2.0.12" }
 # @gxl:end(remote_reactor)
 # @gxl:block(local_reactor)
 #wf-engine = { path = "../wp-reactor/crates/wf-engine" }
@@ -32,17 +32,18 @@ wf-project-remote = { path = "crates/wf-project-remote" }
 
 
 wf-connector-api =  "0.2"
-wp-connectors = { git = "https://github.com/wp-labs/wp-connectors.git", tag = "v0.15.9" }
-wp-core-connectors = "0.5.5"
+wp-connectors = { git = "https://github.com/wp-labs/wp-connectors.git", tag = "v0.19.0" }
+wp-core-connectors = "0.8"
 serde_json = "1.0"
+rayon = "1"
 chrono = { version = "0.4", features = ["serde"] }
 clap = { version = "4", features = ["derive"] }
 tokio = { version = "1", features = ["net", "time", "rt", "rt-multi-thread", "macros", "signal"] }
 rand = "=0.9"
-wp-arrow = "0.2"
-wp-connector-api = "0.10"
+wp-arrow = "0.3"
+wp-connector-api = "0.12"
 tracing = "0.1"
-toml = "1.0"
+toml = "1.1"
 ureq = { version = "3", features = ["gzip"] }
 flate2 = "1"
 tar = "0.4"
@@ -50,3 +51,4 @@ walkdir = "2"
 git2 = { version = "0.21", default-features = false, features = ["vendored-libgit2", "https"] }
 semver = "1"
 libc = "0.2"
+wp-self-update = "0.3"

@@ -5,7 +5,7 @@ use orion_error::conversion::SourceErr;
 
 use crate::error::{WflReason, WflResult, WflStructExt};
 use wf_config::ConfigVarContext;
-use wf_config::project::{load_schemas, load_wfl_with_context, parse_vars};
+use wf_config::project::{load_schemas, parse_vars};
 use wf_lang::explain::RuleExplanation;
 
 const BOLD: &str = "\x1b[1m";
@@ -26,11 +26,8 @@ pub fn run(file: PathBuf, schemas: Vec<String>, vars: Vec<String>) -> WflResult<
     // Load schemas
     let all_schemas = load_schemas(&schemas, &cwd).wfl()?;
 
-    // Load and preprocess the .wfl file
-    let source = load_wfl_with_context(&file, &ctx, Some(&cwd)).wfl()?;
-
-    // Parse
-    let wfl_file = wf_lang::parse_wfl(&source).wfl()?;
+    // Load and preprocess the .wfl file + parse `use` imports (issue #73)
+    let wfl_file = crate::load_wfl_with_imports(&file, &ctx, &cwd)?;
 
     // Compile (runs check_wfl internally)
     let plans = wf_lang::compile_wfl(&wfl_file, &all_schemas).wfl()?;

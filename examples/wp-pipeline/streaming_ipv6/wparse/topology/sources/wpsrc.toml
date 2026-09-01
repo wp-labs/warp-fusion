@@ -1,0 +1,10 @@
+[[sources]]
+key = "tcp_1"
+enable = true
+connect = "tcp_src"
+tags = []
+
+[sources.params]
+addr = "127.0.0.1"
+port = 9801
+framing = "line"

@@ -1,0 +1,15 @@
+version = "2.0"
+[sink_group]
+name = "parsed_nginx_out"
+oml = ["*"]
+batch_size = 1024
+batch_timeout_ms = 300
+tags = ["biz:parsed"]
+[[sink_group.sinks]]
+connect = "tcp_sink"
+name = "arrow_tcp_out"
+[sink_group.sinks.params]
+protocol = "arrow"
+data_format = "arrow_framed"
+addr = "127.0.0.1"
+port = 9802

@@ -1,0 +1,18 @@
+# 哨兵（批末完成信号）记录 —— 性能诊断模式（perf-diag）固定业务路由组
+#
+# wfadm init 自动生成（topology/sinks/business.d/ 的固定业务组之一）。
+# sentinel 事件走内置 __wf_sentinel 窗口 + 哨兵规则（豁免 perf 门控），emit 时
+# 写四元组记录 {round, n, start_ns, emit_ns} → 本 sink 落盘 data/perf_sentinel.ndjson。
+# wfgen perf-diag 从该文件读完成信号，EPS = n/(emit_ns−start_ns) 直接可算。
+#
+# `__wf_sentinel` 窗口仅诊断模式（wfusion daemon --perf-diag ...）存在，生产模式
+# 本组空转，无副作用。
+[sink_group]
+name = "sentinel_infra"
+windows = ["__wf_sentinel"]
+[[sink_group.sinks]]
+connect = "file_json_sink"
+name = "sentinel_out"
+[sink_group.sinks.params]
+base = "data"
+file = "perf_sentinel.ndjson"

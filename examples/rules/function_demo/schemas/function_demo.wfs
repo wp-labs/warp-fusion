@@ -1,0 +1,25 @@
+window function_events {
+    stream_tag = "function"
+    time = event_time
+    over = 1m
+    fields {
+        sip: ip
+        tenant_id: chars
+        target_host: chars
+        empty_part: chars
+        event_time: time
+    }
+}
+
+window function_alerts {
+    over = 0
+    fields {
+        sip: ip
+        tenant_id: chars
+        target_host: chars
+        hash8: chars
+        joined: chars
+        joined_by: chars
+        detail: chars
+    }
+}

@@ -9,6 +9,7 @@ window auth_events {
         service: chars
         user: chars
         result: chars
+        event_id: chars
         event_time: time
     }
 }
@@ -21,6 +22,15 @@ window security_alerts {
         user: chars
         alert_type: chars
         detail: chars
+        window_events: digit
+        matched_events: digit
+        trigger_count: float
+        evidence_event_ids: array/chars
+        first_seen: time
+        last_seen: time
+        rule_window_start: time
+        rule_window_end: time
+        latest_analysis_time: time
     }
 }
 

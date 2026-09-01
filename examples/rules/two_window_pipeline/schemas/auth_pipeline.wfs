@@ -1,0 +1,23 @@
+window auth_events {
+    stream_tag = "auth"
+    time = event_time
+    over = 5m
+    fields {
+        sip: ip
+        dip: ip
+        user: chars
+        result: chars
+        event_time: time
+    }
+}
+
+window security_alerts {
+    over = 0
+    fields {
+        sip: ip
+        alert_type: chars
+        detail: chars
+        burst_count: digit
+        target_count: digit
+    }
+}

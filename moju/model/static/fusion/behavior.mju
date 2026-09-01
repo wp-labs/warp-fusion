@@ -1,0 +1,105 @@
+// ---------------------------------------------------------------------------
+// fusion domain — flows
+// 关键执行流程：wfusion main（main.rs run_cli + cli_config.rs run_engine_inner）
+//
+// 注：flow 的 create/creates 仅限本域类型。Config 域类型（FusionConfig、
+// RawFusionConfigTree）与 Orchestra 域类型（Reactor、RuntimeControlHandle）
+// 无法在 fusion 域 flow 中 create，相关步骤以注释标注，跨域衔接由
+// dataflow ProductPipeline 表达（EngineCommand → ReactorStart → HotReload）。
+// ---------------------------------------------------------------------------
+
+// WfusionMain：CLI 入口分发 —— main → run_cli → 按子命令路由
+//   main.rs:77  run_cli().await
+//   main.rs:87  match cli.command { Daemon|Batch -> run_engine_command; Version -> version check }
+flow WfusionMain {
+  trigger WfusionRun
+  creates Cli
+
+  step Parse {
+    create Cli {
+      command = WfusionRun.config
+    }
+  }
+
+  // Daemon / Batch 子命令 → EngineCommand（run_engine_command）；
+  // Version 子命令 → 版本检查（version_ge，满足则 0 退出，否则 1）。
+  step Dispatch {
+  }
+}
+
+// EngineCommand：run_engine_inner —— daemon / batch 共用的引擎启动执行路径
+//   cli_config.rs:137
+flow EngineCommand {
+  trigger WfusionRun
+  creates AdminApiRuntime
+
+  // 1. resolve_config_load：canonicalize config/overlay/work_dir 路径，解析 --var
+  step ResolveConfig {
+    create ResolvedConfigLoad {
+      config_path = WfusionRun.config
+    }
+  }
+
+  // 2. FusionConfigLoader::new + loader.load() → 有效 FusionConfig
+  //    （Config.LoadConfig flow；CLI 覆盖 mode/metrics 后成为最终配置）
+  step LoadConfig {
+  }
+
+  // 3. init_tracing：按 logging 配置初始化 tracing（返回 guard）
+  step InitTracing {
+  }
+
+  // 4. register_connectors：注册外部 connector 工厂
+  step RegisterConnectors {
+  }
+
+  // 5. loader.load_raw()：读取 raw 配置树（热重载 diff 基线）
+  step LoadRawTree {
+  }
+
+  // 6. Reactor::start(config, raw, base_dir) → Reactor
+  //    （Orchestra.ReactorStart flow：LoadAndCompile → SpawnAlert/Evictor/Rules/Receiver/Metrics → Ready）
+  step StartReactor {
+  }
+
+  // 7. reactor.control_handle() → RuntimeControlHandle（reload + status 入口）
+  step GetControl {
+  }
+
+  // 8. 组装 ReloadConfigSource（携带 --mode / --metrics 覆盖，reload 时重放）
+  step BuildConfigSource {
+    create ReloadConfigSource {
+      config_path = WfusionRun.config
+    }
+  }
+
+  // 9. admin_api::start_if_enabled → 管理 HTTP API（若 admin_api.enabled）
+  step StartAdminApi {
+    create AdminApiRuntime {
+      local_addr = WfusionRun.config
+    }
+  }
+
+  // 10. reactor.run()：信号处理 + reload 控制循环 + 优雅关闭，直到退出
+  //     RunOutcome::RestartRequested → exit(RESTART_EXIT_CODE)；Normal → Ok
+  step RunLoop {
+  }
+}
+
+// ReloadFlow：管理 API 触发配置热重载
+flow ReloadFlow {
+  trigger ReloadCommand
+  creates ReloadResponse
+
+  step Prepare {
+    create ReloadState {
+      current_request_id = ReloadCommand.reason
+    }
+  }
+
+  step Apply {
+    create ReloadResponse {
+      result = ReloadCommand.reason
+    }
+  }
+}

@@ -1,0 +1,222 @@
+// ---------------------------------------------------------------------------
+// admin domain — wfadm: admin CLI (init / conf / check / engine / self-update)
+// Crate: wfadm
+// ---------------------------------------------------------------------------
+
+// -- Trigger commands -------------------------------------------------------
+
+command CheckCommand {
+  work_root: String
+}
+
+command EngineReloadCmd {
+  reason: String
+  wait: Bool
+  version: String?
+  group: String?
+}
+
+// -- CLI types --------------------------------------------------------------
+
+state Commands {
+  Init
+  Conf
+  Check
+  Engine
+  SelfCmd
+}
+
+struct Cli {
+  command: Commands
+}
+
+state Scope {
+  Normal
+  Rules
+  Conf
+}
+
+// -- Conf operations --------------------------------------------------------
+
+state ConfCmd {
+  Diff
+  Update
+}
+
+struct ConfDiffArgs {
+  config: String
+  overlay: List<String>
+  var: List<String>
+  work_dir: String?
+  to_config: String?
+  to_overlay: List<String>
+  to_var: List<String>
+  to_work_dir: String?
+  path_prefix: List<String>
+  expanded: Bool
+}
+
+struct ConfUpdateArgs {
+  work_root: String
+  version: String?
+  group: String?
+  json: Bool
+}
+
+struct LoadCtx {
+  config_path: String
+  overlay_paths: List<String>
+  config_ctx: Config.ConfigVarContext
+  base_dir: String
+}
+
+// -- Engine operations ------------------------------------------------------
+
+state EngineCommands {
+  Status
+  Reload
+}
+
+struct EngineReloadRequest {
+  wait: Bool
+  timeout_ms: Int
+  update: Bool
+  version: String?
+  group: String?
+  reason: String?
+}
+
+struct EngineReloadResponse {
+  request_id: String
+  accepted: Bool
+  result: String
+  update: Bool?
+  requested_version: String?
+  current_version: String?
+  resolved_tag: String?
+  group: String?
+  force_replaced: Bool?
+  warning: String?
+  error: String?
+}
+
+struct AdminApiTarget {
+  base_url: String
+  token: String
+}
+
+// -- Check ------------------------------------------------------------------
+
+struct CheckArgs {
+  work_root: String
+  what: String
+  console: Bool
+  fail_fast: Bool
+  json: Bool
+  only_fail: Bool
+}
+
+struct CheckOptions {
+  console: Bool
+  fail_fast: Bool
+  json: Bool
+  only_fail: Bool
+}
+
+struct CheckComponents {
+  conf: Bool
+  sources: Bool
+  connectors: Bool
+  sinks: Bool
+  rules: Bool
+  schemas: Bool
+  scenarios: Bool
+}
+
+state CheckComponent {
+  Conf
+  Sources
+  Connectors
+  Sinks
+  Rules
+  Schemas
+  Scenarios
+}
+
+struct Cell {
+  ok: Bool
+  msg: String?
+  warnings: List<String>
+}
+
+struct Row {
+  path: String
+  conf_detail: String?
+  conf: Cell
+  sources: Cell
+  connectors: Cell
+  sinks: Cell
+  rules: Cell
+  schemas: Cell
+  scenarios: Cell
+}
+
+struct ResolvedFiles {
+  files: List<String>
+  is_external: Bool
+  display_path: String?
+}
+
+struct ComponentCount {
+  ok: Int
+  total: Int
+}
+
+struct SummaryCounts {
+  conf: ComponentCount
+  sources: ComponentCount
+  connectors: ComponentCount
+  sinks: ComponentCount
+  rules: ComponentCount
+  schemas: ComponentCount
+  scenarios: ComponentCount
+}
+
+struct DetailEntry {
+  category: String
+  item: String
+  data: String
+  result: String
+}
+
+// -- Self update ------------------------------------------------------------
+
+state SelfCmd {
+  Check
+  Update
+}
+
+state UpdateChannel {
+  Stable
+  Beta
+  Alpha
+}
+
+struct SelfSourceArgs {
+  channel: UpdateChannel
+  updates_base_url: String?
+  updates_root: String?
+  json: Bool
+}
+
+struct SelfCheckArgs {
+  source: SelfSourceArgs
+}
+
+struct SelfUpdateArgs {
+  source: SelfSourceArgs
+  yes: Bool
+  dry_run: Bool
+  force: Bool
+  install_dir: String?
+}

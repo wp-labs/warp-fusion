@@ -1,0 +1,33 @@
+// ---------------------------------------------------------------------------
+// admin domain — modules
+// ---------------------------------------------------------------------------
+
+module AdminCli {
+  layer Interface
+  owns Cli, Commands, Scope
+  responsible_for "wfadm CLI — init/conf/check/engine/self-update command dispatch"
+}
+
+module ConfOps {
+  layer Application
+  owns ConfDiffArgs, ConfUpdateArgs, LoadCtx, ConfCmd
+  responsible_for "Project conf diff and update operations against the admin API"
+}
+
+module EngineOps {
+  layer Application
+  owns EngineReloadRequest, EngineReloadResponse, AdminApiTarget, EngineCommands
+  responsible_for "Engine status and reload operations via the admin API"
+}
+
+module Check {
+  layer Application
+  owns CheckArgs, CheckOptions, CheckComponents, CheckComponent, Cell, Row, ResolvedFiles, ComponentCount, SummaryCounts, DetailEntry
+  responsible_for "Project health checks across conf/sources/connectors/sinks/rules/schemas/scenarios"
+}
+
+module SelfUpdate {
+  layer Infrastructure
+  owns SelfCmd, SelfSourceArgs, SelfCheckArgs, SelfUpdateArgs, UpdateChannel
+  responsible_for "wfadm self-update channel check and install"
+}

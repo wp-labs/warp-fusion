@@ -1,0 +1,51 @@
+// ---------------------------------------------------------------------------
+// orchestra domain — modules
+// ---------------------------------------------------------------------------
+
+module EngineEntry {
+  layer Interface
+  owns Cli, ConfigLoadArgs, CompareConfigLoadArgs, PathFilterArgs, VarFilterArgs, ResolvedConfigLoad, Commands, ConfigCommands, EngineReason
+  responsible_for "CLI argument parsing and command dispatch for the reactor binary"
+}
+
+module ReactorLifecycle {
+  layer Application
+  owns Reactor, RuntimeControlHandle, BootstrapData, RunRule, RunRuleKind, TaskGroup, ShutdownTrigger, ReloadOutcome, RunOutcome, ReloadRequest, RuntimeReason, ParsedRuleFile
+  responsible_for "Reactor bootstrap, run loop, shutdown and restart lifecycle"
+}
+
+module HotReload {
+  layer Application
+  owns PreparedRuleReload, CompiledReloadArtifacts, ReloadPreparation
+  responsible_for "Preparing config + rule reload plans and applying them at runtime"
+}
+
+module TaskOrchestration {
+  layer Application
+  owns RuleTask, RuleTaskConfig, WindowSource
+  responsible_for "Per-rule push/pull tasks, window subscription and rule scheduling"
+}
+
+module Receiver {
+  layer Infrastructure
+  owns ReplayRoute, WindowMiss, WindowMissReason
+  responsible_for "Input replay (ndjson/csv/arrow) and window-miss reporting"
+}
+
+module SinkFactory {
+  layer Infrastructure
+  owns SinkFactoryRegistry, SinkFanout
+  responsible_for "Sink adapter registry and per-sink fanout writers for alert delivery"
+}
+
+module RuntimeMetrics {
+  layer Infrastructure
+  owns RuntimeMetrics, Histogram, HistogramSnapshot, IntervalRates, IntervalSnapshot, TotalCounts, RunSummary
+  responsible_for "Runtime counters, histograms and interval summaries for observability"
+}
+
+module ExternalBridge {
+  layer Infrastructure
+  owns ExternalRuntime
+  responsible_for "Bridges external() calls to the wp-knowledge runtime backend"
+}

@@ -1,0 +1,43 @@
+use "match_let_demo.wfs"
+
+rule derive_and_map {
+    events { s : security_events }
+    let tenant_id = s.tenant_id
+    let dedup_key = join_by("|", tenant_id, s.log_type, s.occur_time)
+    let alert_id = join_by("", "alert_", substr(sha256(dedup_key), 0, 24))
+    match<s.tenant_id:10m> {
+        on event { s | count >= 1; }
+    } -> score(50.0)
+    entity(chars, tenant_id)
+    yield security_alerts (
+        tenant_id = tenant_id,
+        dedup_key = dedup_key,
+        alert_id = alert_id,
+        severity = case s.severity {
+            "emerg" | "alert" | "crit" => "CRITICAL",
+            "error" => "HIGH",
+            "warning" => "MEDIUM",
+            "notice" => "LOW",
+            "info" | "debug" => "INFO",
+            _ => s.severity,
+        },
+        sip = s.sip,
+        alert_type = "sdm_alert",
+        detail = "let-derived dedup/alert_id + case severity mapping"
+    )
+
+    limits {
+        max_memory = "16MB";
+        max_instances = 1000;
+        on_exceed = throttle;
+    }
+}
+
+test derive_and_map_maps_severity for derive_and_map {
+  input {
+    row(s, sip = "10.0.0.8", tenant_id = "t1", log_type = "login", occur_time = "2026-01-01T00:00:01Z", severity = "crit", action = "failed", event_time = "2026-01-01T00:00:01Z");
+    row(s, sip = "10.0.0.9", tenant_id = "t1", log_type = "login", occur_time = "2026-01-01T00:00:02Z", severity = "error", action = "failed", event_time = "2026-01-01T00:00:02Z");
+    row(s, sip = "10.0.0.10", tenant_id = "t1", log_type = "login", occur_time = "2026-01-01T00:00:03Z", severity = "info", action = "login", event_time = "2026-01-01T00:00:03Z");
+  }
+  expect { hits == 3; }
+}

@@ -2,7 +2,8 @@ use "network.wfs"
 
 // 端口扫描检测 + 白名单排除 + IP富化
 //
-// join scanner_whitelist anti：排除已知漏扫器
+// join scanner_whitelist anti：排除已知漏扫器（静态表 anti = 纯键存在性
+// 否定，2026-08-24 放开；provider join_lookup 有 O(1) 行索引）
 // join internal_ips snapshot：富化告警（运行时注入 department/owner）
 // 注：WFL test runner 不支持 join 窗口数据预加载，富化效果在完整引擎验证
 

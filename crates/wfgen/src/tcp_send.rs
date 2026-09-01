@@ -61,7 +61,12 @@ pub async fn send_events_with_stream(
         return error::fail(WfgenReason::Network, "no events to send");
     }
 
-    let batches = events_to_typed_batches(events, schemas)?;
+    let batches = events_to_typed_batches(
+        events,
+        schemas,
+        crate::output::arrow_ipc::DEFAULT_MAX_FRAME_BYTES,
+        crate::output::arrow_ipc::DEFAULT_MAX_FRAME_ROWS,
+    )?;
     if batches.is_empty() {
         return error::fail(WfgenReason::Network, "no arrow batches built from events");
     }

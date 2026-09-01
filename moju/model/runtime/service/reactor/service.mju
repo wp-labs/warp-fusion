@@ -1,0 +1,18 @@
+// ---------------------------------------------------------------------------
+// reactor service — the reactor CLI binary (wf-runtime::cli::run_cli)
+// ---------------------------------------------------------------------------
+
+service reactor {
+  kind bin<cli>
+  uses module Config.ConfigLoader
+  uses module Config.SinkConfig
+  uses module Lang.LangCompile
+  uses module Engine.WindowManager
+  uses module Engine.MatchEngine
+  uses module Engine.SinkDispatch
+  uses module Orchestra.ReactorLifecycle
+  uses module Orchestra.TaskOrchestration
+  uses module Orchestra.Receiver
+  uses module Orchestra.SinkFactory
+  uses module Orchestra.RuntimeMetrics
+}

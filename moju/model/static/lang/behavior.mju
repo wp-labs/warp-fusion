@@ -1,0 +1,27 @@
+// ---------------------------------------------------------------------------
+// lang domain — flows
+// ---------------------------------------------------------------------------
+
+// CompileWfl：WFL 源码 → parse → 语义检查 → 编译为 RulePlan
+flow CompileWfl {
+  trigger CompileRequest
+  creates RulePlan
+
+  step Parse {
+    create WflFile {
+      uses = CompileRequest.source
+    }
+  }
+
+  step Check {
+    create CheckError {
+      message = CompileRequest.source
+    }
+  }
+
+  step Compile {
+    create RulePlan {
+      name = CompileRequest.source
+    }
+  }
+}

@@ -1,0 +1,37 @@
+// Verify fusion flows
+
+verify WfusionMainOk for flow WfusionMain {
+  given {
+    WfusionRun.config = "wfusion.toml"
+  }
+
+  when WfusionRun
+
+  expect {
+    Cli.command == "wfusion.toml"
+  }
+}
+
+verify EngineCommandOk for flow EngineCommand {
+  given {
+    WfusionRun.config = "wfusion.toml"
+  }
+
+  when WfusionRun
+
+  expect {
+    AdminApiRuntime.local_addr == "wfusion.toml"
+  }
+}
+
+verify ReloadFlowOk for flow ReloadFlow {
+  given {
+    ReloadCommand.reason = "cfg"
+  }
+
+  when ReloadCommand
+
+  expect {
+    ReloadResponse.result == "cfg"
+  }
+}

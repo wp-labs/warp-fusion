@@ -1,0 +1,13 @@
+// Verify project update flow
+
+verify UpdateProjectOk for flow UpdateProject {
+  given {
+    ProjectUpdateCommand.version = "v0.1.45"
+  }
+
+  when ProjectUpdateCommand
+
+  expect {
+    ProjectRemoteUpdateResult.resolved_tag == "v0.1.45"
+  }
+}

@@ -1,0 +1,14 @@
+// ---------------------------------------------------------------------------
+// config domain — implementation bindings
+// ---------------------------------------------------------------------------
+// Config sources are file + overlay-path TOML plus $VAR expansion scoped to
+// explicit CLI vars and environment vars (wf-config/src/config_loader,
+// wf-config/src/vars). Sink connectors are resolved from sink.toml connector
+// defs through the wp-connector-api adapter registry.
+
+bind Config.ExpandedToml to FileSource with config
+bind Config.ExpandedToml to OverlayPath with config
+bind Config.ExpandedToml to ExplicitVar with config
+bind Config.ExpandedToml to EnvVar with config
+
+bind Config.SinkConfigBundle to ConnectorAdapter with config

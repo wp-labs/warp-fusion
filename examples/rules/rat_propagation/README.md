@@ -156,7 +156,7 @@ rule rat_propagation_exploit {
 
 ## 内存估算
 
-每个 `sip,dip` 创建一个状态机实例：~96 bytes。正常内网 1000 源 IP × 10 目标 = 10000 实例 ≈ **0.9 MB**。详见 [monitoring-design.md](../../docs/monitoring-design.md)。
+每个 `sip,dip` 创建一个状态机实例：~96 bytes。正常内网 1000 源 IP × 10 目标 = 10000 实例 ≈ **0.9 MB**。详见 [metrics.md](../../../docs/useage/config/metrics.md)。
 
 ## 测试
 

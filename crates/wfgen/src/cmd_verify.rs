@@ -7,14 +7,43 @@ use crate::oracle::OracleTolerances;
 use crate::output::jsonl::{read_alerts_jsonl, read_oracle_jsonl};
 use crate::verify::verify;
 
-pub fn run(
-    expected: PathBuf,
-    actual: PathBuf,
-    score_tolerance: Option<f64>,
-    time_tolerance: Option<f64>,
-    meta: Option<PathBuf>,
-    format: String,
-) -> WfgenResult<()> {
+/// `wfgen verify` 参数：比对实际 alerts 与 oracle 期望。
+#[derive(clap::Args)]
+pub struct Args {
+    /// Path to the oracle (expected) JSONL file
+    #[arg(long)]
+    pub expected: PathBuf,
+
+    /// Path to the actual alerts JSONL file
+    #[arg(long)]
+    pub actual: PathBuf,
+
+    /// Score tolerance for matching (overrides meta file if set)
+    #[arg(long)]
+    pub score_tolerance: Option<f64>,
+
+    /// Time tolerance for matching in seconds (overrides meta file if set)
+    #[arg(long)]
+    pub time_tolerance: Option<f64>,
+
+    /// Path to oracle meta JSON with tolerances (written by gen)
+    #[arg(long)]
+    pub meta: Option<PathBuf>,
+
+    /// Output format: "json" or "markdown" (default: json)
+    #[arg(long, default_value = "json")]
+    pub format: String,
+}
+
+pub fn run(args: Args) -> WfgenResult<()> {
+    let Args {
+        expected,
+        actual,
+        score_tolerance,
+        time_tolerance,
+        meta,
+        format,
+    } = args;
     // Load tolerances: CLI flags > meta file > defaults
     let base_tolerances = if let Some(meta_path) = &meta {
         let content = std::fs::read_to_string(meta_path).source_err(

@@ -1,0 +1,39 @@
+// ---------------------------------------------------------------------------
+// generator domain — modules
+// ---------------------------------------------------------------------------
+
+module GenCli {
+  layer Interface
+  owns Cli, Commands, WfgenReason
+  responsible_for "wfgen CLI — gen/lint/verify/send/bench/stream command dispatch"
+}
+
+module ScenarioLoad {
+  layer Application
+  owns LoadedScenario, RulePrelude
+  responsible_for "Loads WFG scenario and prelude rule files for generation"
+}
+
+module DataGen {
+  layer DataFusion
+  owns GenEvent, GenResult, FaultResult, FaultStats, Assignment, UseStepPlan, InjectGenResult, RuleStructure, StepInfo, AliasMap, InjectOverrides, InjectUseStepOverrides
+  responsible_for "Stream/fault/injection-aware scenario event generation"
+}
+
+module Oracle {
+  layer Application
+  owns RuleEngine, OracleAlert, OracleResult, OracleTolerances
+  responsible_for "Runs the rule engine over generated events to produce expected alerts"
+}
+
+module Verify {
+  layer Application
+  owns VerifyReport, VerifySummary, ActualAlert, AlertDetail, MismatchDetail, MatchResult, ValidationError
+  responsible_for "Compares generated alerts against oracle output and reports mismatches"
+}
+
+module ArrowOutput {
+  layer DataFusion
+  owns ColumnBuilder
+  responsible_for "Builds Arrow IPC output frames from generated events"
+}

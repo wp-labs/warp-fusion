@@ -1,14 +1,25 @@
 //! Continuous data generation — daemon mode.
 //!
 //! Loads multiple `.wfg` scenarios, cycles through them indefinitely,
-//! and sends events via persistent TCP connection.
+//! and sends events via a persistent TCP connection.
+//!
+//! The scenario is generated in fixed *event-time slices*: each batch spans a
+//! short slice of event time (default 1s) and the slice's start advances
+//! monotonically between batches, so windows progress correctly on a long run
+//! (the previous implementation regenerated the whole scenario over the same
+//! fixed 60s window every time). The send loop paces each slice to span the
+//! same wall-clock duration as its event-time span, i.e. data flows at the
+//! scenario's declared rate (or an explicit `--rate` override). Batch size is
+//! `rate × slice` and is capped so wfgen's memory stays bounded.
 //!
 //! Usage:
-//!   wpgen stream --scenario-dir scenarios/ --ws schemas/*.wfs --addr 127.0.0.1:9800
+//!   wpgen stream --scenario-dir scenarios/ --ws schemas/*.wfs --wfl rules/*.wfl \
+//!     --addr 127.0.0.1:9800 --rate 2000000 --slice-ms 1000
 
 use std::path::{Path, PathBuf};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
+use chrono::{DateTime, SecondsFormat, Utc};
 use orion_error::conversion::SourceErr;
 
 use crate::datagen::generate;
@@ -23,6 +34,14 @@ use crate::{
 
 use wf_lang::WindowSchema;
 
+/// Events per send chunk. Larger chunks amortize the Arrow batch-encode
+/// overhead (events_to_typed_batches builds builders per call); 40k ≈ the
+/// per-frame row cap, so a chunk typically becomes 1-2 frames.
+const CHUNK_SIZE: usize = 40_000;
+/// Upper bound on one generated batch, so wfgen memory stays bounded even at
+/// very high rates (batch = rate × slice, capped here).
+const MAX_BATCH: u64 = 2_000_000;
+
 /// A loaded scenario ready for continuous generation.
 struct LoadedScenario {
     name: String,
@@ -30,20 +49,52 @@ struct LoadedScenario {
     rule_plans: Vec<wf_lang::plan::RulePlan>,
 }
 
-pub async fn run(
-    scenario_dir: PathBuf,
-    ws: Vec<PathBuf>,
-    wfl: Vec<PathBuf>,
-    addr: String,
-    interval_secs: u64,
-    rate_sleep_ms: u64,
-) -> WfgenResult<()> {
+/// `wfgen stream` 发送参数（CLI 直通）。
+#[derive(clap::Args)]
+pub struct Args {
+    /// Directory containing .wfg scenario files (cycled indefinitely)
+    #[arg(long)]
+    pub scenario_dir: PathBuf,
+
+    /// Schema files (.wfs)
+    #[arg(long)]
+    pub ws: Vec<PathBuf>,
+
+    /// Rule files (.wfl) — required for injection to work correctly
+    #[arg(long, required = true)]
+    pub wfl: Vec<PathBuf>,
+
+    /// Target TCP address (wparse tcp_src)
+    #[arg(long, default_value = "127.0.0.1:9800")]
+    pub addr: String,
+
+    /// Seconds per scenario before switching
+    #[arg(long = "interval", default_value = "60")]
+    pub interval_secs: u64,
+
+    /// Target event rate (events/sec). 0 = use the scenario's declared `gen N/s`
+    #[arg(long = "rate", default_value = "0")]
+    pub rate_eps_override: u64,
+
+    /// Event-time slice per batch (ms). Batch size = rate × slice, capped for bounded memory
+    #[arg(long, default_value = "1000")]
+    pub slice_ms: u64,
+
+    /// Event budget: stop after sending n events and append a `__wf_sentinel`
+    /// completion frame (round=0, n=sent, start_ns=stream start). Engine
+    /// writes {round,n,start_ns,emit_ns} to perf_sentinel.ndjson once data
+    /// windows drain — precise EPS for bench. Omit = keep cycling forever.
+    #[arg(long = "sentinel")]
+    pub sentinel_n: Option<u64>,
+}
+
+pub async fn run(opts: Args) -> WfgenResult<()> {
     // 1. Load schemas
     let mut schemas: Vec<WindowSchema> = Vec::new();
-    schemas.extend(load_ws_files(&ws)?);
+    schemas.extend(load_ws_files(&opts.ws)?);
 
     // 2. Compile WFL rules (for inject_gen hit/near_miss/miss)
-    let wfl_files_loaded = load_wfl_files(&wfl)?;
+    let wfl_files_loaded = load_wfl_files(&opts.wfl)?;
     let mut all_rule_plans = Vec::new();
     for wfl_file in &wfl_files_loaded {
         match wf_lang::compile_wfl(wfl_file, &schemas) {
@@ -55,7 +106,7 @@ pub async fn run(
     }
 
     // 3. Load all .wfg scenarios from directory
-    let scenarios = load_scenarios(&scenario_dir, &schemas, &all_rule_plans)?;
+    let scenarios = load_scenarios(&opts.scenario_dir, &schemas, &all_rule_plans)?;
     if scenarios.is_empty() {
         return error::fail(WfgenReason::Io, "no .wfg scenarios found in directory");
     }
@@ -63,60 +114,147 @@ pub async fn run(
     eprintln!(
         "Loaded {} scenarios from {}",
         scenarios.len(),
-        scenario_dir.display()
+        opts.scenario_dir.display()
     );
     eprintln!(
-        "Rate: sleep {}ms between batches | Scenario interval: {}s",
-        rate_sleep_ms, interval_secs
+        "Rate: override={} | slice={}ms | scenario interval={}s",
+        opts.rate_eps_override, opts.slice_ms, opts.interval_secs
     );
-    eprintln!("Target: {}", addr);
+    eprintln!("Target: {}", opts.addr);
 
     // 4. Connect to wfusion TCP via wp_core_connectors NetWriter (async)
-    let mut writer = connect_sender(&addr).await?;
-    eprintln!("Connected to {}", addr);
+    let mut writer = connect_sender(&opts.addr).await?;
+    eprintln!("Connected to {}", opts.addr);
 
     // 5. Cycle through scenarios forever
-    let sleep_dur = tokio::time::Duration::from_millis(rate_sleep_ms);
-    let scenario_dur = std::time::Duration::from_secs(interval_secs);
+    let scenario_dur = Duration::from_secs(opts.interval_secs);
     let mut idx = 0usize;
     let mut total_events: u64 = 0;
     let mut total_frames: u64 = 0;
     let wall_start = Instant::now();
+    // 哨兵 start_ns = 流开始时刻（与引擎 emit_ns 同机时钟可比）。
+    let sentinel_start_ns = crate::cmd_perf_diag::now_nanos();
 
     loop {
         let scenario = &scenarios[idx];
+
+        // Effective target rate: explicit --rate wins, else scenario declared rate.
+        let base_rate: f64 = scenario
+            .wfg
+            .scenario
+            .streams
+            .iter()
+            .map(|s| s.rate.events_per_second())
+            .sum();
+        if base_rate <= 0.0 && opts.rate_eps_override == 0 {
+            return error::fail(
+                WfgenReason::Validation,
+                format!(
+                    "scenario '{}' declares no stream rate and no --rate override given",
+                    scenario.name
+                ),
+            );
+        }
+        let rate: f64 = if opts.rate_eps_override > 0 {
+            opts.rate_eps_override as f64
+        } else {
+            base_rate
+        };
+
+        let base_start: DateTime<Utc> =
+            scenario
+                .wfg
+                .scenario
+                .time_clause
+                .start
+                .parse()
+                .map_err(|e| {
+                    error::error(
+                        WfgenReason::Generation,
+                        format!(
+                            "invalid scenario start '{}': {}",
+                            scenario.wfg.scenario.time_clause.start, e
+                        ),
+                    )
+                })?;
+        let base_seed = scenario.wfg.scenario.seed;
+
         let phase_start = Instant::now();
-        let mut phase_events = 0u64;
-        let mut phase_frames = 0u64;
+        let mut phase_events: u64 = 0;
+        let mut phase_frames: u64 = 0;
+        let mut cursor_nanos: i128 = 0; // accumulated event-time offset
 
         eprintln!(
-            "[{}] phase=start scenario={} (idx {}/{})",
+            "[{}] phase=start scenario={} (idx {}/{}) rate={:.0}/s",
             chrono::Local::now().format("%H:%M:%S"),
             scenario.name,
             idx,
-            scenarios.len()
+            scenarios.len(),
+            rate
         );
 
         while phase_start.elapsed() < scenario_dur {
-            let result = generate(&scenario.wfg, &schemas, &scenario.rule_plans)?;
-            let event_count = result.events.len();
+            // Batch = rate × slice, bounded to keep wfgen memory in check.
+            // --sentinel 预算模式下截断到剩余预算（batch_total ≤ 预算余量，
+            // 保证最后一批发满即停、不超发）。
+            let rate_batch =
+                ((rate * opts.slice_ms as f64 / 1000.0).round() as u64).clamp(1, MAX_BATCH);
+            let batch_total = match opts.sentinel_n {
+                Some(budget) => rate_batch.min(budget.saturating_sub(total_events).max(1)),
+                None => rate_batch,
+            };
+            // Actual event-time span for this batch (seconds).
+            let slice_secs = batch_total as f64 / rate;
+            let slice_nanos = (slice_secs * 1e9).max(1.0) as u64;
 
-            // Split into smaller chunks so wfusion can process them incrementally
-            const CHUNK_SIZE: usize = 1000;
+            // Build a modified scenario: advancing start, slice duration, bounded
+            // total, and a per-slice seed so field values differ across batches.
+            let mut wfg = scenario.wfg.clone();
+            wfg.scenario.seed = base_seed.wrapping_add(cursor_nanos as u64);
+            wfg.scenario.time_clause.start = (base_start
+                + chrono::Duration::nanoseconds(cursor_nanos as i64))
+            .to_rfc3339_opts(SecondsFormat::Nanos, true);
+            wfg.scenario.time_clause.duration = Duration::from_nanos(slice_nanos);
+            wfg.scenario.total = batch_total;
+
+            // Start the slice timer before generate() so generation time is counted
+            // inside the slice budget — the send pacing below then makes each slice
+            // span ~slice_secs of wall time end to end (generate + send).
+            let batch_start = Instant::now();
+            let result = generate(&wfg, &schemas, &scenario.rule_plans)?;
+            let event_count = result.events.len() as u64;
+
             let mut gen_frames = 0u64;
-            for chunk in result.events.chunks(CHUNK_SIZE) {
+            let num_chunks = result.events.len().div_ceil(CHUNK_SIZE).max(1);
+            for (i, chunk) in result.events.chunks(CHUNK_SIZE).enumerate() {
                 let sent =
                     crate::tcp_send::send_events_with_stream(chunk, &schemas, &mut writer).await?;
                 gen_frames += sent as u64;
-                if sleep_dur > tokio::time::Duration::ZERO {
-                    tokio::time::sleep(sleep_dur).await;
+
+                // Pace each chunk so the whole slice spans ~slice_secs of wall
+                // time (i.e. event-time rate ≈ real-time). Under daemon
+                // backpressure the send itself takes longer and this sleep is
+                // skipped automatically — the stream then flows at the daemon's
+                // consumption rate instead of flooding it.
+                let ideal = batch_start
+                    + Duration::from_secs_f64(slice_secs * (i as f64 + 1.0) / num_chunks as f64);
+                let now = Instant::now();
+                if now < ideal {
+                    tokio::time::sleep(ideal - now).await;
                 }
             }
 
-            total_events += event_count as u64;
+            cursor_nanos += slice_nanos as i128;
+            total_events += event_count;
             total_frames += gen_frames;
-            phase_events += event_count as u64;
+            phase_events += event_count;
             phase_frames += gen_frames;
+
+            // --sentinel <n> 事件预算模式：发满 n 条后结束（stream bench 有限发送，
+            // 末尾追加哨兵帧作完成信号）。不传则保持无限循环（原行为）。
+            if opts.sentinel_n.is_some_and(|budget| total_events >= budget) {
+                break;
+            }
         }
 
         let elapsed = wall_start.elapsed().as_secs_f64();
@@ -137,7 +275,22 @@ pub async fn run(
         );
 
         idx = (idx + 1) % scenarios.len();
+        if opts.sentinel_n.is_some_and(|budget| total_events >= budget) {
+            break;
+        }
     }
+
+    // 预算模式：末尾追加哨兵帧 `{round=0, n=total_events, start_ns}`——引擎哨兵任务
+    // 等**数据窗排空**后写 `perf_sentinel.ndjson` 四元组，EPS 精确可算。
+    if opts.sentinel_n.is_some() {
+        let frame =
+            crate::cmd_perf_diag::build_sentinel_frame(0, total_events as i64, sentinel_start_ns)?;
+        crate::cmd_perf_diag::send_payload(&opts.addr, &frame).await?;
+        eprintln!(
+            "[sentinel] round=0 n={total_events} sent — EPS 以 data/perf_sentinel.ndjson 为准"
+        );
+    }
+    Ok(())
 }
 
 /// Load all .wfg files from a directory.
@@ -173,7 +326,7 @@ fn load_scenarios(
 
         // Load schemas referenced by the scenario's `use` declarations
         let (mut scenario_schemas, _) =
-            load_from_uses(&wfg, &path, &std::collections::HashMap::new())?;
+            load_from_uses(&wfg, &path, &std::collections::HashMap::new(), false)?;
         // Merge with global schemas (avoid duplicates by name)
         for s in global_schemas {
             if !scenario_schemas.iter().any(|x| x.name == s.name) {

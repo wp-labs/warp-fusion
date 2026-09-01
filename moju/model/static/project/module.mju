@@ -1,0 +1,9 @@
+// ---------------------------------------------------------------------------
+// project domain — modules
+// ---------------------------------------------------------------------------
+
+module RemoteUpdate {
+  layer Application
+  owns ProjectRemoteUpdateResult, ResolvedTag, GroupState, ProjectRemoteSnapshot, ProjectRuntimeArtifactSnapshot, ProjectRemoteLockGuard, BackupManifest, RemoteGroup, ProjectRemoteState, ProjectRemoteMode
+  responsible_for "Project remote version resolution, lock and reload artifact management"
+}

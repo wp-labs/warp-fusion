@@ -1,0 +1,15 @@
+// 顶层列表（issue #73）——一处定义、多处引用。
+//
+// 三个规则文件（alert_rule / alert_entity_rule / event_evidence_rule）分别
+// `use "../lists/security_log_types.wfl"` 导入本文件, 以 `s.log_type in
+// security_log_types`（或 `not in`）引用同一组允许列表值——新增/删除日志
+// 类型只需改这里, 三个规则无需重复编辑。
+//
+// 列表元素为字符串字面量, 编译期做元素-左值类型检查（与手写 `in (...)` 列表
+// 同一条检查路径）。
+security_log_types = (
+    "edr_alert_log",
+    "fw_ips_protect_log",
+    "topas_waf_virus",
+    "ngsoc_threat_alert_send"
+)

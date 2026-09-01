@@ -1,0 +1,8 @@
+// ---------------------------------------------------------------------------
+// generator domain — implementation bindings
+// ---------------------------------------------------------------------------
+// Generated events bind to the reactor window/ingress for streaming; oracle
+// replay binds to the reactor match engine.
+
+bind Generator.GenEvent to ArrowIpcOutput with storage
+bind Generator.RuleEngine to ReactorMatchEngine with storage

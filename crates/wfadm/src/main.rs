@@ -53,9 +53,12 @@ enum Commands {
         #[command(subcommand)]
         command: engine::EngineCommands,
     },
-    /// Self-update binary
-    #[command(name = "self-update")]
-    SelfUpdate,
+    /// Self-update tools
+    #[command(name = "self", visible_alias = "自身")]
+    SelfCmd {
+        #[command(subcommand)]
+        command: self_update::SelfCmd,
+    },
 }
 
 fn main() {
@@ -72,7 +75,7 @@ fn main() {
         Commands::Conf { command } => conf::run(command),
         Commands::Check(args) => check::run(args),
         Commands::Engine { command } => engine::run(command),
-        Commands::SelfUpdate => self_update::run(),
+        Commands::SelfCmd { command } => self_update::run_self(command),
     };
 
     if let Err(e) = result {

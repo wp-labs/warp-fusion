@@ -3,6 +3,7 @@ version = "1.0"
 [sink_group]
 name = "security_alerts_out"
 windows = ["security_alerts"]
+wf_meta_disable = ["__wfu_*"]
 
 [[sink_group.sinks]]
 connect = "file_json"

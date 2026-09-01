@@ -1,0 +1,81 @@
+// ---------------------------------------------------------------------------
+// lang domain — modules
+// ---------------------------------------------------------------------------
+
+module LangSchema {
+  layer DataFusion
+  owns FieldDef, WindowSchema, StaticWindowSchema, ParsedWfs, BaseType, FieldType
+  responsible_for "Window schema (.wfs) definitions and field type vocabulary"
+}
+
+module LangRule {
+  layer DataFusion
+  owns WflFile, RuleDecl, PatternDecl, PatternOrigin, UseDecl, PipelineStage, MetaBlock, MetaEntry, EventsBlock, EventDecl, YieldPresetDecl, YieldPresetParam
+  responsible_for "WFL rule file AST — rules, patterns, events, yield presets"
+}
+
+module LangMatch {
+  layer DataFusion
+  owns MatchClause, EachClause, MatchStep, StepBranch, PipeChain, KeyMapItem, CloseBlock, SeqClause, SeqStep, CloseMode, MatchMode, SeqSkip, WindowMode, Transform, Measure
+  responsible_for "Match/seq/each clause AST for NFA event-pattern matching"
+}
+
+module LangExpr {
+  layer DataFusion
+  owns Expr, ObjectItem, FieldRef, FieldSelector, PathSegment, CmpOp, BinOp, SystemVar
+  responsible_for "Expression and field-reference AST with operators and system variables"
+}
+
+module LangClauses {
+  layer DataFusion
+  owns ScoreExpr, EntityClause, YieldClause, YieldPresetRef, NamedArg, LimitsBlock, LimitItem, EntityTypeVal
+  responsible_for "Rule-level clauses: entity, yield, score, limits"
+}
+
+module LangJoin {
+  layer DataFusion
+  owns JoinClause, JoinCondition, JoinMode
+  responsible_for "Cross-window join clauses (snapshot / asof / anti)"
+}
+
+module LangConv {
+  layer DataFusion
+  owns ConvClause, ConvChain, ConvStep, SortKey
+  responsible_for "Result conversion pipeline clauses (sort / top / dedup / where)"
+}
+
+module LangTest {
+  layer DataFusion
+  owns TestBlock, InputStmt, FieldAssign, ExpectStmt, HitAssert, TestOptions, CloseTrigger, EvalMode, PermutationMode
+  responsible_for "Rule test-contract AST — input rows/ticks and expected outcomes"
+}
+
+module LangCompile {
+  layer DataFusion
+  owns RulePlan, EachPlan, PatternOriginPlan, BindPlan, MatchPlan, KeyMapPlan, WindowSpec, StepPlan, BranchPlan, AggPlan, SeqPlan, SeqSkipPlan, SeqStepPlan
+  responsible_for "Compiled rule plan — bind/match/seq step structure"
+}
+
+module LangExePlan {
+  layer DataFusion
+  owns JoinPlan, JoinCondPlan, LimitsPlan, ExceedAction, RateSpec, EntityPlan, ScorePlan, YieldPlan, YieldField, ConvPlan, ConvChainPlan, ConvOpPlan, SortKeyPlan
+  responsible_for "Compiled execution plan — join, limits, entity, score, yield, conversion"
+}
+
+module LangChecker {
+  layer DataFusion
+  owns CheckError, Severity, LangReason, RuleExplanation, BindingExpl, MatchExpl
+  responsible_for "Semantic checking, diagnostics and explain output for WFL"
+}
+
+module LangWfg {
+  layer DataFusion
+  owns WfgFile, ScenarioDecl, SyntaxScenario, TimeClause, ScenarioAttr, AttrValue, TrafficBlock, SyntaxStreamDecl, RateExpr, WaveShape, TimelineSegment, SyntaxInjectionBlock, SyntaxInjectCase, InjectCaseMode, SeqBlock, FieldPredicate, ExpectBlock, ExpectCheck, ExpectMetric, CompareOp, ExpectValue, Rate, RateUnit, StreamBlock, FieldOverride, GenExpr, GenArg, InjectBlock, InjectLine, InjectUseStep, InjectMode, FaultsBlock, FaultType, FaultLine, OracleBlock, ParamAssign, ParamValue
+  responsible_for "WFG scenario / traffic-generation AST — streams, injection, faults, oracle"
+}
+
+module LangWfuMeta {
+  layer DataFusion
+  owns WfuMetaField, WfuIntermediateMetaField
+  responsible_for "__wfu_* metadata field vocabulary for rule output"
+}

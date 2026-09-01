@@ -1,0 +1,12 @@
+// ---------------------------------------------------------------------------
+// wfl service — rule tooling binary
+// ---------------------------------------------------------------------------
+
+service wfl {
+  kind bin<cli>
+  uses module Tooling.WflCli
+  uses module Tooling.Replay
+  uses module Lang.LangCompile
+  uses module Lang.LangChecker
+  uses module Engine.MatchEngine
+}

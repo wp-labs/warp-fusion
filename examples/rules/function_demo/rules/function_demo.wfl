@@ -1,0 +1,31 @@
+use "function_demo.wfs"
+
+rule function_demo {
+    events { s : function_events }
+    match<s.tenant_id,s.target_host:1m> {
+        on event { seen: s | count >= 1; }
+    } -> score(10.0)
+    entity(ip, s.sip)
+    yield function_alerts (
+        sip = s.sip,
+        tenant_id = s.tenant_id,
+        target_host = s.target_host,
+        hash8 = sha1_n(@__wfu_id, 8),
+        joined = join(s.tenant_id, "function_demo", s.empty_part, s.target_host),
+        joined_by = join_by("|", s.tenant_id, "function_demo", s.empty_part, s.target_host),
+        detail = "function demo"
+    )
+
+    limits {
+        max_memory = "16MB";
+        max_instances = 1000;
+        on_exceed = throttle;
+    }
+}
+
+test function_output_compiles for function_demo {
+  input {
+    row(s, sip = "10.0.0.8", tenant_id = "tenant|A", target_host = "host%01", empty_part = "", event_time = "2026-01-01T00:00:00Z");
+  }
+  expect { hits == 1; }
+}

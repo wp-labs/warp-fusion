@@ -1,0 +1,25 @@
+// Verify admin flows
+
+verify CheckOk for flow CheckFlow {
+  given {
+    CheckCommand.work_root = "work"
+  }
+
+  when CheckCommand
+
+  expect {
+    SummaryCounts.conf == "work"
+  }
+}
+
+verify EngineReloadOk for flow EngineReload {
+  given {
+    EngineReloadCmd.reason = "reload"
+  }
+
+  when EngineReloadCmd
+
+  expect {
+    EngineReloadResponse.result == "reload"
+  }
+}

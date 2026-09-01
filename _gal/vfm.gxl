@@ -5,11 +5,9 @@ mod sys_ver_adm {
   }
   #[usage(desp="update version of patch ")]
   flow v_patch | ver.patch  {
-    gx.cmd ( "bash scripts/update-local-manifest.sh ${VERSION} stable" );
   }
   #[usage(desp="update version of feature ")]
   flow v_feat |  ver.feature   {
-    gx.cmd ( "bash scripts/update-local-manifest.sh ${VERSION} stable" );
   }
   #[usage(desp="add tag by version ")]
   flow tag_stable {
@@ -35,11 +33,9 @@ mod lib_ver_adm {
   }
   #[usage(desp="update version of patch ")]
   flow v_patch | ver.patch  {
-    gx.cmd ( "bash scripts/update-local-manifest.sh ${VERSION} stable" );
   }
   #[usage(desp="update version of feature ")]
   flow v_feat |  ver.feature   {
-    gx.cmd ( "bash scripts/update-local-manifest.sh ${VERSION} stable" );
   }
   #[usage(desp="add tag by version ")]
   flow tag_stable{

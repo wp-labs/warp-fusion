@@ -1,0 +1,76 @@
+// ---------------------------------------------------------------------------
+// engine domain — flows
+// ---------------------------------------------------------------------------
+
+// ProcessEvents：Arrow RecordBatch → 窗口路由 → 时间排序 buffer → NFA 匹配 → 告警 → 分发
+flow ProcessEvents {
+  actor DataSender
+  trigger IncomingBatch
+  creates OutputRecord
+
+  step Ingest {
+    create TimedBatch {
+      row_count = IncomingBatch.stream_name
+    }
+  }
+
+  step Route {
+    create ParsedRoute {
+      content_bytes = IncomingBatch.stream_name
+    }
+  }
+
+  step Buffer {
+    create Window {
+      name = IncomingBatch.stream_name
+    }
+  }
+
+  step Append {
+  }
+
+  step Match {
+    create MatchedContext {
+      rule_name = IncomingBatch.stream_name
+    }
+  }
+
+  step Emit {
+    create OutputRecord {
+      rule_name = IncomingBatch.stream_name
+    }
+  }
+
+  step Dispatch {
+  }
+}
+
+// EvictWindow：时间驱逐 + 全局内存驱逐，报告各窗口驱逐行数
+flow EvictWindow {
+  trigger MemoryPressure
+  creates EvictReport
+
+  step Purge {
+    create EvictReport {
+      windows_scanned = MemoryPressure.window_name
+    }
+  }
+}
+
+// StateMachineStep：把窗口事件逐步送入 NFA 状态机求值
+flow StateMachineStep {
+  trigger NewEvents
+  creates MatchedContext
+
+  step Evaluate {
+    create StepOutcome {
+      result = NewEvents.rule_name
+    }
+  }
+
+  step Advance {
+    create MatchedContext {
+      rule_name = NewEvents.rule_name
+    }
+  }
+}

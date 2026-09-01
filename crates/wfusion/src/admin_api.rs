@@ -1159,29 +1159,22 @@ async fn map_reload_result(
             )
         }
         Ok(ReloadOutcome::Blocked(plan)) => {
-            mark_reload_finished(&state, &request_id, "reload_failed").await;
+            mark_reload_finished(&state, &request_id, "restart_required").await;
             let blockers = plan.requires_restart.len();
-            let rollback_warning = rollback_updated_project(
-                &state.config_source.work_dir,
-                reload_ctx.as_ref(),
-                &request_id,
-                remote_addr,
-                "reload_blocked",
-            );
             tracing::info!(
                 domain = "sys",
-                "admin api reload blocked request_id={} remote={} blockers={} reason={}",
+                "admin api reload restart required request_id={} remote={} blockers={} reason={}",
                 request_id,
                 remote_addr,
                 blockers,
                 reason
             );
             json_response(
-                StatusCode::CONFLICT,
+                StatusCode::OK,
                 &ReloadResponse {
                     request_id,
-                    accepted: false,
-                    result: "reload_failed",
+                    accepted: true,
+                    result: "restart_required",
                     update: update_result.map(|_| true),
                     requested_version: update_result
                         .and_then(|result| result.requested_version.clone()),
@@ -1189,14 +1182,11 @@ async fn map_reload_result(
                     resolved_tag: update_result.map(|result| result.resolved_tag.clone()),
                     group: update_result.and_then(|result| result.group.clone()),
                     force_replaced: None,
-                    warning: merge_warnings(
-                        Some(format!(
-                            "reload blocked by {} restart-required changes",
-                            blockers
-                        )),
-                        rollback_warning,
-                    ),
-                    error: Some("reload requires restart".to_string()),
+                    warning: Some(format!(
+                        "reload requires restart because {} restart-required changes were found; synced project content was kept",
+                        blockers
+                    )),
+                    error: None,
                 },
             )
         }
@@ -1335,15 +1325,6 @@ fn rollback_updated_project(
             warning
         );
         Some(warning)
-    }
-}
-
-fn merge_warnings(first: Option<String>, second: Option<String>) -> Option<String> {
-    match (first, second) {
-        (Some(first), Some(second)) => Some(format!("{}; {}", first, second)),
-        (Some(first), None) => Some(first),
-        (None, Some(second)) => Some(second),
-        (None, None) => None,
     }
 }
 

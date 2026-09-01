@@ -16,7 +16,7 @@ fn test_sv7_string_lit_on_digit_field() {
         vec![],
     );
     let schemas = vec![make_schema("W", vec![("count", BaseType::Digit)])];
-    let errors = validate_wfg(&wfg, &schemas, &[]);
+    let errors = validate_wfg(&wfg, &schemas, &[], false);
     assert!(
         errors
             .iter()
@@ -36,7 +36,7 @@ fn test_sv7_number_lit_on_bool_field() {
         vec![],
     );
     let schemas = vec![make_schema("W", vec![("flag", BaseType::Bool)])];
-    let errors = validate_wfg(&wfg, &schemas, &[]);
+    let errors = validate_wfg(&wfg, &schemas, &[], false);
     assert!(
         errors
             .iter()
@@ -56,7 +56,7 @@ fn test_sv7_bool_lit_on_chars_field() {
         vec![],
     );
     let schemas = vec![make_schema("W", vec![("name", BaseType::Chars)])];
-    let errors = validate_wfg(&wfg, &schemas, &[]);
+    let errors = validate_wfg(&wfg, &schemas, &[], false);
     assert!(
         errors
             .iter()
@@ -79,7 +79,7 @@ fn test_sv7_ipv4_on_digit_field() {
         vec![],
     );
     let schemas = vec![make_schema("W", vec![("port", BaseType::Digit)])];
-    let errors = validate_wfg(&wfg, &schemas, &[]);
+    let errors = validate_wfg(&wfg, &schemas, &[], false);
     assert!(
         errors
             .iter()
@@ -102,7 +102,7 @@ fn test_sv7_range_on_ip_field() {
         vec![],
     );
     let schemas = vec![make_schema("W", vec![("addr", BaseType::Ip)])];
-    let errors = validate_wfg(&wfg, &schemas, &[]);
+    let errors = validate_wfg(&wfg, &schemas, &[], false);
     assert!(
         errors
             .iter()
@@ -125,7 +125,7 @@ fn test_sv7_enum_compatible_with_any_type() {
         vec![],
     );
     let schemas = vec![make_schema("W", vec![("val", BaseType::Digit)])];
-    let errors = validate_wfg(&wfg, &schemas, &[]);
+    let errors = validate_wfg(&wfg, &schemas, &[], false);
     assert!(
         !errors.iter().any(|e| e.code == "SV7"),
         "enum should be compatible with any type"
@@ -153,7 +153,7 @@ fn test_sv7_structured_fields_reject_scalar_overrides() {
             ("tags", FieldType::ArrayAny),
         ],
     )];
-    let errors = validate_wfg(&wfg, &schemas, &[]);
+    let errors = validate_wfg(&wfg, &schemas, &[], false);
 
     assert!(
         errors
@@ -214,7 +214,7 @@ fn test_sv7_valid_combinations() {
             ("count", BaseType::Digit),
         ],
     )];
-    let errors = validate_wfg(&wfg, &schemas, &[]);
+    let errors = validate_wfg(&wfg, &schemas, &[], false);
     assert!(
         !errors.iter().any(|e| e.code == "SV7"),
         "all valid: {:?}",

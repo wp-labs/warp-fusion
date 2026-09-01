@@ -1,0 +1,15 @@
+
+[sink_group]
+name = "demo"
+oml = ["*"]
+tags = ["biz:demo"]
+batch_size = 1024
+batch_timeout_ms = 300
+
+[[sink_group.sinks]]
+name = "json"
+connect = "file_json_sink"
+tags = ["sink:json"]
+
+[sink_group.sinks.params]
+file = "demo.json"

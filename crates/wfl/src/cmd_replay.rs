@@ -3,13 +3,15 @@ use std::io::{BufRead, BufReader, IsTerminal};
 use std::path::PathBuf;
 
 use orion_error::conversion::SourceErr;
+use smol_str::SmolStr;
 
 use crate::error::{self, WflReason, WflResult, WflStructExt};
 use wf_config::ConfigVarContext;
 use wf_data::time::parse_json_timestamp_nanos;
 use wf_engine::alert::OutputRecord;
 use wf_engine::match_engine::{
-    CepStateMachine, CloseReason, Event, RuleExecutor, StepResult, Value, WindowLookup,
+    CepStateMachine, CloseReason, EngineHashMap, Event, JoinRow, RuleExecutor, StepResult, Value,
+    WindowLookup,
 };
 use wf_lang::WindowSchema;
 use wf_lang::plan::RulePlan;
@@ -38,7 +40,7 @@ pub fn run(
     input: PathBuf,
     vars: Vec<String>,
 ) -> WflResult<()> {
-    use wf_config::project::{load_schemas, load_wfl_with_context, parse_vars};
+    use wf_config::project::{load_schemas, parse_vars};
 
     let cwd = std::env::current_dir().source_err(WflReason::Io, "reading cwd")?;
     let mut var_map = parse_vars(&vars).wfl()?;
@@ -49,14 +51,15 @@ pub fn run(
     let color = std::io::stderr().is_terminal();
 
     let all_schemas = load_schemas(&schemas, &cwd).wfl()?;
-    let source = load_wfl_with_context(&file, &ctx, Some(&cwd)).wfl()?;
+    // 加载 + 预处理 + parse `use` imports（issue #73）
+    let wfl_file = crate::load_wfl_with_imports(&file, &ctx, &cwd)?;
 
     let reader = BufReader::new(
         std::fs::File::open(&input)
             .source_err(WflReason::Io, format!("opening {}", input.display()))?,
     );
 
-    let result = replay_events(&source, &all_schemas, reader, color)?;
+    let result = replay_events_from_file(&wfl_file, &all_schemas, reader, color, false)?;
 
     for alert in &result.alerts {
         match serde_json::to_string(alert) {
@@ -111,50 +114,54 @@ pub fn replay_events<R: BufRead>(
     reader: R,
     color: bool,
 ) -> WflResult<ReplayResult> {
-    replay_events_impl(
-        wfl_source,
-        schemas,
-        reader,
-        color,
-        ReplayExecOptions {
-            scan_expired_each_event: false,
-            eof_action: ReplayEofAction::CloseAllEos,
-        },
-    )
+    // 纯逻辑入口（无文件系统访问）: parse 不含 use 导入; 需要 use 的走
+    // `replay_events_from_file`（命令入口已解析导入）。
+    let parsed = wf_lang::parse_wfl(wfl_source).wfl()?;
+    replay_events_from_file(&parsed, schemas, reader, color, false)
 }
 
-/// Replay mode used by `wfl replay-verify`.
-///
-/// This mode aligns with oracle semantics:
-/// - scans timeout expirations before each input event
-/// - does NOT force `close:eos` at EOF
+/// Replay mode used by `wfl replay-verify`（与 oracle 语义对齐: 每事件前扫
+/// timeout 到期, EOF 不强制 close）。
 pub fn replay_events_for_verify<R: BufRead>(
     wfl_source: &str,
     schemas: &[WindowSchema],
     reader: R,
     color: bool,
 ) -> WflResult<ReplayResult> {
-    replay_events_impl(
-        wfl_source,
-        schemas,
-        reader,
-        color,
+    let parsed = wf_lang::parse_wfl(wfl_source).wfl()?;
+    replay_events_from_file(&parsed, schemas, reader, color, true)
+}
+
+/// 命令入口（已解析 + use 导入的文件）统一走这里。
+pub(crate) fn replay_events_from_file<R: BufRead>(
+    wfl_file: &wf_lang::ast::WflFile,
+    schemas: &[WindowSchema],
+    reader: R,
+    color: bool,
+    verify_mode: bool,
+) -> WflResult<ReplayResult> {
+    let options = if verify_mode {
         ReplayExecOptions {
             scan_expired_each_event: true,
             eof_action: ReplayEofAction::SweepTimeoutAtLastWatermark,
-        },
-    )
+        }
+    } else {
+        ReplayExecOptions {
+            scan_expired_each_event: false,
+            eof_action: ReplayEofAction::CloseAllEos,
+        }
+    };
+    replay_events_impl(wfl_file, schemas, reader, color, options)
 }
 
 fn replay_events_impl<R: BufRead>(
-    wfl_source: &str,
+    wfl_file: &wf_lang::ast::WflFile,
     schemas: &[WindowSchema],
     reader: R,
     color: bool,
     options: ReplayExecOptions,
 ) -> WflResult<ReplayResult> {
-    let wfl_file = wf_lang::parse_wfl(wfl_source).wfl()?;
-    let plans = wf_lang::compile_wfl(&wfl_file, schemas).wfl()?;
+    let plans = wf_lang::compile_wfl(wfl_file, schemas).wfl()?;
 
     if plans.is_empty() {
         return Ok(ReplayResult {
@@ -183,7 +190,7 @@ impl WindowLookup for NullWindowLookup {
         None
     }
 
-    fn snapshot(&self, _window: &str) -> Option<Vec<std::collections::HashMap<String, Value>>> {
+    fn snapshot(&self, _window: &str) -> Option<Vec<JoinRow>> {
         None
     }
 }
@@ -573,7 +580,10 @@ fn handle_output_record(
     match_count: &mut u64,
 ) {
     if is_internal_window_name(&record.yield_target) {
-        queue.push_back((record.yield_target.clone(), output_record_to_event(&record)));
+        queue.push_back((
+            record.yield_target.to_string(),
+            output_record_to_event(&record),
+        ));
     } else {
         alerts.push(record);
         *match_count += 1;
@@ -581,13 +591,13 @@ fn handle_output_record(
 }
 
 fn output_record_to_event(record: &OutputRecord) -> Event {
-    let mut fields = HashMap::new();
+    let mut fields = EngineHashMap::default();
     fields.insert(
-        PIPE_EVENT_TIME_FIELD.to_string(),
+        SmolStr::from(PIPE_EVENT_TIME_FIELD),
         Value::Number(record.event_time_nanos as f64),
     );
     for (name, value) in &record.yield_fields {
-        fields.insert(name.clone(), value.clone());
+        fields.insert(SmolStr::from(&**name), value.clone());
     }
     Event { fields }
 }
@@ -601,13 +611,13 @@ fn json_to_event_with_time_fields(
     json: &serde_json::Value,
     time_fields: &HashSet<String>,
 ) -> Event {
-    let mut fields = HashMap::new();
+    let mut fields = EngineHashMap::default();
     if let serde_json::Value::Object(map) = json {
         for (key, val) in map {
             if time_fields.contains(key)
                 && let Some(nanos) = parse_json_timestamp_nanos(val)
             {
-                fields.insert(key.clone(), Value::Number(nanos as f64));
+                fields.insert(SmolStr::from(key.as_str()), Value::Number(nanos as f64));
                 continue;
             }
 
@@ -619,11 +629,11 @@ fn json_to_event_with_time_fields(
                         continue;
                     }
                 }
-                serde_json::Value::String(s) => Value::Str(s.clone()),
+                serde_json::Value::String(s) => Value::Str(SmolStr::from(s.as_str())),
                 serde_json::Value::Bool(b) => Value::Bool(*b),
                 _ => continue, // skip arrays, objects, nulls
             };
-            fields.insert(key.clone(), v);
+            fields.insert(SmolStr::from(key.as_str()), v);
         }
     }
     Event { fields }

@@ -1,0 +1,8 @@
+[[connectors]]
+id = "file_json"
+type = "file"
+allow_override = ["file"]
+
+[connectors.params]
+fmt = "json"
+file = "out/default.jsonl"

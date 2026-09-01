@@ -1,0 +1,29 @@
+use "network.wfs"
+
+rule known_netflow_still_routes {
+    events { c : conn_events && c.protocol == "tcp" && c.action == "syn" }
+    match<c.sip:5m> {
+        on event { c | count >= 1; }
+    } -> score(60.0)
+    entity(ip, c.sip)
+    yield security_alerts (
+        sip = c.sip,
+        dip = c.dip,
+        alert_type = "known_netflow_still_routes",
+        detail = "known stream is routed while unknown or missing stream tags are recorded as window miss"
+    )
+
+    limits {
+        max_memory = "64MB";
+        max_instances = 10000;
+        on_exceed = throttle;
+    }
+}
+
+test known_stream_routes for known_netflow_still_routes {
+  input {
+    row(c, sip = "10.0.0.9", dip = "192.168.1.10", dport = "22",
+        protocol = "tcp", action = "syn", event_time = "2026-01-01T00:00:00Z");
+  }
+  expect { hits == 1; }
+}

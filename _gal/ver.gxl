@@ -23,6 +23,12 @@ flow set_cargo_ver {
         value  : r#""${VERSION}""#
         );
         gx.patch_file(
+        file   : "./crates/wfadm/Cargo.toml",
+        action : "set",
+        marker : "version",
+        value  : r#""${VERSION}""#
+        );
+        gx.patch_file(
         file   : "./crates/wfl/Cargo.toml",
         action : "set",
         marker : "version",

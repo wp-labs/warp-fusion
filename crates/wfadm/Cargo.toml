@@ -1,6 +1,6 @@
 [package]
 name = "wfadm"
-version = "0.1.13" #@gxl:set(version)
+version = "0.5.5" #@gxl:set(version)
 edition.workspace = true
 license.workspace = true
 
@@ -20,12 +20,8 @@ wp-connectors = { workspace = true }
 wf-config = { workspace = true }
 wf-lang = { workspace = true }
 ureq = { workspace = true }
-flate2 = { workspace = true }
-tar = { workspace = true }
-walkdir = { workspace = true }
-comfy-table = { version = "7", default-features = false }
+comfy-table = { version = "8", default-features = false }
 wf-project-remote = { workspace = true }
 tracing = { workspace = true }
-
-[dev-dependencies]
-tempfile = "3"
+tokio = { workspace = true }
+wp-self-update = { workspace = true }

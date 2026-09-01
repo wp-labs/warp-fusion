@@ -1,0 +1,14 @@
+// ---------------------------------------------------------------------------
+// WarpFusion subsystem — product daemon + tooling around the reactor runtime
+// ---------------------------------------------------------------------------
+
+subsystem WarpFusion {
+  uses service warp-fusion
+  uses service wfgen
+  uses service wfl
+  uses service wfadm
+  uses service reactor
+  uses module Fusion.AdminApi
+  uses module Generator.Verify
+  uses module Project.RemoteUpdate
+}

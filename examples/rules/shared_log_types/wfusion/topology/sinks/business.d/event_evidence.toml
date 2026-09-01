@@ -1,0 +1,12 @@
+version = "1.0"
+
+[sink_group]
+name = "event_evidence_out"
+windows = ["event_evidence"]
+
+[[sink_group.sinks]]
+connect = "file_json"
+name = "evidence"
+
+[sink_group.sinks.params]
+file = "event_evidence.ndjson"

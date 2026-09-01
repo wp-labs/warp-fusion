@@ -5,7 +5,9 @@ mod inject;
 
 use std::time::Duration;
 
-use wf_lang::ast::{BinOp, CloseMode, CmpOp, Expr, FieldRef, FieldSelector, Measure, Transform};
+use wf_lang::ast::{
+    BinOp, CloseMode, CmpOp, Expr, FieldRef, FieldSelector, MatchMode, Measure, Transform,
+};
 use wf_lang::plan::{
     AggPlan, BindPlan, BranchPlan, EntityPlan, MatchPlan, RulePlan, ScorePlan, StepPlan,
     WindowSpec, YieldPlan,
@@ -66,9 +68,11 @@ fn make_brute_force_plan() -> RulePlan {
             window: "LoginWindow".to_string(),
             filter: None,
         }],
+        lets: Vec::new(),
         match_plan: MatchPlan {
             keys: vec![FieldRef::Simple("src_ip".to_string())],
             key_map: None,
+            key_join: None,
             window_spec: WindowSpec::Sliding(Duration::from_secs(300)),
             event_steps: vec![StepPlan {
                 branches: vec![BranchPlan {
@@ -86,12 +90,18 @@ fn make_brute_force_plan() -> RulePlan {
             }],
             close_steps: vec![],
             close_mode: CloseMode::Or,
+            match_mode: MatchMode::Seq,
+            accu: false,
+            seq: None,
             tracked_bind_aliases: std::collections::HashSet::new(),
             tracked_bind_fields: std::collections::HashMap::new(),
             tracked_plain_fields: std::collections::HashSet::new(),
+            needs_field_history: false,
+            trigger_event_needed: false,
         },
         each_plan: None,
         joins: vec![],
+        r#where: None,
         entity_plan: EntityPlan {
             entity_type: "ip".to_string(),
             entity_id_expr: Expr::Field(FieldRef::Simple("src_ip".to_string())),
@@ -107,6 +117,8 @@ fn make_brute_force_plan() -> RulePlan {
         pattern_origin: None,
         conv_plan: None,
         limits_plan: None,
+        conv_window: None,
+        stats_plan: None,
     }
 }
 
@@ -123,9 +135,11 @@ fn make_auth_fail_plan() -> RulePlan {
                 right: Box::new(Expr::Bool(false)),
             }),
         }],
+        lets: Vec::new(),
         match_plan: MatchPlan {
             keys: vec![FieldRef::Simple("src_ip".to_string())],
             key_map: None,
+            key_join: None,
             window_spec: WindowSpec::Sliding(Duration::from_secs(300)),
             event_steps: vec![StepPlan {
                 branches: vec![BranchPlan {
@@ -143,12 +157,18 @@ fn make_auth_fail_plan() -> RulePlan {
             }],
             close_steps: vec![],
             close_mode: CloseMode::Or,
+            match_mode: MatchMode::Seq,
+            accu: false,
+            seq: None,
             tracked_bind_aliases: std::collections::HashSet::new(),
             tracked_bind_fields: std::collections::HashMap::new(),
             tracked_plain_fields: std::collections::HashSet::new(),
+            needs_field_history: false,
+            trigger_event_needed: false,
         },
         each_plan: None,
         joins: vec![],
+        r#where: None,
         entity_plan: EntityPlan {
             entity_type: "ip".to_string(),
             entity_id_expr: Expr::Field(FieldRef::Simple("src_ip".to_string())),
@@ -164,6 +184,8 @@ fn make_auth_fail_plan() -> RulePlan {
         pattern_origin: None,
         conv_plan: None,
         limits_plan: None,
+        conv_window: None,
+        stats_plan: None,
     }
 }
 
@@ -177,9 +199,11 @@ fn make_bool_chain_plan() -> RulePlan {
             window: "LoginWindow".to_string(),
             filter: None,
         }],
+        lets: Vec::new(),
         match_plan: MatchPlan {
             keys: vec![FieldRef::Simple("username".to_string())],
             key_map: None,
+            key_join: None,
             window_spec: WindowSpec::Sliding(Duration::from_secs(300)),
             event_steps: vec![
                 StepPlan {
@@ -221,12 +245,18 @@ fn make_bool_chain_plan() -> RulePlan {
             ],
             close_steps: vec![],
             close_mode: CloseMode::Or,
+            match_mode: MatchMode::Seq,
+            accu: false,
+            seq: None,
             tracked_bind_aliases: std::collections::HashSet::new(),
             tracked_bind_fields: std::collections::HashMap::new(),
             tracked_plain_fields: std::collections::HashSet::new(),
+            needs_field_history: false,
+            trigger_event_needed: false,
         },
         each_plan: None,
         joins: vec![],
+        r#where: None,
         entity_plan: EntityPlan {
             entity_type: "user".to_string(),
             entity_id_expr: Expr::Field(FieldRef::Simple("username".to_string())),
@@ -242,6 +272,8 @@ fn make_bool_chain_plan() -> RulePlan {
         pattern_origin: None,
         conv_plan: None,
         limits_plan: None,
+        conv_window: None,
+        stats_plan: None,
     }
 }
 
@@ -253,9 +285,11 @@ fn make_distinct_close_plan() -> RulePlan {
             window: "LoginWindow".to_string(),
             filter: None,
         }],
+        lets: Vec::new(),
         match_plan: MatchPlan {
             keys: vec![FieldRef::Simple("src_ip".to_string())],
             key_map: None,
+            key_join: None,
             window_spec: WindowSpec::Fixed(Duration::from_secs(300)),
             event_steps: vec![StepPlan {
                 branches: vec![BranchPlan {
@@ -286,12 +320,18 @@ fn make_distinct_close_plan() -> RulePlan {
                 }],
             }],
             close_mode: CloseMode::And,
+            match_mode: MatchMode::Seq,
+            accu: false,
+            seq: None,
             tracked_bind_aliases: std::collections::HashSet::new(),
             tracked_bind_fields: std::collections::HashMap::new(),
             tracked_plain_fields: std::collections::HashSet::new(),
+            needs_field_history: true,
+            trigger_event_needed: true,
         },
         each_plan: None,
         joins: vec![],
+        r#where: None,
         entity_plan: EntityPlan {
             entity_type: "ip".to_string(),
             entity_id_expr: Expr::Field(FieldRef::Simple("src_ip".to_string())),
@@ -307,6 +347,8 @@ fn make_distinct_close_plan() -> RulePlan {
         pattern_origin: None,
         conv_plan: None,
         limits_plan: None,
+        conv_window: None,
+        stats_plan: None,
     }
 }
 
@@ -333,9 +375,11 @@ fn make_chain_attack_plan() -> RulePlan {
                 }),
             },
         ],
+        lets: Vec::new(),
         match_plan: MatchPlan {
             keys: vec![FieldRef::Simple("src_ip".to_string())],
             key_map: None,
+            key_join: None,
             window_spec: WindowSpec::Sliding(Duration::from_secs(300)),
             event_steps: vec![
                 StepPlan {
@@ -369,12 +413,18 @@ fn make_chain_attack_plan() -> RulePlan {
             ],
             close_steps: vec![],
             close_mode: CloseMode::Or,
+            match_mode: MatchMode::Seq,
+            accu: false,
+            seq: None,
             tracked_bind_aliases: std::collections::HashSet::new(),
             tracked_bind_fields: std::collections::HashMap::new(),
             tracked_plain_fields: std::collections::HashSet::new(),
+            needs_field_history: false,
+            trigger_event_needed: false,
         },
         each_plan: None,
         joins: vec![],
+        r#where: None,
         entity_plan: EntityPlan {
             entity_type: "ip".to_string(),
             entity_id_expr: Expr::Field(FieldRef::Simple("src_ip".to_string())),
@@ -390,5 +440,7 @@ fn make_chain_attack_plan() -> RulePlan {
         pattern_origin: None,
         conv_plan: None,
         limits_plan: None,
+        conv_window: None,
+        stats_plan: None,
     }
 }

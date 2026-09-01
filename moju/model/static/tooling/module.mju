@@ -1,0 +1,15 @@
+// ---------------------------------------------------------------------------
+// tooling domain — modules
+// ---------------------------------------------------------------------------
+
+module WflCli {
+  layer Interface
+  owns Cli, Commands, WflReason
+  responsible_for "wfl CLI — explain/lint/fmt/replay/verify/test command dispatch"
+}
+
+module Replay {
+  layer Application
+  owns ReplayEngine, ReplayResult, ReplayExecOptions, ReplayEofAction, ConsumerRoute, ResolvedPaths
+  responsible_for "Replays events through the reactor rule engine for offline rule testing"
+}

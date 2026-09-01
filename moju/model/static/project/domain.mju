@@ -1,0 +1,72 @@
+// ---------------------------------------------------------------------------
+// project domain — wf-project-remote: project versioning, lock, reload artifacts
+// Crate: wf-project-remote
+// ---------------------------------------------------------------------------
+
+// -- Trigger command --------------------------------------------------------
+
+command ProjectUpdateCommand {
+  version: String?
+  group: String?
+}
+
+// -- Update result ----------------------------------------------------------
+
+struct ProjectRemoteUpdateResult {
+  requested_version: String?
+  current_version: String
+  resolved_tag: String
+  from_revision: String?
+  to_revision: String
+  changed: Bool
+  group: String?
+}
+
+struct ResolvedTag {
+  tag: String
+  version: String
+  commit_id: String
+}
+
+struct GroupState {
+  current_version: String
+  resolved_tag: String
+  revision: String
+}
+
+// -- Snapshots & lock -------------------------------------------------------
+
+struct ProjectRemoteSnapshot {
+  state_file: Bytes?
+  group: RemoteGroup?
+}
+
+struct ProjectRuntimeArtifactSnapshot {
+  rule_mapping: Bytes?
+  authority_db: Bytes?
+}
+
+struct ProjectRemoteLockGuard {
+  file: String
+}
+
+struct BackupManifest {
+  existing_dirs: List<String>
+}
+
+// -- States -----------------------------------------------------------------
+
+state RemoteGroup {
+  Models
+  Infra
+}
+
+state ProjectRemoteState {
+  Single
+  Dual
+}
+
+state ProjectRemoteMode {
+  Single
+  Dual
+}

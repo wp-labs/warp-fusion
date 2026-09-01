@@ -1,0 +1,58 @@
+// ---------------------------------------------------------------------------
+// config domain — modules
+// ---------------------------------------------------------------------------
+
+module ConfigLoader {
+  layer Application
+  owns FusionConfig, FusionConfigLoader, RuntimeConfig, RawFusionConfigTree, RawFusionConfigChange, ResolvedConfigVar, FusionMode, ConfigReason
+  responsible_for "Loads, validates and merges wfusion.toml overlays; resolves config vars"
+}
+
+module ConfigChange {
+  layer Application
+  owns ClassifiedFusionConfigChange, FusionReloadPlan, FusionChangeKind, FusionReloadDisposition
+  responsible_for "Classifies raw config-tree diffs into hot-reload vs restart dispositions"
+}
+
+module WindowConfig {
+  layer Application
+  owns WindowConfig, WindowDefaults, WindowOverride, ByteSize, HumanDuration, DistMode, EvictPolicy, LatePolicy
+  responsible_for "Window sizing, eviction, watermark and lateness policy configuration"
+}
+
+module SourceConfig {
+  layer Application
+  owns SourceConfig
+  responsible_for "Source endpoint configuration (flat and connector formats)"
+}
+
+module SinkConfig {
+  layer Application
+  owns SinkConfigBundle, RouteFile, RouteGroup, RouteSink, FlexGroup, FixedGroup, ResolvedRouteSink, ConnectorTomlFile, ConnectorDefRaw, DefaultsBody, GroupExpectSpec, SinkExpectOverride, StringOrArray, WildArray
+  responsible_for "Sink routing, grouping, connector definitions and defaults"
+}
+
+module LoggingMetrics {
+  layer Application
+  owns LoggingConfig, MetricsConfig, MetricsTopNConfig, LogFormat
+  responsible_for "Logging level/format and metrics reporting configuration"
+}
+
+
+module OutputConfig {
+  layer Application
+  owns OutputConfig, OutputTimeZone
+  responsible_for "Alert output time format and timezone configuration"
+}
+
+module VarResolver {
+  layer DataFusion
+  owns ConfigVarContext, ExpandedToml, TracedValue, SourceAtom, TemplatePart, VarsReason
+  responsible_for "Expands $VAR / ${VAR:default} references with source tracing"
+}
+
+module AdminProjectConfig {
+  layer Application
+  owns AdminApiConf, AdminApiTlsConf, AdminApiAuthConf, ProjectRemoteConf, RepoGroupConf
+  responsible_for "Admin HTTP API and project-remote configuration"
+}

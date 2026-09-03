@@ -172,8 +172,15 @@ async fn run_driver_with_mock_engine(
         sentinels: Some(sentinel_path.clone()),
         output: Some(wall_path.clone()),
         timeout_secs: 10,
+        gate: None,
+        record_baseline: None,
+        format: "human".to_string(),
     };
-    run_perf_diag(args).await.unwrap();
+    assert_eq!(
+        run_perf_diag(args).await.unwrap(),
+        GateVerdict::NotApplied,
+        "未启用门禁的诊断模式"
+    );
     server.await.unwrap();
     assert_eq!(
         stages,
@@ -254,6 +261,9 @@ async fn driver_rejects_empty_stages_and_over_budget_n() {
         sentinels: None,
         output: None,
         timeout_secs: 2,
+        gate: None,
+        record_baseline: None,
+        format: "human".to_string(),
     };
     let err = run_perf_diag(args).await.unwrap_err();
     assert!(err.to_string().contains("至少一个 [[stages]]"));
@@ -268,6 +278,9 @@ async fn driver_rejects_empty_stages_and_over_budget_n() {
         sentinels: None,
         output: None,
         timeout_secs: 2,
+        gate: None,
+        record_baseline: None,
+        format: "human".to_string(),
     };
     let err = run_perf_diag(args).await.unwrap_err();
     assert!(err.to_string().contains("帧文件仅 2 行"));
@@ -300,6 +313,9 @@ async fn driver_send_failure_is_reported() {
         sentinels: Some(sentinel_path),
         output: None,
         timeout_secs: 2,
+        gate: None,
+        record_baseline: None,
+        format: "human".to_string(),
     };
     let err = run_perf_diag(args).await.unwrap_err();
     assert!(err.to_string().contains("connecting to runtime"), "{err}");
@@ -602,4 +618,151 @@ async fn wait_for_sentinel_counts_occurrences() {
     assert_eq!(first.emit_ns, Some(200));
     assert_eq!(second.emit_ns, Some(400));
     let _ = std::fs::remove_file(&path);
+}
+
+// -- L4 门禁驱动端到端（mock 引擎，无 daemon）-------------------------------
+
+/// 同 run_driver_with_mock_engine，但在 run 前允许 patch Args（gate / record_baseline / format）。
+/// mock 引擎所有档的 sentinel 均模拟 EPS=20（n=2，emit−start=0.1s）。
+/// 返回 (TempDir, 本次门禁判定)。
+async fn run_driver_patched(
+    stages_toml: &str,
+    stages: usize,
+    patch: impl FnOnce(&mut Args),
+) -> (tempfile::TempDir, GateVerdict) {
+    let dir = tempfile::tempdir().unwrap();
+    let diag_path = dir.path().join("perf-diag.toml");
+    std::fs::write(&diag_path, stages_toml).unwrap();
+    let frames_path = dir.path().join("data.frames");
+    make_frames_file(&frames_path, 2);
+    let sentinel_path = dir.path().join("perf_sentinel.ndjson");
+    let wall_path = dir.path().join("wall.txt");
+    std::fs::write(
+        &sentinel_path,
+        r#"{"record_type":"stage","current":0}"#.to_string() + "\n",
+    )
+    .unwrap();
+
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap().to_string();
+    let sentinel_path2 = sentinel_path.clone();
+    let server = tokio::spawn(async move {
+        use tokio::io::AsyncReadExt;
+        for k in 0..stages {
+            let (mut sock, _) = listener.accept().await.unwrap();
+            let mut buf = Vec::new();
+            let _ = sock.read_to_end(&mut buf).await.unwrap();
+            tokio::time::sleep(Duration::from_millis(30)).await;
+            let mut rec = std::fs::read_to_string(&sentinel_path2).unwrap();
+            rec.push_str(&format!(
+                r#"{{"record_type":"sentinel","round":{k},"n":2,"start_ns":"1000000000","emit_ns":"1100000000"}}"#
+            ));
+            rec.push('\n');
+            rec.push_str(&format!(r#"{{"record_type":"stage","current":{}}}"#, k + 1));
+            rec.push('\n');
+            std::fs::write(&sentinel_path2, rec).unwrap();
+        }
+    });
+
+    let mut args = Args {
+        diag: diag_path,
+        frames: frames_path,
+        addr,
+        n_list: Some("2".to_string()),
+        rounds: 1,
+        sentinels: Some(sentinel_path.clone()),
+        output: Some(wall_path.clone()),
+        timeout_secs: 10,
+        gate: None,
+        record_baseline: None,
+        format: "human".to_string(),
+    };
+    patch(&mut args);
+    let verdict = run_perf_diag(args).await.unwrap();
+    server.await.unwrap();
+    (dir, verdict)
+}
+
+fn floor_rules_stages() -> &'static str {
+    r#"
+[[stages]]
+name = "floor"
+cut_rules = true
+cut_output = true
+rules = ""
+[[stages]]
+name = "rules"
+cut_rules = false
+cut_output = true
+rules = ""
+"#
+}
+
+#[tokio::test]
+async fn driver_gate_absolute_pass_within_budget() {
+    // 墙表：floor/rules 均 EPS=20；门禁只断言 rules EPS ≥ 10 → PASS。
+    let (_dir, verdict) = run_driver_patched(floor_rules_stages(), 2, |args| {
+        let gate_path = args_diag_parent(args).join("perf-gate.toml");
+        std::fs::write(
+            &gate_path,
+            "[absolute]\nrules_eps_min = 10.0\n",
+        )
+        .unwrap();
+        args.gate = Some(gate_path);
+    })
+    .await;
+    assert_eq!(verdict, GateVerdict::Passed);
+}
+
+#[tokio::test]
+async fn driver_gate_absolute_fails_when_set_too_slow() {
+    // 门禁断言 rules EPS ≥ 30，实测 20 → FAIL（门禁 FAIL 语义 = 退出码 1 的依据）。
+    let (_dir, verdict) = run_driver_patched(floor_rules_stages(), 2, |args| {
+        let gate_path = args_diag_parent(args).join("perf-gate.toml");
+        std::fs::write(&gate_path, "[absolute]\nrules_eps_min = 30.0\n").unwrap();
+        args.gate = Some(gate_path);
+    })
+    .await;
+    assert_eq!(verdict, GateVerdict::Failed);
+}
+
+#[tokio::test]
+async fn driver_record_baseline_then_relative_gate_passes() {
+    // 1) 首次跑 --record-baseline → 留存墙表；2) 第二次跑 --gate 相对回归比该基线。
+    // mock 两次 EPS 相同（20），回退 0% ≤ 50% → PASS——验证基线文件格式闭环。
+    let dir1 = tempfile::tempdir().unwrap();
+    let base_path = dir1.path().join("perf_wall.baseline.txt");
+    let (_dir1, verdict) = run_driver_patched(floor_rules_stages(), 2, |args| {
+        args.record_baseline = Some(base_path.clone());
+    })
+    .await;
+    assert_eq!(verdict, GateVerdict::NotApplied);
+    let content = std::fs::read_to_string(&base_path).unwrap();
+    assert!(
+        content.contains("rules  eps=20 n=2 rounds=1"),
+        "基线含 rules 档行: {content}"
+    );
+
+    let (_dir2, verdict) = run_driver_patched(floor_rules_stages(), 2, |args| {
+        let gate_path = args_diag_parent(args).join("perf-gate.toml");
+        std::fs::write(
+            &gate_path,
+            &format!(
+                "[relative]\nbaseline = \"{}\"\nmax_regression_pct = 50.0\n",
+                base_path.display()
+            ),
+        )
+        .unwrap();
+        args.gate = Some(gate_path);
+    })
+    .await;
+    assert_eq!(verdict, GateVerdict::Passed);
+}
+
+/// 取 args.diag 的父目录（patch 里放门禁配置用）。
+fn args_diag_parent(args: &Args) -> PathBuf {
+    args.diag
+        .parent()
+        .expect("diag path parent")
+        .to_path_buf()
 }

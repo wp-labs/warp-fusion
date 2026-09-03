@@ -5680,6 +5680,7 @@ dependencies = [
  "similar",
  "tempfile",
  "tokio",
+ "toml",
  "tracing-appender",
  "tracing-subscriber",
  "wf-config",

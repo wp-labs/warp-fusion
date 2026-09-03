@@ -11,11 +11,16 @@
 //! 每 (点, N) 取多轮 max（`--rounds`），输出墙表（EPS 单调 → 增量成本归属）。
 //! 数据由小到大（`--n-list "100k,1m,3m"`）：小 N 秒级出方向，大 N 区分
 //! per-event 墙 vs 固定开销墙。
+//!
+//! L4 门禁（`--gate conf/perf-gate.toml`）：墙梯测量完成后，按项目门禁断言
+//! 「单规则成本增量」（绝对兜底 + 相对防回归），任一断言 FAIL → verdict=FAIL
+//! → 退出码 1（AI/CI 自动拦下"语义对但性能不可接受"的规则）。见 `gate.rs`。
 
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use orion_error::conversion::SourceErr;
+use serde::Serialize;
 use tokio::io::AsyncWriteExt;
 
 use wf_config::PerfConfig;
@@ -24,11 +29,13 @@ use crate::error;
 use crate::error::{WfgenReason, WfgenResult};
 
 mod frames;
+mod gate;
 mod sentinel;
 #[cfg(test)]
 mod tests;
 
 pub(crate) use frames::*;
+pub(crate) use gate::*;
 pub(crate) use sentinel::*;
 
 // ---------------------------------------------------------------------------
@@ -62,14 +69,64 @@ pub struct Args {
     /// 单次等待（切换/哨兵记录）超时秒数
     #[arg(long, default_value = "60")]
     pub timeout_secs: u64,
+    /// L4 门禁配置（conf/perf-gate.toml）：墙梯后自动断言（绝对+相对），
+    /// 任一 FAIL → verdict=FAIL → 退出码 1
+    #[arg(long)]
+    pub gate: Option<PathBuf>,
+    /// 记录本次墙表为基线文件（门禁相对回归的参照；新机器/新规则集先录一次）
+    #[arg(long)]
+    pub record_baseline: Option<PathBuf>,
+    /// 输出格式："human"（默认：进度+墙表到 stdout）或 "json"
+    /// （进度走 stderr，末了单份 wfgen-perf-report/v1 到 stdout）
+    #[arg(long, default_value = "human")]
+    pub format: String,
 }
 
 // ---------------------------------------------------------------------------
 // 驱动
 // ---------------------------------------------------------------------------
 
-/// 执行一轮诊断：切档 → 发帧+哨兵 → 读完成信号 → 算 EPS。
-pub async fn run_perf_diag(args: Args) -> WfgenResult<()> {
+/// 门禁判定（供调用方映射退出码，unit 测试可不 exit）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GateVerdict {
+    /// 未启用门禁（纯诊断模式）。
+    NotApplied,
+    Passed,
+    Failed,
+}
+
+impl GateVerdict {
+    pub fn is_failure(self) -> bool {
+        self == Self::Failed
+    }
+}
+
+/// `wfgen perf-report`（json 模式单份报告；schema v1）。
+#[derive(Debug, Clone, Serialize)]
+pub struct PerfReport {
+    pub schema: &'static str,
+    /// 本次墙表（(档, N) 行，best-of-rounds EPS）。
+    pub wall: Vec<WallRow>,
+    /// 门禁结果（未启用则缺省）。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub gate: Option<GateOutcome>,
+    /// 门禁判定（未启用则缺省）。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub verdict: Option<&'static str>,
+}
+
+/// human 模式输出到 stdout；json 模式进度行转到 stderr（stdout 只留报告）。
+fn speak(json: bool, msg: &str) {
+    if json {
+        eprintln!("{msg}");
+    } else {
+        println!("{msg}");
+    }
+}
+
+/// 执行一轮诊断：切档 → 发帧+哨兵 → 读完成信号 → 算 EPS →（可选）门禁判定。
+pub async fn run_perf_diag(args: Args) -> WfgenResult<GateVerdict> {
+    let json = matches!(args.format.as_str(), "json" | "jsonl");
     let config = PerfConfig::load(&args.diag).map_err(|e| {
         error::error(
             WfgenReason::Validation,
@@ -121,20 +178,23 @@ pub async fn run_perf_diag(args: Args) -> WfgenResult<()> {
     }
     let timeout = Duration::from_secs(args.timeout_secs.max(1));
 
-    println!(
-        "== perf-diag: stages={} n-list={:?} rounds={} frames={} total_rows={} ==",
-        stages.len(),
-        n_list,
-        rounds,
-        frames.len(),
-        total_rows
+    speak(
+        json,
+        &format!(
+            "== perf-diag: stages={} n-list={:?} rounds={} frames={} total_rows={} ==",
+            stages.len(),
+            n_list,
+            rounds,
+            frames.len(),
+            total_rows
+        ),
     );
 
-    let mut wall_lines: Vec<String> = Vec::new();
+    let mut rows: Vec<WallRow> = Vec::new();
     for (k, stage) in stages.iter().enumerate() {
         // 1. 等引擎切到档 k（启动即 stages[0]，后续 sentinel 驱动）。
         wait_for_stage(&sentinels, k, timeout).await?;
-        println!("== stage {k} [{}] applied — sending ==", stage.name);
+        speak(json, &format!("== stage {k} [{}] applied — sending ==", stage.name));
         for &n_target in &n_list {
             let mut best_eps = 0.0f64;
             for r in 0..rounds {
@@ -163,30 +223,96 @@ pub async fn run_perf_diag(args: Args) -> WfgenResult<()> {
                     )
                 })?;
                 best_eps = best_eps.max(eps);
-                println!(
-                    "  {}/{}: sent {} rows in {:?} → eps={:.0}",
-                    stage.name,
-                    r + 1,
-                    sent_n,
-                    Duration::from_nanos((rec.emit_ns.unwrap() - rec.start_ns.unwrap()) as u64),
-                    eps
+                speak(
+                    json,
+                    &format!(
+                        "  {}/{}: sent {} rows in {:?} → eps={:.0}",
+                        stage.name,
+                        r + 1,
+                        sent_n,
+                        Duration::from_nanos((rec.emit_ns.unwrap() - rec.start_ns.unwrap()) as u64),
+                        eps
+                    ),
                 );
             }
-            wall_lines.push(format!(
-                "{}  eps={:.0} n={} rounds={}",
-                stage.name, best_eps, n_target, rounds
-            ));
+            rows.push(WallRow {
+                stage: stage.name.clone(),
+                eps: best_eps,
+                n: n_target,
+                rounds,
+            });
         }
     }
 
-    let table = wall_lines.join("\n");
+    let table = rows
+        .iter()
+        .map(render_wall_row)
+        .collect::<Vec<_>>()
+        .join("\n");
     std::fs::write(&output, table.clone() + "\n")
         .source_err(WfgenReason::Io, format!("writing {}", output.display()))?;
-    println!(
-        "\n== wall table ==\n{table}\n== done: 结果在 {} ==",
-        output.display()
-    );
-    Ok(())
+
+    // 记录基线：--record-baseline 只留存本次墙表，不评估门禁。
+    if let Some(base) = &args.record_baseline {
+        write_baseline(base, &rows)?;
+        if json {
+            return finish_report(&rows, None);
+        }
+        println!("== 基线已记录: {} ({} 行墙表) ==", base.display(), rows.len());
+        return Ok(GateVerdict::NotApplied);
+    }
+
+    // 门禁评估（L4）。
+    let gate: Option<GateOutcome> = if let Some(gate_path) = &args.gate {
+        let cfg = GateConfig::load(gate_path)?;
+        let checks = evaluate_gate(&cfg, &rows)?;
+        let passed = summarize_checks(&checks);
+        Some(GateOutcome {
+            config: gate_path.display().to_string(),
+            checks,
+            passed,
+        })
+    } else {
+        None
+    };
+
+    if json {
+        return finish_report(&rows, gate.as_ref());
+    }
+
+    // human 输出保持现状：墙表 + done。
+    println!("\n== wall table ==\n{table}\n== done: 结果在 {} ==", output.display());
+    let verdict = match &gate {
+        Some(g) => {
+            println!("\n{}", render_gate_human(g));
+            if g.passed {
+                GateVerdict::Passed
+            } else {
+                GateVerdict::Failed
+            }
+        }
+        None => GateVerdict::NotApplied,
+    };
+    Ok(verdict)
+}
+
+/// json 模式：单份报告到 stdout，退出码由 verdict 决定。
+fn finish_report(rows: &[WallRow], gate: Option<&GateOutcome>) -> WfgenResult<GateVerdict> {
+    let verdict = gate.map(|g| if g.passed { "PASS" } else { "FAIL" });
+    let report = PerfReport {
+        schema: "wfgen-perf-report/v1",
+        wall: rows.to_vec(),
+        gate: gate.cloned(),
+        verdict,
+    };
+    let out = serde_json::to_string_pretty(&report)
+        .source_err(WfgenReason::Serialization, "serializing perf report")?;
+    println!("{out}");
+    Ok(match gate {
+        Some(g) if g.passed => GateVerdict::Passed,
+        Some(_) => GateVerdict::Failed,
+        None => GateVerdict::NotApplied,
+    })
 }
 
 /// 单连接发送内存载荷（字节复制，零解析）并 shutdown——用于小载荷（哨兵帧）。

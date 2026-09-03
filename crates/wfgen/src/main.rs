@@ -81,7 +81,14 @@ async fn run_cli() -> WfgenResult<()> {
         Commands::ShardFrames(a) => wfgen::cmd_frames::shard_frames(a).await,
         Commands::Bench(a) => wfgen::cmd_bench::run(a).await,
         Commands::Stream(a) => wfgen::cmd_stream::run(a).await,
-        Commands::PerfDiag(a) => wfgen::cmd_perf_diag::run_perf_diag(a).await,
+        Commands::PerfDiag(a) => {
+            let verdict = wfgen::cmd_perf_diag::run_perf_diag(a).await?;
+            // L4 门禁：verdict=FAIL → exit 1（与 wfgen verify/wfl 的 verdict/exit 一致）
+            if verdict.is_failure() {
+                std::process::exit(1);
+            }
+            Ok(())
+        }
     }
 }
 

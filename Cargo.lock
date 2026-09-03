@@ -5510,6 +5510,23 @@ dependencies = [
 
 [[package]]
 name = "wf-config"
+version = "2.0.11"
+source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v2.0.11#39062d897d6d62345ab01f13b0741b658a9801f4"
+dependencies = [
+ "chrono",
+ "glob",
+ "moju-derive",
+ "orion-error",
+ "serde",
+ "serde_json",
+ "toml",
+ "wf-lang 2.0.11",
+ "wildmatch",
+ "wp-connector-api",
+]
+
+[[package]]
+name = "wf-config"
 version = "2.0.15"
 source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v2.0.15#2e460996bf7db1b378f9ada728768b113e817407"
 dependencies = [
@@ -5520,7 +5537,7 @@ dependencies = [
  "serde",
  "serde_json",
  "toml",
- "wf-lang",
+ "wf-lang 2.0.15",
  "wildmatch",
  "wp-connector-api",
 ]
@@ -5538,11 +5555,53 @@ dependencies = [
 
 [[package]]
 name = "wf-data"
+version = "2.0.11"
+source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v2.0.11#39062d897d6d62345ab01f13b0741b658a9801f4"
+dependencies = [
+ "chrono",
+ "serde_json",
+]
+
+[[package]]
+name = "wf-data"
 version = "2.0.15"
 source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v2.0.15#2e460996bf7db1b378f9ada728768b113e817407"
 dependencies = [
  "chrono",
  "serde_json",
+]
+
+[[package]]
+name = "wf-engine"
+version = "2.0.11"
+source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v2.0.11#39062d897d6d62345ab01f13b0741b658a9801f4"
+dependencies = [
+ "arrow",
+ "async-trait",
+ "chrono",
+ "derive_more",
+ "foldhash 0.2.0",
+ "hex",
+ "log",
+ "md-5 0.10.6",
+ "moju-derive",
+ "orion-error",
+ "parking_lot",
+ "redb",
+ "regex",
+ "serde",
+ "serde_json",
+ "sha1 0.11.0",
+ "sha2 0.11.0",
+ "smol_str",
+ "thiserror 2.0.20",
+ "tokio",
+ "tokio-util",
+ "wf-config 2.0.11",
+ "wf-lang 2.0.11",
+ "wildmatch",
+ "wp-connector-api",
+ "wp-model-core",
 ]
 
 [[package]]
@@ -5571,11 +5630,22 @@ dependencies = [
  "thiserror 2.0.20",
  "tokio",
  "tokio-util",
- "wf-config",
- "wf-lang",
+ "wf-config 2.0.15",
+ "wf-lang 2.0.15",
  "wildmatch",
  "wp-connector-api",
  "wp-model-core",
+]
+
+[[package]]
+name = "wf-lang"
+version = "2.0.11"
+source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v2.0.11#39062d897d6d62345ab01f13b0741b658a9801f4"
+dependencies = [
+ "moju-derive",
+ "orion-error",
+ "regex-syntax",
+ "winnow",
 ]
 
 [[package]]
@@ -5601,13 +5671,13 @@ dependencies = [
  "tempfile",
  "tracing",
  "walkdir",
- "wf-config",
+ "wf-config 2.0.15",
 ]
 
 [[package]]
 name = "wf-runtime"
-version = "2.0.15"
-source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v2.0.15#2e460996bf7db1b378f9ada728768b113e817407"
+version = "2.0.11"
+source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v2.0.11#39062d897d6d62345ab01f13b0741b658a9801f4"
 dependencies = [
  "arrow",
  "async-broadcast",
@@ -5629,11 +5699,11 @@ dependencies = [
  "tracing",
  "tracing-appender",
  "tracing-subscriber",
- "wf-config",
+ "wf-config 2.0.11",
  "wf-connector-api",
- "wf-data",
- "wf-engine",
- "wf-lang",
+ "wf-data 2.0.11",
+ "wf-engine 2.0.11",
+ "wf-lang 2.0.11",
  "wp-arrow",
  "wp-connector-api",
  "wp-core-connectors",
@@ -5654,8 +5724,8 @@ dependencies = [
  "toml",
  "tracing",
  "ureq",
- "wf-config",
- "wf-lang",
+ "wf-config 2.0.15",
+ "wf-lang 2.0.15",
  "wf-project-remote",
  "wp-connector-api",
  "wp-connectors",
@@ -5683,9 +5753,9 @@ dependencies = [
  "toml",
  "tracing-appender",
  "tracing-subscriber",
- "wf-config",
- "wf-engine",
- "wf-lang",
+ "wf-config 2.0.15",
+ "wf-engine 2.0.15",
+ "wf-lang 2.0.15",
  "wf-runtime",
  "winnow",
  "wp-arrow",
@@ -5705,10 +5775,10 @@ dependencies = [
  "smol_str",
  "tree-sitter",
  "tree-sitter-wfl",
- "wf-config",
- "wf-data",
- "wf-engine",
- "wf-lang",
+ "wf-config 2.0.15",
+ "wf-data 2.0.15",
+ "wf-engine 2.0.15",
+ "wf-lang 2.0.15",
  "wfgen",
 ]
 
@@ -5736,7 +5806,7 @@ dependencies = [
  "tokio-util",
  "tracing",
  "uuid",
- "wf-config",
+ "wf-config 2.0.15",
  "wf-project-remote",
  "wf-runtime",
  "wp-connectors",

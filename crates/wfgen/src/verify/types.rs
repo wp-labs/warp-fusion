@@ -45,6 +45,8 @@ pub struct MismatchDetail {
 /// Full verification report.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct VerifyReport {
+    /// 回执 schema 版本（L1：与 `wfl test` 的 wfl-test-report/v1 同风格版本化）。
+    pub schema: String,
     pub status: String,
     pub summary: VerifySummary,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]

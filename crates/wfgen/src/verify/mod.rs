@@ -131,6 +131,7 @@ pub fn verify(
     };
 
     VerifyReport {
+        schema: "wfgen-verify-report/v1".to_string(),
         status,
         summary: VerifySummary {
             oracle_total: expected.len(),

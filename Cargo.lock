@@ -5699,6 +5699,7 @@ dependencies = [
  "chrono",
  "clap",
  "orion-error",
+ "serde",
  "serde_json",
  "smol_str",
  "tree-sitter",

@@ -141,6 +141,10 @@ enum Commands {
         /// Number of runs for conformance testing (requires > 0)
         #[arg(long)]
         runs: Option<usize>,
+
+        /// Output format: "human" (default) or "json"
+        #[arg(long, default_value = "human")]
+        format: String,
     },
 }
 
@@ -214,8 +218,9 @@ fn run_cli() -> WflResult<()> {
             var,
             shuffle,
             runs,
+            format,
         } => {
-            wfl::cmd_test::run(file, schemas, var, shuffle, runs)?;
+            wfl::cmd_test::run(file, schemas, var, shuffle, runs, format)?;
         }
     }
 

@@ -22,6 +22,7 @@ tree-sitter = "0.26"
 tree-sitter-wfl = { git = "https://github.com/wp-labs/tree-sitter-wfl.git", branch = "main" }
 orion-error = { workspace = true }
 clap = { workspace = true }
+serde = { workspace = true }
 serde_json = { workspace = true }
 chrono = { workspace = true }
 smol_str = "0.3"

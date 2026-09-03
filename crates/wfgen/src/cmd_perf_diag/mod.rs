@@ -126,6 +126,15 @@ fn speak(json: bool, msg: &str) {
 
 /// 执行一轮诊断：切档 → 发帧+哨兵 → 读完成信号 → 算 EPS →（可选）门禁判定。
 pub async fn run_perf_diag(args: Args) -> WfgenResult<GateVerdict> {
+    // --record-baseline 与 --gate 互斥：record 分支会提前返回、跳过门禁。
+    // 若同时给却不拦，脚本误留两旗标会"记录完直接 exit 0"——门禁被静默绕过。
+    if args.gate.is_some() && args.record_baseline.is_some() {
+        return Err(error::error(
+            WfgenReason::Validation,
+            "--gate 与 --record-baseline 互斥：先单独 --record-baseline 校准基线，\
+             再另跑 --gate 做门禁",
+        ));
+    }
     let json = matches!(args.format.as_str(), "json" | "jsonl");
     let config = PerfConfig::load(&args.diag).map_err(|e| {
         error::error(

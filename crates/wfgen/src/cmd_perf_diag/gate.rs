@@ -119,16 +119,18 @@ fn max_n(wall: &[WallRow]) -> u64 {
 // ---------------------------------------------------------------------------
 
 #[derive(Debug, Clone, Default, Deserialize, Serialize, PartialEq)]
+#[serde(deny_unknown_fields)]
 pub struct AbsoluteCaps {
-    /// 整集 rules 档 EPS 下限（0/缺省 = 不断言）。
+    /// 整集 rules 档 EPS 下限（缺省 = 不断言；须 > 0）。
     #[serde(default)]
     pub rules_eps_min: Option<f64>,
-    /// 单规则成本上限（ns/事件/规则）——需 rule_count>0 且有 floor+rules 档。
+    /// 单规则成本上限（ns/事件/规则）——需 rule_count>0 且有 floor+rules 档；须 > 0。
     #[serde(default)]
     pub per_rule_ns_max: Option<f64>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+#[serde(deny_unknown_fields)]
 pub struct RelativeCaps {
     /// 基线墙表文件（上次通过跑 --record-baseline 留存）。
     #[serde(default)]
@@ -136,7 +138,7 @@ pub struct RelativeCaps {
     /// 做相对回归的档名列表（缺省 = ["rules"]）。
     #[serde(default = "default_rel_stages")]
     pub stages: Vec<String>,
-    /// 允许的 EPS 回退百分比（10 = 现 EPS ≥ 基线的 90%）。
+    /// 允许的 EPS 回退百分比（10 = 现 EPS ≥ 基线的 90%；[0,100]）。
     #[serde(default)]
     pub max_regression_pct: Option<f64>,
 }
@@ -156,8 +158,9 @@ fn default_rel_stages() -> Vec<String> {
 }
 
 #[derive(Debug, Clone, Default, Deserialize, Serialize, PartialEq)]
+#[serde(deny_unknown_fields)]
 pub struct GateConfig {
-    /// 被测规则集大小（把 rules−floor 增量摊到单规则成本用）。
+    /// 被测规则集大小（把 rules-floor 增量摊到单规则成本用）。
     #[serde(default)]
     pub rule_count: usize,
     #[serde(default)]
@@ -189,8 +192,9 @@ impl GateConfig {
     fn validate(&self) -> WfgenResult<()> {
         let has_abs = self.absolute.rules_eps_min.is_some() || self.absolute.per_rule_ns_max.is_some();
         let rel = &self.relative;
-        // 相对断言以 baseline 为准：只有给了基线才会真正比出回归。
-        let has_rel = rel.baseline.is_some();
+        // 相对断言信号 = 给了基线（真要比）或给了回退率（想比但可能漏了基线）。
+        // 不把 stages 算作信号——它有 serde 默认值（[relative] 整段省略也存在）。
+        let has_rel = rel.baseline.is_some() || rel.max_regression_pct.is_some();
         if !has_abs && !has_rel {
             return Err(error::error(
                 WfgenReason::Validation,
@@ -218,6 +222,13 @@ impl GateConfig {
                 ));
             }
         }
+        // max_regression_pct 给了却忘写 baseline → 相对断言无从比，静默失效。
+        if rel.baseline.is_none() && rel.max_regression_pct.is_some() {
+            return Err(error::error(
+                WfgenReason::Validation,
+                "[relative] max_regression_pct 需配套 baseline（基线墙表文件）",
+            ));
+        }
         if let Some(pct) = rel.max_regression_pct
             && !(0.0..=100.0).contains(&pct)
         {
@@ -225,6 +236,21 @@ impl GateConfig {
                 WfgenReason::Validation,
                 format!("max_regression_pct={pct} 超出 [0,100]"),
             ));
+        }
+        // 绝对断言的值必须为正——负值/0 会让断言恒过（拼错级静默失效）。
+        for (name, val) in [
+            ("rules_eps_min", self.absolute.rules_eps_min),
+            ("per_rule_ns_max", self.absolute.per_rule_ns_max),
+        ] {
+            // NaN 与任何比较都不成立，须显式排除后看非正。
+            if let Some(v) = val
+                && (v.is_nan() || v <= 0.0)
+            {
+                return Err(error::error(
+                    WfgenReason::Validation,
+                    format!("{name}={v} 必须为正数"),
+                ));
+            }
         }
         Ok(())
     }
@@ -316,7 +342,7 @@ pub fn evaluate_gate(cfg: &GateConfig, current: &[WallRow]) -> WfgenResult<Vec<G
             stage: "rules-floor".to_string(),
             measured: per_rule_ns,
             threshold: cap,
-            unit: "ns/事件/规则".to_string(),
+            unit: "ns/evt/rule".to_string(),
             relation: "<=".to_string(),
             passed: per_rule_ns <= cap,
             detail: format!(
@@ -371,7 +397,7 @@ fn missing_measurement(stage: &str, n_ref: u64, wall: &[WallRow]) -> crate::erro
     error::error(
         WfgenReason::Validation,
         format!(
-            "本次墙表缺档 `{stage}`（n={n_ref}）——绝对断言需要 floor+rules 档：\
+            "本次墙表缺档 `{stage}`（n={n_ref}），无法评估该断言——\
              检查 --diag 的 [[stages]] 是否含对应档（可用行：{}）",
             wall.iter()
                 .map(render_wall_row)
@@ -685,5 +711,198 @@ max_regression_pct = 20.0
         let mut fail = pass_checks.clone();
         fail[1].passed = false;
         assert!(!summarize_checks(&fail));
+    }
+
+    // ---- review 追加：配置值域 / 未知 key / 口径语义 / 输出形态 ----------------
+
+    fn cfg_from_toml(toml_text: &str) -> WfgenResult<GateConfig> {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static NEXT: AtomicU64 = AtomicU64::new(0);
+        let dir = std::env::temp_dir();
+        // 并行测试同 PID：文件名必须唯一（固定名会被并发测试互相覆盖）。
+        let path = dir.join(format!(
+            "wfgen_gate_extra_{}_{}.toml",
+            std::process::id(),
+            NEXT.fetch_add(1, Ordering::Relaxed)
+        ));
+        std::fs::write(&path, toml_text).unwrap();
+        let res = GateConfig::load(&path);
+        let _ = std::fs::remove_file(&path);
+        res
+    }
+
+    #[test]
+    fn gate_config_rejects_non_positive_absolute_caps() {
+        // 负值/0 会让断言恒过（拼写级静默失效）——必须显式报错。
+        let err = cfg_from_toml("[absolute]\nrules_eps_min = -1.0\n").unwrap_err();
+        assert!(err.to_string().contains("必须为正数"), "{err}");
+        let err = cfg_from_toml("[absolute]\nrules_eps_min = 0.0\n").unwrap_err();
+        assert!(err.to_string().contains("rules_eps_min=0"));
+        let err = cfg_from_toml("rule_count = 10\n[absolute]\nper_rule_ns_max = -300.0\n")
+            .unwrap_err();
+        assert!(err.to_string().contains("per_rule_ns_max=-300"));
+        let err = cfg_from_toml("rule_count = 10\n[absolute]\nper_rule_ns_max = 0\n")
+            .unwrap_err();
+        assert!(err.to_string().contains("必须为正数"));
+        // 正值通过。
+        assert!(cfg_from_toml("rule_count = 10\n[absolute]\nper_rule_ns_max = 300.0\n").is_ok());
+    }
+
+    #[test]
+    fn gate_config_rejects_unknown_keys() {
+        // 未知 key 静默忽略 = 断言悄悄消失；deny_unknown_fields 让它显式报错。
+        let err = cfg_from_toml("rule_cout = 376\n[absolute]\nrules_eps_min = 1.0\n")
+            .unwrap_err();
+        assert!(err.to_string().contains("unknown field"), "{err}");
+        let err = cfg_from_toml("[absolute]\nrule_eps_min = 1.0\n").unwrap_err();
+        assert!(err.to_string().contains("unknown field"));
+        let err = cfg_from_toml("[relative]\nmax_regresion_pct = 10.0\nbaseline = \"b.txt\"\n")
+            .unwrap_err();
+        assert!(err.to_string().contains("unknown field"));
+        // 合法配置不受影响。
+        assert!(cfg_from_toml("[relative]\nbaseline = \"b.txt\"\nmax_regression_pct = 10.0\n")
+            .is_ok());
+    }
+
+    #[test]
+    fn gate_config_relative_pct_without_baseline_is_rejected() {
+        // [relative] 只写 max_regression_pct、忘写 baseline → 相对断言无从比
+        // （stages 有 serde 默认、pct 无默认，pct 是"想开相对"的唯一可靠信号）。
+        let err = cfg_from_toml("[relative]\nmax_regression_pct = 10.0\n").unwrap_err();
+        assert!(err.to_string().contains("需配套 baseline"), "{err}");
+    }
+
+    #[test]
+    fn relative_stages_default_to_rules_when_omitted() {
+        // [relative] 未写 stages → serde 默认 ["rules"]，评估产生 1 条相对断言。
+        let dir = std::env::temp_dir();
+        let base_path = dir.join(format!("wfgen_gate_defstage_{}.txt", std::process::id()));
+        write_baseline(&base_path, &[row("rules", 200_000.0, 1_000_000)]).unwrap();
+        let cfg = cfg_from_toml(&format!(
+            "[relative]\nbaseline = \"{}\"\nmax_regression_pct = 20.0\n",
+            base_path.display()
+        ))
+        .unwrap();
+        assert_eq!(cfg.relative.stages, vec!["rules".to_string()]);
+        let wall = vec![row("rules", 180_000.0, 1_000_000)];
+        let checks = evaluate_gate(&cfg, &wall).unwrap();
+        let _ = std::fs::remove_file(&base_path);
+        assert_eq!(checks.len(), 1);
+        assert_eq!(checks[0].metric, "eps_regression");
+        assert_eq!(checks[0].stage, "rules");
+    }
+
+    #[test]
+    fn absolute_gate_uses_max_n_row() {
+        // 门禁口径 = 取该档最大 N 行（固定开销摊薄后的每事件成本最稳）。
+        // 小 N 好、大 N 差 → 必须 FAIL（不拿小 N 的好数字糊弄）。
+        let mut cfg = base_cfg();
+        cfg.absolute.rules_eps_min = Some(100_000.0);
+        let wall = vec![
+            row("rules", 2_000_000.0, 100_000), // 小 N：固定开销摊薄前虚高
+            row("rules", 60_000.0, 1_000_000),  // 大 N：稳态真值 60k < 100k
+        ];
+        let checks = evaluate_gate(&cfg, &wall).unwrap();
+        assert!(!checks[0].passed, "门禁必须用最大 N 行，现取 {:?}", checks[0].measured);
+        assert_eq!(checks[0].measured, 60_000.0);
+
+        // 反向：小 N 差、大 N 好 → 通过（测量噪声/启动固定开销不误伤）。
+        let wall = vec![
+            row("rules", 30_000.0, 100_000),
+            row("rules", 200_000.0, 1_000_000),
+        ];
+        let checks = evaluate_gate(&cfg, &wall).unwrap();
+        assert!(checks[0].passed);
+        assert_eq!(checks[0].measured, 200_000.0);
+    }
+
+    #[test]
+    fn evaluate_rejects_empty_current_wall() {
+        let mut cfg = base_cfg();
+        cfg.absolute.rules_eps_min = Some(100_000.0);
+        let err = evaluate_gate(&cfg, &[]).unwrap_err();
+        assert!(err.to_string().contains("墙表为空"));
+    }
+
+    #[test]
+    fn per_rule_ns_clamps_noise_to_zero() {
+        // 噪声可能让 rules 档 EPS 反而高于 floor（增量负）——按 0 处理并 PASS，
+        // 不产生负成本或误报。
+        let mut cfg = base_cfg();
+        cfg.absolute.per_rule_ns_max = Some(10.0);
+        let wall = vec![row("floor", 5_000_000.0, 1_000_000), row("rules", 9_000_000.0, 1_000_000)];
+        let checks = evaluate_gate(&cfg, &wall).unwrap();
+        assert_eq!(checks[0].measured, 0.0);
+        assert!(checks[0].passed);
+    }
+
+    #[test]
+    fn combined_abs_and_rel_produce_ordered_checks() {
+        // 绝对 2 条 + 相对 1 条（默认 rules 档）→ 检查顺序：abs 先、rel 后。
+        let dir = std::env::temp_dir();
+        let base_path = dir.join(format!("wfgen_gate_combo_{}.txt", std::process::id()));
+        write_baseline(&base_path, &[row("rules", 200_000.0, 1_000_000)]).unwrap();
+
+        let mut cfg = base_cfg();
+        cfg.absolute.rules_eps_min = Some(150_000.0);
+        cfg.absolute.per_rule_ns_max = Some(300.0);
+        cfg.relative.baseline = Some(base_path.clone());
+        cfg.relative.max_regression_pct = Some(20.0);
+
+        let checks = evaluate_gate(&cfg, &typical_wall()).unwrap();
+        let _ = std::fs::remove_file(&base_path);
+        assert_eq!(checks.len(), 3);
+        assert_eq!(checks[0].metric, "rules_set_eps");
+        assert_eq!(checks[1].metric, "per_rule_ns");
+        assert_eq!(checks[2].metric, "eps_regression");
+        assert!(checks.iter().all(|c| c.passed));
+    }
+
+    #[test]
+    fn render_gate_human_marks_failures_with_detail() {
+        let outcome = GateOutcome {
+            config: "conf/perf-gate.toml".to_string(),
+            passed: false,
+            checks: vec![
+                GateCheck {
+                    metric: "rules_set_eps".to_string(),
+                    stage: "rules".to_string(),
+                    measured: 120_000.0,
+                    threshold: 150_000.0,
+                    unit: "eps".to_string(),
+                    relation: ">=".to_string(),
+                    passed: true,
+                    detail: "ok".to_string(),
+                },
+                GateCheck {
+                    metric: "eps_regression".to_string(),
+                    stage: "rules".to_string(),
+                    measured: 150_000.0,
+                    threshold: 160_000.0,
+                    unit: "eps".to_string(),
+                    relation: ">=".to_string(),
+                    passed: false,
+                    detail: "rules 档 EPS=150000 vs 基线 200000（回退 25.0%，允许 ≤20.0%）"
+                        .to_string(),
+                },
+            ],
+        };
+        let text = render_gate_human(&outcome);
+        assert!(text.contains("== perf gate (conf/perf-gate.toml)"));
+        assert!(text.contains("[PASS]"));
+        assert!(text.contains("[FAIL]"));
+        assert!(text.contains("回退 25.0%"), "失败明细必须自解释: {text}");
+        assert!(text.contains("== 门禁判定: FAIL =="));
+    }
+
+    #[test]
+    fn write_baseline_creates_parent_dirs_and_roundtrips() {
+        let dir = std::env::temp_dir().join(format!("wfgen_gate_nested_{}", std::process::id()));
+        let path = dir.join("data/perf_wall.baseline.txt");
+        let rows = vec![row("rules", 168_000.0, 1_000_000), row("floor", 17_000_000.0, 1_000_000)];
+        write_baseline(&path, &rows).unwrap();
+        let parsed = read_wall_file(&path).unwrap();
+        let _ = std::fs::remove_dir_all(&dir);
+        assert_eq!(parsed, rows);
     }
 }

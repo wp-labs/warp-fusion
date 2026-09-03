@@ -766,3 +766,72 @@ fn args_diag_parent(args: &Args) -> PathBuf {
         .expect("diag path parent")
         .to_path_buf()
 }
+
+// -- review 追加：互斥旗标 / JSON 报告形态 --------------------------------
+
+#[tokio::test]
+async fn driver_rejects_gate_plus_record_baseline_together() {
+    // --gate 与 --record-baseline 同给 = 门禁被静默绕过（record 提前返回）→ 显式报错。
+    let args = Args {
+        diag: PathBuf::from("perf-diag.toml"),
+        frames: PathBuf::from("data.frames"),
+        addr: "127.0.0.1:1".into(),
+        n_list: Some("2".into()),
+        rounds: 1,
+        sentinels: None,
+        output: None,
+        timeout_secs: 2,
+        gate: Some(PathBuf::from("perf-gate.toml")),
+        record_baseline: Some(PathBuf::from("base.txt")),
+        format: "human".to_string(),
+    };
+    let err = run_perf_diag(args).await.unwrap_err();
+    assert!(err.to_string().contains("互斥"), "{err}");
+}
+
+#[test]
+fn perf_report_json_shape_matches_schema_v1() {
+    let wall = vec![WallRow {
+        stage: "rules".into(),
+        eps: 168_000.0,
+        n: 1_000_000,
+        rounds: 1,
+    }];
+    // 带门禁：gate + verdict 在报告里，schema 版本化。
+    let gated = PerfReport {
+        schema: "wfgen-perf-report/v1",
+        wall: wall.clone(),
+        gate: Some(GateOutcome {
+            config: "conf/perf-gate.toml".into(),
+            passed: false,
+            checks: vec![GateCheck {
+                metric: "per_rule_ns".into(),
+                stage: "rules-floor".into(),
+                measured: 412.3,
+                threshold: 300.0,
+                unit: "ns/evt/rule".into(),
+                relation: "<=".into(),
+                passed: false,
+                detail: "规则求值成本摊到 376 条规则".into(),
+            }],
+        }),
+        verdict: Some("FAIL"),
+    };
+    let v = serde_json::to_value(&gated).unwrap();
+    assert_eq!(v["schema"], "wfgen-perf-report/v1");
+    assert_eq!(v["verdict"], "FAIL");
+    assert_eq!(v["gate"]["passed"], false);
+    assert_eq!(v["gate"]["checks"][0]["unit"], "ns/evt/rule");
+    assert_eq!(v["wall"][0]["stage"], "rules");
+    // 纯诊断（无门禁）：gate/verdict 字段缺省（skip_serializing_if），stdout 语义干净。
+    let plain = PerfReport {
+        schema: "wfgen-perf-report/v1",
+        wall,
+        gate: None,
+        verdict: None,
+    };
+    let v = serde_json::to_value(&plain).unwrap();
+    assert!(v.get("gate").is_none());
+    assert!(v.get("verdict").is_none());
+    assert_eq!(v["wall"].as_array().unwrap().len(), 1);
+}

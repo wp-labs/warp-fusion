@@ -1,9 +1,10 @@
-# match_let_demo — let 派生字段复用 + case 模式匹配表达式（issue #79）
+# match_let_demo — let 派生字段复用 + case 模式匹配 + let 派生 match key（issue #79 / #83）
 
-演示两条 WFL 新语法（2026-08-31，issue #79）：
+演示三条 WFL 新语法（2026-08-31，issue #79；2026-09-02，issue #83）：
 
 1. **`let` 派生字段复用**：一条规则内多处输出的复杂逻辑一处定义、链式引用。
 2. **`case` 模式匹配表达式**：枚举值归一化，替代多层 `if/else`（值分派；规则级 `match<...>` 保留给 CEP 事件匹配）。
+3. **`let` 派生字段作为 match 分组 key**（issue #83）：`match<tenant_id:10m>` 按 let 派生值分组，与直接写 `s.tenant_id` 结果一致。
 
 ## 规则
 
@@ -15,7 +16,7 @@ rule derive_and_map {
     let tenant_id = s.tenant_id
     let dedup_key = join_by("|", tenant_id, s.log_type, s.occur_time)
     let alert_id = join_by("", "alert_", substr(sha256(dedup_key), 0, 24))
-    match<s.tenant_id:10m> {
+    match<tenant_id:10m> {
         on event { s | count >= 1; }
     } -> score(50.0)
     entity(chars, tenant_id)
@@ -43,6 +44,7 @@ rule derive_and_map {
 
 - `dedup_key` 复用 `tenant_id`，`alert_id` 复用 `dedup_key`——三段依赖链，逻辑一处定义。
 - 求值路径：match（CEP）规则在事件匹配后逐事件求值注入，`entity`/`yield` 按裸名引用。
+- **派生 match key**（issue #83）：分组 key 可直接引用 `let`（纯字段形态）——`match<tenant_id:10m>`，窗口路由前按事件求值；引擎侧与直接嵌套/字段 key 编译为同一分组表达式，结果一致。
 - 等价展开（不推荐）：`alert_id` 需要把 `join_by("|", ...)` 整段再抄一遍。
 
 ### case 表达式
@@ -69,7 +71,7 @@ rule derive_and_map {
 
 ## 验证覆盖
 
-- `wfl lint`：新语法通过 checker（match 分支类型检查、let 字段作用域）。
+- `wfl lint`：新语法通过 checker（match 分支类型检查、let 字段作用域、派生 match key 放行）。
 - `wfl test`：内联测试（3 行输入 → 3 命中）。
 - `wfusion batch`：完整引擎链路（解析 → 编译 → match 路径 apply_lets → yield 求值）。
 - 对应引擎/语言单测见 wp-reactor（`execute_match_applies_lets_before_alert_build`、

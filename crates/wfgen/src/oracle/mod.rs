@@ -41,7 +41,7 @@ use std::time::Duration;
 use chrono::{DateTime, Utc};
 use wf_engine::alert::OutputRecord;
 use wf_engine::match_engine::{
-    CepStateMachine, CloseOutput, CloseReason, DeferredPending, EngineHashMap, Event, RuleExecutor,
+    CepStateMachine, CloseOutput, CloseReason, DeferredPending, DeferredLeft, EngineHashMap, Event, RuleExecutor,
     StatsExecutor, StepResult, Value, WindowLookup,
 };
 use wf_lang::WindowSchema;
@@ -362,7 +362,7 @@ where
                         if let Some(p) =
                             engine
                                 .executor
-                                .deferred_pending_for(join_idx, &core_event, event_nanos)
+                                .deferred_pending_for(join_idx, &DeferredLeft::Event(core_event.clone()), event_nanos)
                         {
                             deferred.pending.entry(p.expiry_nanos).or_default().push(p);
                         }

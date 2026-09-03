@@ -5,7 +5,8 @@ rule derive_and_map {
     let tenant_id = s.tenant_id
     let dedup_key = join_by("|", tenant_id, s.log_type, s.occur_time)
     let alert_id = join_by("", "alert_", substr(sha256(dedup_key), 0, 24))
-    match<s.tenant_id:10m> {
+    // match key 引用 let 派生字段（issue #83）：按 tenant_id 分组，与直接写 s.tenant_id 结果一致
+    match<tenant_id:10m> {
         on event { s | count >= 1; }
     } -> score(50.0)
     entity(chars, tenant_id)

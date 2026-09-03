@@ -120,8 +120,10 @@ pub fn replay_events<R: BufRead>(
     replay_events_from_file(&parsed, schemas, reader, color, false)
 }
 
-/// Replay mode used by `wfl replay-verify`（与 oracle 语义对齐: 每事件前扫
-/// timeout 到期, EOF 不强制 close）。
+/// Replay mode used by `wfl verify`。语义对齐 `wfl replay` / `wfl test` 与
+/// 引擎的 flush 收口：每事件前扫 timeout 到期；EOF 时 **close_all 剩余实例**
+/// （否则 `and close` 规则的告警只在窗口自然过期时发射——对 span 短于窗口的
+/// 验证数据（Sigma 用例常见）永不触发，verify 对 oracle 恒 0 匹配，issue #23）。
 pub fn replay_events_for_verify<R: BufRead>(
     wfl_source: &str,
     schemas: &[WindowSchema],
@@ -140,16 +142,11 @@ pub(crate) fn replay_events_from_file<R: BufRead>(
     color: bool,
     verify_mode: bool,
 ) -> WflResult<ReplayResult> {
-    let options = if verify_mode {
-        ReplayExecOptions {
-            scan_expired_each_event: true,
-            eof_action: ReplayEofAction::SweepTimeoutAtLastWatermark,
-        }
-    } else {
-        ReplayExecOptions {
-            scan_expired_each_event: false,
-            eof_action: ReplayEofAction::CloseAllEos,
-        }
+    let options = ReplayExecOptions {
+        // verify（replay_events_for_verify）逐事件扫窗口过期——流中途过期的
+        // 窗口（长 span 数据，如 count 示例）按真实 watermark 发射，与引擎
+        // 逐批扫描一致；replay 不扫（EOF 统一 close_all 收口）。
+        scan_expired_each_event: verify_mode,
     };
     replay_events_impl(wfl_file, schemas, reader, color, options)
 }
@@ -202,15 +199,10 @@ struct ReplayEngine {
 }
 
 #[derive(Clone, Copy)]
-enum ReplayEofAction {
-    CloseAllEos,
-    SweepTimeoutAtLastWatermark,
-}
-
-#[derive(Clone, Copy)]
 struct ReplayExecOptions {
+    /// 流中途是否逐事件扫描窗口过期（verify 模式）：引擎逐批扫描语义，
+    /// 使长 span 数据（count 示例）按真实 watermark 过期发射。
     scan_expired_each_event: bool,
-    eof_action: ReplayEofAction,
 }
 
 #[derive(Clone)]
@@ -271,8 +263,6 @@ fn replay_with_plans<R: BufRead>(
     let mut match_count: u64 = 0;
     let mut error_count: u64 = 0;
     let known_time_fields = collect_known_time_fields(schemas);
-    let mut has_watermark = false;
-    let mut last_watermark_nanos: i64 = 0;
 
     // -- Event loop --
     for line_result in reader.lines() {
@@ -303,26 +293,21 @@ fn replay_with_plans<R: BufRead>(
             }
         };
 
-        if let Some(watermark_nanos) = infer_event_watermark_nanos(&json, &known_time_fields) {
-            if !has_watermark || watermark_nanos > last_watermark_nanos {
-                has_watermark = true;
-                last_watermark_nanos = watermark_nanos;
-            }
-
-            if options.scan_expired_each_event {
-                for i in 0..engines.len() {
-                    run_timeout_scan_for_engine(
-                        i,
-                        watermark_nanos,
-                        &all_routes,
-                        &mut engines,
-                        &lookup,
-                        &mut alerts,
-                        &mut match_count,
-                        &mut error_count,
-                        color,
-                    );
-                }
+        if let Some(watermark_nanos) = infer_event_watermark_nanos(&json, &known_time_fields)
+            && options.scan_expired_each_event
+        {
+            for i in 0..engines.len() {
+                run_timeout_scan_for_engine(
+                    i,
+                    watermark_nanos,
+                    &all_routes,
+                    &mut engines,
+                    &lookup,
+                    &mut alerts,
+                    &mut match_count,
+                    &mut error_count,
+                    color,
+                );
             }
         }
 
@@ -353,46 +338,28 @@ fn replay_with_plans<R: BufRead>(
         }
     }
 
-    // -- EOF --
-    match options.eof_action {
-        ReplayEofAction::CloseAllEos => {
-            for i in 0..engines.len() {
-                let close_outputs = {
-                    let engine = &mut engines[i];
-                    engine
-                        .machine
-                        .close_all_with_conv(CloseReason::Eos, engine.conv_plan.as_ref())
-                };
-                handle_close_outputs_for_engine(
-                    i,
-                    &close_outputs,
-                    &all_routes,
-                    &mut engines,
-                    &lookup,
-                    &mut alerts,
-                    &mut match_count,
-                    &mut error_count,
-                    color,
-                );
-            }
-        }
-        ReplayEofAction::SweepTimeoutAtLastWatermark => {
-            if has_watermark {
-                for i in 0..engines.len() {
-                    run_timeout_scan_for_engine(
-                        i,
-                        last_watermark_nanos,
-                        &all_routes,
-                        &mut engines,
-                        &lookup,
-                        &mut alerts,
-                        &mut match_count,
-                        &mut error_count,
-                        color,
-                    );
-                }
-            }
-        }
+    // -- EOF -- 统一 close_all（Eos）：replay 与 verify 共用（issue #23）。
+    // verify 的 scan_expired_each_event 已让中途过期的窗口按真实 watermark
+    // 发射；此处收口剩余未过期实例（引擎 flush 语义），避免 span 短于窗口的
+    // 验证数据对 `and close` 规则恒 0 匹配。
+    for i in 0..engines.len() {
+        let close_outputs = {
+            let engine = &mut engines[i];
+            engine
+                .machine
+                .close_all_with_conv(CloseReason::Eos, engine.conv_plan.as_ref())
+        };
+        handle_close_outputs_for_engine(
+            i,
+            &close_outputs,
+            &all_routes,
+            &mut engines,
+            &lookup,
+            &mut alerts,
+            &mut match_count,
+            &mut error_count,
+            color,
+        );
     }
 
     Ok(ReplayResult {
@@ -546,13 +513,27 @@ fn route_event_once(
 ) {
     let consumers = routes.get(route_key).cloned().unwrap_or_default();
     for consumer in consumers {
-        let step = engines[consumer.engine_idx].machine.advance_with(
+        // Bind filter（issue #23）：与 `wfl test`（contract::execute_test_run）
+        // 与生产 rule_task 的 `alias_accepts` 对齐——事件必须过其绑定 alias 的
+        // `events { alias : win && <filter> }` 过滤才推进状态机。此前 replay
+        // 驱动漏掉该前置过滤，被 filter 排除的事件仍进入机器：事件步因 guard
+        // 大多能挡住，但 **close 步累积**（accumulate_close_steps 只查分支
+        // guard、无 bind filter）会把良性事件计入 count → 误触发告警
+        // （实测 dport==4444 规则对 dport=443/80 的 NDJSON 误发射）。
+        let engine_idx = consumer.engine_idx;
+        if !engines[engine_idx]
+            .executor
+            .event_matches_alias(&consumer.bind_alias, event, Some(lookup))
+        {
+            continue;
+        }
+        let step = engines[engine_idx].machine.advance_with(
             &consumer.bind_alias,
             event,
             Some(lookup),
         );
         if let StepResult::Matched(ctx) = step {
-            match engines[consumer.engine_idx]
+            match engines[engine_idx]
                 .executor
                 .execute_match_with_joins(&ctx, lookup)
             {

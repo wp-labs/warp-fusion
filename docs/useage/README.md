@@ -8,6 +8,7 @@
 |------|------|
 | [intro.md](./intro.md) | 面向市场的产品介绍（定位、核心能力、与 Flink / 检测 DSL 对比） |
 | [getting-started.md](./getting-started.md) | 快速开始、示例项目结构、文档索引 |
+| [integration.md](./integration.md) | 开发者集成指南：事件接入 / 告警输出 / 规则交付 / Admin API 管理 |
 | [configuration.md](./configuration.md) | `wfusion.toml`、source / sink / runtime 配置入口 |
 | [schema.md](./schema.md) | `.wfs` window 和字段类型 |
 | [rules.md](./rules.md) | `.wfl` 规则编写、yield 时间变量、稳定统计上下文 |
@@ -31,6 +32,7 @@
 
 1. 先读 [getting-started.md](./getting-started.md)，跑通一个最小示例。
 2. 读 [schema.md](./schema.md) 和 [rules.md](./rules.md)，理解 `.wfs` / `.wfl` 的职责边界。
-3. 接入真实数据源时读 [configuration.md](./configuration.md)、[config/source.md](./config/source.md) 和 [config/sink.md](./config/sink.md)。
-4. 与 warp-parse 联动时读 [wparse-window-routing.md](./wparse-window-routing.md)。
-5. 需要在线 reload 或发布时读 [cli/admin_api.md](./cli/admin_api.md)。
+3. **把引擎接入自有系统时读 [integration.md](./integration.md)**（事件源接入、告警 sink、规则集交付、Admin API 管理）。
+4. 接入真实数据源时读 [configuration.md](./configuration.md)、[config/source.md](./config/source.md) 和 [config/sink.md](./config/sink.md)。
+5. 与 warp-parse 联动时读 [wparse-window-routing.md](./wparse-window-routing.md)。
+6. 需要在线 reload 或发布时读 [cli/admin_api.md](./cli/admin_api.md)。

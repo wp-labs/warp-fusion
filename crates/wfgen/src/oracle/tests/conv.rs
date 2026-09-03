@@ -48,6 +48,7 @@ fn conv_top_filters_non_qualifying() {
         }],
         lets: Vec::new(),
         match_plan: MatchPlan {
+            key_exprs: Vec::new(),
             keys: vec![FieldRef::Simple("sip".to_string())],
             key_map: None,
             key_join: None,

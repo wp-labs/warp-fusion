@@ -22,6 +22,7 @@ fn make_simple_rule_plan() -> RulePlan {
         }],
         lets: Vec::new(),
         match_plan: MatchPlan {
+            key_exprs: Vec::new(),
             keys: vec![FieldRef::Simple("sip".to_string())],
             key_map: None,
             key_join: None,

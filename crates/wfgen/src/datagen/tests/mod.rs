@@ -70,6 +70,7 @@ fn make_brute_force_plan() -> RulePlan {
         }],
         lets: Vec::new(),
         match_plan: MatchPlan {
+            key_exprs: Vec::new(),
             keys: vec![FieldRef::Simple("src_ip".to_string())],
             key_map: None,
             key_join: None,
@@ -137,6 +138,7 @@ fn make_auth_fail_plan() -> RulePlan {
         }],
         lets: Vec::new(),
         match_plan: MatchPlan {
+            key_exprs: Vec::new(),
             keys: vec![FieldRef::Simple("src_ip".to_string())],
             key_map: None,
             key_join: None,
@@ -201,6 +203,7 @@ fn make_bool_chain_plan() -> RulePlan {
         }],
         lets: Vec::new(),
         match_plan: MatchPlan {
+            key_exprs: Vec::new(),
             keys: vec![FieldRef::Simple("username".to_string())],
             key_map: None,
             key_join: None,
@@ -287,6 +290,7 @@ fn make_distinct_close_plan() -> RulePlan {
         }],
         lets: Vec::new(),
         match_plan: MatchPlan {
+            key_exprs: Vec::new(),
             keys: vec![FieldRef::Simple("src_ip".to_string())],
             key_map: None,
             key_join: None,
@@ -377,6 +381,7 @@ fn make_chain_attack_plan() -> RulePlan {
         ],
         lets: Vec::new(),
         match_plan: MatchPlan {
+            key_exprs: Vec::new(),
             keys: vec![FieldRef::Simple("src_ip".to_string())],
             key_map: None,
             key_join: None,

@@ -41,8 +41,8 @@ use std::time::Duration;
 use chrono::{DateTime, Utc};
 use wf_engine::alert::OutputRecord;
 use wf_engine::match_engine::{
-    CepStateMachine, CloseOutput, CloseReason, DeferredPending, DeferredLeft, EngineHashMap, Event, RuleExecutor,
-    StatsExecutor, StepResult, Value, WindowLookup,
+    CepStateMachine, CloseOutput, CloseReason, DeferredLeft, DeferredPending, EngineHashMap, Event,
+    RuleExecutor, StatsExecutor, StepResult, Value, WindowLookup,
 };
 use wf_lang::WindowSchema;
 use wf_lang::plan::{ConvPlan, RulePlan, WindowSpec};
@@ -359,11 +359,11 @@ where
                     let (due, join_idx, watermark) = {
                         deferred.watermark = deferred.watermark.max(event_nanos);
                         let join_idx = deferred.join_idx;
-                        if let Some(p) =
-                            engine
-                                .executor
-                                .deferred_pending_for(join_idx, &DeferredLeft::Event(core_event.clone()), event_nanos)
-                        {
+                        if let Some(p) = engine.executor.deferred_pending_for(
+                            join_idx,
+                            &DeferredLeft::Event(core_event.clone()),
+                            event_nanos,
+                        ) {
                             deferred.pending.entry(p.expiry_nanos).or_default().push(p);
                         }
                         (

@@ -54,6 +54,7 @@ fn make_join_key_rule_plan() -> RulePlan {
         }],
         lets: Vec::new(),
         match_plan: MatchPlan {
+            key_exprs: Vec::new(),
             keys: vec![FieldRef::Simple("category".to_string())],
             key_map: None,
             key_join: Some(JoinKeyPlan {

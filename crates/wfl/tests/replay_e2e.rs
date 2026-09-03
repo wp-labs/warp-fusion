@@ -592,7 +592,10 @@ rule timeout_and_eof {
         replay_events_for_verify(wfl, &schemas, reader, false).expect("replay should succeed");
     assert_eq!(result.event_count, 2);
     assert_eq!(result.error_count, 0);
-    assert_eq!(result.match_count, 2, "timeout (10.0.0.1) + EOF close (10.0.0.2)");
+    assert_eq!(
+        result.match_count, 2,
+        "timeout (10.0.0.1) + EOF close (10.0.0.2)"
+    );
     assert_eq!(result.alerts.len(), 2);
 
     let mut by_entity: Vec<(&str, &str)> = result
@@ -608,7 +611,10 @@ rule timeout_and_eof {
     // 10.0.0.1（origin 为 eos 而非 timeout，语义差异见 run_timeout_scan 注释）。
     let reader = BufReader::new(ndjson.as_bytes());
     let replay_result = replay_events(wfl, &schemas, reader, false).expect("replay should succeed");
-    assert_eq!(replay_result.match_count, 2, "replay closes both keys at EOF");
+    assert_eq!(
+        replay_result.match_count, 2,
+        "replay closes both keys at EOF"
+    );
     let mut replay_origins: Vec<&str> = replay_result
         .alerts
         .iter()

@@ -521,17 +521,17 @@ fn route_event_once(
         // guard、无 bind filter）会把良性事件计入 count → 误触发告警
         // （实测 dport==4444 规则对 dport=443/80 的 NDJSON 误发射）。
         let engine_idx = consumer.engine_idx;
-        if !engines[engine_idx]
-            .executor
-            .event_matches_alias(&consumer.bind_alias, event, Some(lookup))
-        {
-            continue;
-        }
-        let step = engines[engine_idx].machine.advance_with(
+        if !engines[engine_idx].executor.event_matches_alias(
             &consumer.bind_alias,
             event,
             Some(lookup),
-        );
+        ) {
+            continue;
+        }
+        let step =
+            engines[engine_idx]
+                .machine
+                .advance_with(&consumer.bind_alias, event, Some(lookup));
         if let StepResult::Matched(ctx) = step {
             match engines[engine_idx]
                 .executor

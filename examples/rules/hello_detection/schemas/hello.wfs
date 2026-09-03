@@ -1,0 +1,20 @@
+window auth_events {
+    stream_tag = "auth"
+    time = event_time
+    over = 1h
+    fields {
+        sip: ip
+        user: chars
+        action: chars
+        event_time: time
+    }
+}
+
+window mini_alerts {
+    over = 0
+    fields {
+        sip: ip
+        alert_type: chars
+        detail: chars
+    }
+}

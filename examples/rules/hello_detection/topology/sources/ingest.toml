@@ -1,0 +1,7 @@
+connect = "file_src"
+enable = true
+key = "mini_input"
+
+path = "data/mini.ndjson"
+stream_tag = "auth"
+data_format = "ndjson"

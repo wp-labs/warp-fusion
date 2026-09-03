@@ -2,6 +2,7 @@
 
 | 场景 | 目录 | 检测类型 | 核心模式 |
 |------|------|---------|---------|
+| 最小可跑示例（入门） | `hello_detection/` | 暴力破解 | 1m 窗 count ≥ 3 → 1 条告警；[集成指南](../../docs/useage/integration.md) 的配套最小工程 |
 | 端口扫描 + 白名单 | `port_scan_whitelist/` | 扫描检测 | distinct + count 阈值 + join anti 排除 |
 | SSH 暴力破解 | `ssh_brute_force/` | 暴力破解 | count 阈值 + 多目标聚合 |
 | SQL 注入探测 | `sqli_probe/` | Web 攻击 | URI 模式匹配 + count 阈值 |
@@ -204,6 +205,18 @@ window dns_events {
 - **分发**: 合法 `netflow` 进入业务 window；miss row 进入 runtime 诊断路径
 - **验证**: `./run.sh`，期望合法 stream 产生 1 条告警，并在
   `data/out_dat/metrics.ndjson` 中检查到两条 `window_miss_total` monitor 统计
+
+### 9. 最小可跑示例 `hello_detection`
+
+与 [docs/useage/integration.md](../../docs/useage/integration.md) 第「简单示例」
+小节配套的照抄可跑工程：file source 喂 3 行 failed 登录 → `auth_events` 输入窗
+→ `match<sip:1m>` 计数 ≥ 3 → `mini_alerts` 输出窗 → `alerts.ndjson` 恰好 1 条
+`brute_login_mini`。文件按 5 步集成次序组织（source → schema 两窗 → sink 路由
+→ 规则 + 内联测试），`run_all.sh` 已含其 batch 档；单跑：
+
+```bash
+cd hello_detection && ./run.sh
+```
 
 ---
 

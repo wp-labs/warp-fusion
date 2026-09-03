@@ -1,0 +1,29 @@
+use "hello.wfs"
+
+rule brute_login_mini {
+    events { a : auth_events && action == "failed" }
+    match<sip:1m> {
+        on event { a | count >= 3; }
+    } -> score(60.0)
+    entity(ip, a.sip)
+    yield mini_alerts (
+        sip = a.sip,
+        alert_type = "brute_login_mini",
+        detail = "3 failed logins in 1m"
+    )
+
+    limits {
+        max_memory = "16MB";
+        max_instances = 1000;
+        on_exceed = throttle;
+    }
+}
+
+test brute_login_fires_once for brute_login_mini {
+  input {
+    row(a, sip = "10.0.0.5", user = "bob", action = "failed", event_time = "2026-01-01T00:00:01Z");
+    row(a, sip = "10.0.0.5", user = "bob", action = "failed", event_time = "2026-01-01T00:00:02Z");
+    row(a, sip = "10.0.0.5", user = "bob", action = "failed", event_time = "2026-01-01T00:00:03Z");
+  }
+  expect { hits == 1; }
+}

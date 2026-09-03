@@ -126,7 +126,17 @@ rule ssh_brute_force {
 
 ## 文档
 
+> **用 AI / Agent 辅助开发？建议优先使用 [wf-skills](https://github.com/wp-labs/wf-skills)**——
+> 产品级技能集（Claude Code / Codex / 各类 agent 通用），把本仓库经验沉淀为
+> 「何时用 → 怎么做 → 已踩过的坑 → 检查清单」，覆盖 schema / 规则 / 配置 /
+> **系统集成（5 步接入）** / 基准与正确性验证。一条命令安装：
+>
+> ```bash
+> curl -sSf https://get.warpparse.ai/inst-x.sh | bash -s -- wf-skills
+> ```
+
 - **快速上手 / 概念**：[getting-started.md](docs/useage/getting-started.md) · [warp-fusion-intro.md](docs/warp-fusion-intro.md)
+- **开发者集成**：[integration.md](docs/useage/integration.md)（把引擎接入自有系统：来源 → 窗口 → 输出路由 → 规则）
 - **WFL 语言**：[rules.md](docs/useage/rules.md)
 - **运行与配置**：[config](docs/useage/config/) · [cli](docs/useage/cli/cli.md)
 - **Admin API / 在线 reload / 发布**：[admin_api.md](docs/useage/cli/admin_api.md)

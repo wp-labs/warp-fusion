@@ -142,6 +142,12 @@ enum Commands {
         #[arg(long)]
         runs: Option<usize>,
 
+        /// Generate bind-guard negative cases (L2): for each test row that
+        /// hits a simple `field == literal` / `field != literal` bind guard,
+        /// append a violating row and assert hits stay unchanged.
+        #[arg(long)]
+        gen_negatives: bool,
+
         /// Output format: "human" (default) or "json"
         #[arg(long, default_value = "human")]
         format: String,
@@ -218,9 +224,10 @@ fn run_cli() -> WflResult<()> {
             var,
             shuffle,
             runs,
+            gen_negatives,
             format,
         } => {
-            wfl::cmd_test::run(file, schemas, var, shuffle, runs, format)?;
+            wfl::cmd_test::run(file, schemas, var, shuffle, runs, gen_negatives, format)?;
         }
     }
 

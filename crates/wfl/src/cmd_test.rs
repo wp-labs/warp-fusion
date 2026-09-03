@@ -55,12 +55,84 @@ pub struct TestReport {
     pub verdict: String,
 }
 
+/// 执行单个 test 变体并生成报告项（human 输出走 stderr；json 模式静默）。
+/// 不 exit —— 退出码由调用方按汇总决定。
+fn run_one(
+    test: &wf_lang::ast::TestBlock,
+    plan: &wf_lang::plan::RulePlan,
+    time_field: Option<&str>,
+    color: bool,
+    json: bool,
+) -> TestCaseReport {
+    match run_test(test, plan, time_field.map(str::to_string)) {
+        Ok(result) => {
+            let passed = result.passed;
+            if passed {
+                if color {
+                    eprintln!(
+                        "{GREEN}PASS{RESET}  {} {DIM}({}){RESET}",
+                        test.name, test.rule_name
+                    );
+                } else if !json {
+                    eprintln!("PASS  {} ({})", test.name, test.rule_name);
+                }
+            } else if color {
+                eprintln!(
+                    "{RED}FAIL{RESET}  {} {DIM}({}){RESET}",
+                    test.name, test.rule_name
+                );
+                for f in &result.failures {
+                    eprintln!("      {RED}{f}{RESET}");
+                }
+            } else if !json {
+                eprintln!("FAIL  {} ({})", test.name, test.rule_name);
+                for f in &result.failures {
+                    eprintln!("      {}", f);
+                }
+            }
+            TestCaseReport {
+                name: result.test_name,
+                rule: result.rule_name,
+                passed,
+                output_count: result.output_count,
+                failures: result.failures,
+            }
+        }
+        Err(e) => {
+            let msg = e.report().render().to_string();
+            if color {
+                eprintln!(
+                    "{RED}FAIL{RESET}  {} {DIM}({}){RESET} — error: {}",
+                    test.name,
+                    test.rule_name,
+                    e.report().render()
+                );
+            } else if !json {
+                eprintln!(
+                    "FAIL  {} ({}) — error: {}",
+                    test.name,
+                    test.rule_name,
+                    e.report().render()
+                );
+            }
+            TestCaseReport {
+                name: test.name.clone(),
+                rule: test.rule_name.clone(),
+                passed: false,
+                output_count: 0,
+                failures: vec![msg],
+            }
+        }
+    }
+}
+
 pub fn run(
     file: PathBuf,
     schemas: Vec<String>,
     vars: Vec<String>,
     shuffle: bool,
     runs: Option<usize>,
+    gen_negatives: bool,
     format: String,
 ) -> WflResult<()> {
     if let Some(0) = runs {
@@ -132,65 +204,25 @@ pub fn run(
             effective_test.options = Some(opts);
         }
 
-        match run_test(&effective_test, plan, time_field) {
-            Ok(result) => {
-                if result.passed {
-                    if color {
-                        eprintln!(
-                            "{GREEN}PASS{RESET}  {} {DIM}({}){RESET}",
-                            test.name, test.rule_name
-                        );
-                    } else if !json {
-                        eprintln!("PASS  {} ({})", test.name, test.rule_name);
-                    }
-                } else {
-                    if color {
-                        eprintln!(
-                            "{RED}FAIL{RESET}  {} {DIM}({}){RESET}",
-                            test.name, test.rule_name
-                        );
-                        for f in &result.failures {
-                            eprintln!("      {RED}{f}{RESET}");
-                        }
-                    } else if !json {
-                        eprintln!("FAIL  {} ({})", test.name, test.rule_name);
-                        for f in &result.failures {
-                            eprintln!("      {}", f);
-                        }
-                    }
+        let baseline = run_one(&effective_test, plan, time_field.as_deref(), color, json);
+        let baseline_passed = baseline.passed;
+        cases.push(baseline);
+
+        // L2：基线通过后，追加 bind-guard 反例变体并逐个验证（hits 应不变）。
+        if gen_negatives && baseline_passed {
+            let negative_cases =
+                crate::gen_negatives::gen_negative_cases(plan, &effective_test);
+            if !negative_cases.is_empty() {
+                for nc in negative_cases {
+                    let mut variant = effective_test.clone();
+                    variant.name = format!("{} [neg: {}]", effective_test.name, nc.desc);
+                    variant.input = nc.input;
+                    // 反例变体保持原始行序 + 单轮：乱序会改变窗口行为 → 假失败。
+                    // 反例断言 = “追加反例行后 hits 不变”，须与基线同序可比。
+                    variant.options = None;
+                    let report = run_one(&variant, plan, time_field.as_deref(), color, json);
+                    cases.push(report);
                 }
-                cases.push(TestCaseReport {
-                    name: result.test_name,
-                    rule: result.rule_name,
-                    passed: result.passed,
-                    output_count: result.output_count,
-                    failures: result.failures,
-                });
-            }
-            Err(e) => {
-                let msg = e.report().render().to_string();
-                if color {
-                    eprintln!(
-                        "{RED}FAIL{RESET}  {} {DIM}({}){RESET} — error: {}",
-                        test.name,
-                        test.rule_name,
-                        e.report().render()
-                    );
-                } else if !json {
-                    eprintln!(
-                        "FAIL  {} ({}) — error: {}",
-                        test.name,
-                        test.rule_name,
-                        e.report().render()
-                    );
-                }
-                cases.push(TestCaseReport {
-                    name: test.name.clone(),
-                    rule: test.rule_name.clone(),
-                    passed: false,
-                    output_count: 0,
-                    failures: vec![msg],
-                });
             }
         }
     }

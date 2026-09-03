@@ -1,0 +1,41 @@
+use "match_expr_key_demo.wfs"
+
+rule group_by_normalized_entity {
+    events { s : security_events }
+    // 表达式派生 key（issue #80）：实体归一——ip/主机名/用户名缺一取余；
+    // coalesce 视空串为空值，需用非空兜底（"unknown"）才能稳定归组不丢事件。
+    let attacker_key = coalesce(s.source_ip, s.source_host, s.source_user, "unknown")
+    let target_key = coalesce(s.target_ip, s.target_host, "unknown")
+    // 普通字段位（log_type）与表达式派生 key 混用（issue #80）；accu：窗口内
+    // 同组每事件触发、输出累计命中。
+    match<s.log_type, attacker_key, target_key:10m> {
+        on event { s | count >= 1; }
+    } -> score(30.0)
+    entity(chars, attacker_key)
+    yield security_alerts (
+        attacker_key = attacker_key,
+        target_key = target_key,
+        log_type = s.log_type,
+        user = s.user,
+        action = s.action,
+        detail = "coalesce 归一实体作分组 key（issue #80）"
+    )
+
+    limits {
+        max_memory = "16MB";
+        max_instances = 1000;
+        on_exceed = throttle;
+    }
+}
+
+test group_attacker_by_normalized_entity for group_by_normalized_entity {
+  input {
+    // 5 行 → 5 个不同派生组：ip 命中 / 用户回退 / 主机回退 / 全缺兜底 unknown / target 兜底 unknown
+    row(s, source_ip = "10.0.0.8", target_ip = "192.168.1.10", log_type = "login", user = "alice", action = "failed", event_time = "2026-01-01T00:00:01Z");
+    row(s, source_user = "alice", target_ip = "192.168.1.11", log_type = "login", user = "alice", action = "failed", event_time = "2026-01-01T00:00:02Z");
+    row(s, source_host = "bob-ws", target_host = "db-02", log_type = "login", user = "bob", action = "ok", event_time = "2026-01-01T00:00:03Z");
+    row(s, target_ip = "172.16.0.1", log_type = "scan", user = "anon", action = "probe", event_time = "2026-01-01T00:00:04Z");
+    row(s, source_ip = "10.0.0.9", log_type = "login", user = "carol", action = "failed", event_time = "2026-01-01T00:00:05Z");
+  }
+  expect { hits == 5; }
+}

@@ -1,0 +1,28 @@
+window security_events {
+    stream_tag = "security"
+    time = event_time
+    over = 24h
+    fields {
+        source_ip: chars
+        source_host: chars
+        source_user: chars
+        target_ip: chars
+        target_host: chars
+        log_type: chars
+        user: chars
+        action: chars
+        event_time: time
+    }
+}
+
+window security_alerts {
+    over = 0
+    fields {
+        attacker_key: chars
+        target_key: chars
+        log_type: chars
+        user: chars
+        action: chars
+        detail: chars
+    }
+}

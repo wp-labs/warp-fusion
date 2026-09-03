@@ -1,0 +1,7 @@
+connect = "file_src"
+enable = true
+key = "seed_security"
+
+path = "data/security_events.ndjson"
+stream_tag = "security"
+data_format = "ndjson"

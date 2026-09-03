@@ -1,0 +1,5 @@
+{"_stream":"security","source_ip":"10.0.0.8","target_ip":"192.168.1.10","log_type":"login","user":"alice","action":"failed","event_time":"2026-01-01T00:00:01Z"}
+{"_stream":"security","source_user":"alice","target_ip":"192.168.1.11","log_type":"login","user":"alice","action":"failed","event_time":"2026-01-01T00:00:02Z"}
+{"_stream":"security","source_host":"bob-ws","target_host":"db-02","log_type":"login","user":"bob","action":"ok","event_time":"2026-01-01T00:00:03Z"}
+{"_stream":"security","target_ip":"172.16.0.1","log_type":"scan","user":"anon","action":"probe","event_time":"2026-01-01T00:00:04Z"}
+{"_stream":"security","source_ip":"10.0.0.9","log_type":"login","user":"carol","action":"failed","event_time":"2026-01-01T00:00:05Z"}

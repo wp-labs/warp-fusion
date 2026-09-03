@@ -22,20 +22,54 @@
 
 ## 快速开始
 
-构建（需要 Rust stable，workspace 依赖 wp-reactor 引擎 crates）：
+### 安装（推荐）
+
+一行命令安装 `warp-fusion` 套件（`wfusion` 引擎及配套 CLI，默认装到 `~/bin`）：
+
+```bash
+# stable（默认通道，推荐生产）
+curl -sSf https://get.warpparse.ai/inst-x.sh | bash -s -- wfusion
+
+# 预发布通道：alpha / beta（新语法验证、与引擎开发线对齐时使用）
+curl -sSf https://get.warpparse.ai/inst-x.sh | bash -s -- wfusion alpha
+curl -sSf https://get.warpparse.ai/inst-x.sh | bash -s -- wfusion beta
+```
+
+安装后确保 `~/bin` 在 PATH 中（脚本会提示）：
+
+```bash
+export PATH="$HOME/bin:$PATH"
+```
+
+### 快速体验（示例项目集合）
+
+示例项目在独立仓库 [wf-examples](https://github.com/wp-labs/wf-examples)。最简路径
+`getting_started/` 一条命令验证完整 CEP 管道（`wfadm init` 生成 17 规则项目 →
+lint → 生成 3 万事件演示数据 → batch 回放产出 654 条 `port_scan` 告警 → TCP
+daemon 实时联调）：
+
+```bash
+# 确保 wfadm / wfusion / wfgen 在 PATH（见上方安装 / 源码构建；前置细节以
+# wf-examples/getting_started 的 README 为准），然后：
+git clone https://github.com/wp-labs/wf-examples
+cd wf-examples/getting_started
+./run.sh
+```
+
+更多场景（安全检测规则库 / NEXMark 基准）见仓库内 [core](https://github.com/wp-labs/wf-examples/tree/main/core) 与 [performance](https://github.com/wp-labs/wf-examples/tree/main/performance)。
+
+> 引擎仓库内也带可运行的安全检测规则集（`examples/rules/`，随源码构建使用），
+> 矩阵见 [examples/rules/README.md](examples/rules/README.md)。
+
+### 从源码构建（可选）
+
+需要 Rust stable（workspace 依赖 wp-reactor 引擎 crates）：
 
 ```bash
 cargo build --release --bin wfusion --bin wfl
 ```
 
-跑通第一个安全检测 demo（含 lint → 内联测试 → 数据回放 → 输出断言全流程）：
-
-```bash
-cd examples/rules/ssh_brute_force
-./run.sh release          # 或 ./run.sh 用 debug 构建
-```
-
-跑全部示例（约 20 个规则工程，逐个 lint / 内联测试 / batch 回放）：
+构建后可跑示例自带的全流程脚本（约 20 个规则工程，逐个 lint / 内联测试 / batch 回放）：
 
 ```bash
 ./examples/rules/run_all.sh release
@@ -128,7 +162,7 @@ rule ssh_brute_force {
 
 | 杠杆               | 砍掉了什么                                                 |
 | ------------------ | ---------------------------------------------------------- |
-| **列式批式向量化** | 逐事件对象分配 + 解释器分发                                |
+| **列批式向量化**  | 逐事件对象分配 + 解释器分发                                |
 | **数据零拷贝**     | 消灭 Event→Record→DataRecord 多层拷贝                      |
 | **内存精确控制**   | 窗口数据仅过期且被下游全部消费后才释放、数据预读总量设上限 |
 | **Rust vs Java**   | 免去 Java 系引擎（Flink 等）的 JVM GC 停顿                 |
@@ -136,7 +170,7 @@ rule ssh_brute_force {
 
 ## 边界声明
 
-上述领先在**「引擎纯算力 / 单机内存」隔离维度**测得：当前为**单机、纯内存、无 exactly-once / checkpoint / 分布式协调开销**。NEXMark 为合成基准，结论作**能力参照**而非生产 SLA 承诺；生产级容错、分布式与有状态一致性补齐后方可对等比较。
+上述领先在**「引擎纯算力 / 单机内存」隔离维度**测得：当前为**单机、无 exactly-once / checkpoint(规划) / 分布式协调开销**。NEXMark 为合成基准，结论作**能力参照**而非生产 SLA 承诺；生产级容错、分布式与有状态一致性补齐后方可对等比较。
 
 ## License
 

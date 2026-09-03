@@ -2,6 +2,25 @@
 
 本文件记录 `wfusion` / `wfl` / `wfgen` / `wfadm` 面向使用者的变更。内部实现细节、依赖版本对齐和测试计数不在此展开。
 
+## [0.5.6]
+
+### 语言（WFL，对齐 wp-reactor 2.0.15）
+
+- **match 分组 key 支持函数/字面量派生表达式（issue #80）**：`coalesce(s.a, s.b, "unknown")` / `concat` / `case` / 字面量等表达式的求值结果可直接作窗口分组 key（`match<k:10m>`），与普通字段 key 混用；`let` 引用链编译期展开为纯事件表达式。
+  - 缺失语义：`coalesce` 将空串视为空值，需非空兜底（如 `"unknown"`）才稳定归组不丢事件；无回退且求值为空时与 key 缺失一致（事件不入组）。
+  - 表达式派生 key 支持 `rule_shards` 分片：同派生键事件恒入同分片，跨事件窗口聚合状态完整。
+  - 窗口统计/查询类与 `now*` 时间函数不可作 key（checker 编译期报错）。
+  - 示例：`examples/rules/match_expr_key_demo`（coalesce 实体归一作分组键）。
+- `match_let_demo` 示例补充 let 派生字段作 match key 的写法（issue #83 形态，与直接写字段结果一致）。
+
+### wfl
+
+- **`wfl verify` EOF 收口修正（issue #23）**：对 span 短于窗口的验证数据，`and close` 规则不再等窗口自然过期——EOF 统一 close 剩余实例，verify 与 oracle 命中一致。
+
+### 引擎（对齐 wp-reactor 2.0.15）
+
+- 对齐 wp-reactor v2.0.15（match 表达式派生 key、fanout 表达式分片、异步落盘等待看门狗等）。
+
 ## [0.5.5]
 
 ### 语言（WFL）

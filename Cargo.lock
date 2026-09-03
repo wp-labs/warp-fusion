@@ -5520,7 +5520,7 @@ dependencies = [
  "serde",
  "serde_json",
  "toml",
- "wf-lang",
+ "wf-lang 2.0.15",
  "wildmatch",
  "wp-connector-api",
 ]
@@ -5572,10 +5572,21 @@ dependencies = [
  "tokio",
  "tokio-util",
  "wf-config",
- "wf-lang",
+ "wf-lang 2.0.15",
  "wildmatch",
  "wp-connector-api",
  "wp-model-core",
+]
+
+[[package]]
+name = "wf-lang"
+version = "2.0.11"
+source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v2.0.11#39062d897d6d62345ab01f13b0741b658a9801f4"
+dependencies = [
+ "moju-derive",
+ "orion-error",
+ "regex-syntax",
+ "winnow",
 ]
 
 [[package]]
@@ -5633,7 +5644,7 @@ dependencies = [
  "wf-connector-api",
  "wf-data",
  "wf-engine",
- "wf-lang",
+ "wf-lang 2.0.15",
  "wp-arrow",
  "wp-connector-api",
  "wp-core-connectors",
@@ -5655,7 +5666,7 @@ dependencies = [
  "tracing",
  "ureq",
  "wf-config",
- "wf-lang",
+ "wf-lang 2.0.11",
  "wf-project-remote",
  "wp-connector-api",
  "wp-connectors",
@@ -5684,7 +5695,7 @@ dependencies = [
  "tracing-subscriber",
  "wf-config",
  "wf-engine",
- "wf-lang",
+ "wf-lang 2.0.11",
  "wf-runtime",
  "winnow",
  "wp-arrow",
@@ -5706,7 +5717,7 @@ dependencies = [
  "wf-config",
  "wf-data",
  "wf-engine",
- "wf-lang",
+ "wf-lang 2.0.11",
  "wfgen",
 ]
 

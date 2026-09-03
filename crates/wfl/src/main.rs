@@ -152,6 +152,32 @@ enum Commands {
         #[arg(long, default_value = "human")]
         format: String,
     },
+
+    /// Run detection-intent samples (.wfi) against compiled rules (L3)
+    ///
+    /// 意图文件 = 纯 test 块集合：expect { hits >= 1 } 是正样本（漏报检查：
+    /// 该检出），expect { hits == 0 } 是负样本（误报检查：不该检出）。
+    #[command(name = "intent")]
+    Intent {
+        /// Path to the .wfl rule file (the rules under test)
+        file: PathBuf,
+
+        /// Path to the .wfi intent samples file (test-block-only subset of .wfl)
+        #[arg(long)]
+        intent: PathBuf,
+
+        /// Schema file glob patterns (e.g. "schemas/*.wfs")
+        #[arg(short, long, default_value = "schemas/*.wfs")]
+        schemas: Vec<String>,
+
+        /// Variable substitutions in KEY=VALUE format
+        #[arg(long)]
+        var: Vec<String>,
+
+        /// Output format: "human" (default) or "json"
+        #[arg(long, default_value = "human")]
+        format: String,
+    },
 }
 
 fn main() {
@@ -228,6 +254,16 @@ fn run_cli() -> WflResult<()> {
             format,
         } => {
             wfl::cmd_test::run(file, schemas, var, shuffle, runs, gen_negatives, format)?;
+        }
+
+        Commands::Intent {
+            file,
+            intent,
+            schemas,
+            var,
+            format,
+        } => {
+            wfl::cmd_intent::run(file, intent, schemas, var, format)?;
         }
     }
 

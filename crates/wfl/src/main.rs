@@ -178,6 +178,28 @@ enum Commands {
         #[arg(long, default_value = "human")]
         format: String,
     },
+
+    /// Recommend rule memory limits from a metrics.ndjson run (memory-limits.md)
+    ///
+    /// 读 bench/diag/verify 跑出的 metrics.ndjson，按 rule.instances /
+    /// rule.memory_bytes 峰值给出建议：max_memory / max_instances = 峰值 × headroom。
+    #[command(name = "limits-est")]
+    LimitsEst {
+        /// metrics.ndjson 路径（bench.sh/diag.sh/verify_daemon.sh 产物）
+        metrics: PathBuf,
+
+        /// 只评估指定规则（缺省 = 全部）
+        #[arg(long)]
+        rule: Option<String>,
+
+        /// 建议余量倍数（文档推荐 1.5–3，默认 2）
+        #[arg(long, default_value = "2.0")]
+        headroom: f64,
+
+        /// Output format: "human" (default) or "json"
+        #[arg(long, default_value = "human")]
+        format: String,
+    },
 }
 
 fn main() {
@@ -264,6 +286,15 @@ fn run_cli() -> WflResult<()> {
             format,
         } => {
             wfl::cmd_intent::run(file, intent, schemas, var, format)?;
+        }
+
+        Commands::LimitsEst {
+            metrics,
+            rule,
+            headroom,
+            format,
+        } => {
+            wfl::cmd_limits_est::run(metrics, rule, headroom, format)?;
         }
     }
 

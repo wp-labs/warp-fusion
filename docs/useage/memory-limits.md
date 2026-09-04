@@ -104,6 +104,18 @@ E = 单 key 窗口内保留事件上界（= 事件率 × `over` 窗口长，有�
 3. **读实测**：metrics.ndjson 的 `rule.instances` + `rule.memory_bytes` 峰值；
 4. **收紧为保险丝**：`max_memory = 峰值 × (1.5–3×)`，`max_instances = 实例峰值 × (2–3×)`。
 
+第 3–4 步有现成指令（wfl，读一次 bench/diag 产出的 metrics.ndjson）：
+
+```bash
+wfl limits-est data/metrics.ndjson --rule q12_bidder_10s_window_count --headroom 2
+# rule                            inst峰值      mem峰值       B/实例  建议 max_memory = 峰值×2.0   建议 max_instances
+# q12_bidder_10s_window_count       2841      8.4MB       3114  17.0MB    (上限 2.0×)        5682 (上限 2.0×)
+# --format json → wfl-limits-est/v1（AI/CI 可消费）
+```
+
+命令逐条说明：`rule.memory_bytes` 全 0 时提示成因（未配 max_memory 引擎不记账 / stats 族规则），
+建议值向上取整到整 MiB/KiB；headroom 默认 2.0（文档推荐 1.5–3）。
+
 **上限是"保险丝"不是"工作带"**：日常工作负载应远低于上限；撞上限意味着"负载超出设计"
 开始丢新 key/逐出——**定太低会静默漏检**（metrics `[clean]` 照常，这是性能验证里最危险的
 坑），定太高失去防 OOM 意义。

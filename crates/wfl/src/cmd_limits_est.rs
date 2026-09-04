@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::path::PathBuf;
 
 use orion_error::conversion::SourceErr;
@@ -23,6 +24,9 @@ pub struct RuleLimitEst {
     pub suggested_max_memory_bytes: u64,
     /// 建议 max_instances = peak_instances × headroom。
     pub suggested_max_instances: u64,
+    /// 建议 max_memory 的向上取整档位（GiB/MiB/KiB/B）——写回 `limits { max_memory = "17MB" }`
+    /// 时整数单位的来源；配合 peak_memory_bytes × headroom 可完整复核建议值。
+    pub memory_granularity: &'static str,
 }
 
 /// `wfl limits-est --format json` 报告（schema v1）。
@@ -41,6 +45,35 @@ pub struct LimitsEstReport {
 
 const ZERO_NOTE: &str = "rule.memory_bytes 全 0：规则未配 max_memory（引擎不记账）或属 stats 族 \
     规则（见 docs/useage/memory-limits.md §3 边界）——先配宽上限重跑真实负载再收紧";
+
+/// 全规则均 stats 族（metrics 含 stats_over_limit_total 采样）时的提示——stats 执行器
+/// 不在 rule.memory_bytes/instances 记账内（恒 0），重跑也出不来数，需换口径。
+const STATS_NOTE: &str = "全部规则属 stats 族（metrics 含 stats_over_limit_total 采样）：\
+    rule.memory_bytes / instances 不覆盖该执行器（恒 0）——本指令只校准 match/CEP 规则；\
+    stats 族规则容量看 stats_over_limit_total 拒收计数与全局内存预算（memory-limits.md §3 边界）";
+
+/// 从 metrics.ndjson 收集有 `stats_over_limit_total` 采样的规则（stats 执行器标记）。
+///
+/// stats 族规则（如 nexmark q15–q18/q22 形态）走自己 guard/计数，`rule.memory_bytes` /
+/// `instances` 恒 0——靠这个标记把"stats 族（重跑无效）"与"未配 max_memory（重跑有效）"分开。
+fn collect_stats_labels(lines: &str) -> HashSet<String> {
+    let mut out = HashSet::new();
+    for line in lines.lines() {
+        let Ok(v) = serde_json::from_str::<serde_json::Value>(line) else {
+            continue;
+        };
+        if v.get("stage").and_then(|x| x.as_str()) != Some("rule") {
+            continue;
+        }
+        if v.get("name").and_then(|x| x.as_str()) != Some("stats_over_limit_total") {
+            continue;
+        }
+        if let Some(lb) = v.get("label").and_then(|x| x.as_str()) {
+            out.insert(lb.to_string());
+        }
+    }
+    out
+}
 
 /// 从 metrics.ndjson 文本统计每规则峰值（纯函数，可单测）。
 ///
@@ -72,7 +105,11 @@ fn peak_per_rule(lines: &str) -> Vec<(String, u64, u64)> {
         // metrics 行 value 是字符串形态（`"value":"2841"`）；也兼容纯数字。
         let val: u64 = v
             .get("value")
-            .and_then(|x| x.as_str().and_then(|s| s.parse().ok()).or_else(|| x.as_u64()))
+            .and_then(|x| {
+                x.as_str()
+                    .and_then(|s| s.parse().ok())
+                    .or_else(|| x.as_u64())
+            })
             .unwrap_or(0);
         if !order.iter().any(|r| r == label) {
             order.push(label.to_string());
@@ -107,28 +144,87 @@ fn upsert_max(acc: &mut Vec<(String, u64)>, label: &str, val: u64) {
     }
 }
 
-/// 计算建议（纯函数）：cap = 峰值 × headroom。
+/// 计算建议（纯函数）：cap = 峰值 × headroom；内存再向上取整到整洁档位。
 fn estimate(rule: &str, peak_instances: u64, peak_memory: u64, headroom: f64) -> RuleLimitEst {
     let avg = if peak_instances > 0 {
         peak_memory as f64 / peak_instances as f64
     } else {
         0.0
     };
+    let (rounded_mem, gran) = round_bytes_unit(peak_memory as f64 * headroom);
     RuleLimitEst {
         rule: rule.to_string(),
         peak_instances,
         peak_memory_bytes: peak_memory,
         avg_bytes_per_instance: avg,
-        suggested_max_memory_bytes: round_bytes(peak_memory as f64 * headroom),
+        suggested_max_memory_bytes: rounded_mem,
         suggested_max_instances: (peak_instances as f64 * headroom).round() as u64,
+        memory_granularity: gran,
     }
 }
 
+/// 逐规则推导行（纯函数，可单测）——把建议值还原成可复核的算术。
+/// `stats` = 有 stats_over_limit_total 采样的规则集（stats 族标记）。
+fn derivation_lines(est: &RuleLimitEst, headroom: f64, stats: &HashSet<String>) -> Vec<String> {
+    let mut lines = Vec::new();
+    let rule = &est.rule;
+    if est.peak_instances == 0 && est.peak_memory_bytes == 0 {
+        if stats.contains(rule) {
+            lines.push(format!(
+                "  {rule}: stats 族规则（metrics 含 stats_over_limit_total）——不在 \
+                 rule.memory_bytes/instances 记账内（恒 0），本指令无法校准；看 \
+                 stats_over_limit_total 拒收计数与全局内存预算（memory-limits.md §3）"
+            ));
+        } else {
+            lines.push(format!(
+                "  {rule}: 两指标记账值均 0（无有效采样）——若已配 max_memory 仍全 0 = 引擎不记账/\
+                 stats 族；否则先配宽上限跑真实负载再收紧"
+            ));
+        }
+        return lines;
+    }
+    if est.peak_instances == 0 {
+        lines.push(format!(
+            "  {rule}: 无 instances 采样（memory_bytes 有值）——只能估内存，max_instances 无实测基准"
+        ));
+    } else {
+        lines.push(format!(
+            "  {rule}: max_instances = round({} × {headroom:.1}) = {}",
+            est.peak_instances, est.suggested_max_instances
+        ));
+    }
+    if est.peak_memory_bytes == 0 {
+        if stats.contains(rule) {
+            lines.push(format!(
+                "          max_memory 恒 0：stats 族规则不走 memory_bytes 记账（见 memory-limits.md §3）——\
+                 看 stats_over_limit_total 与全局预算，本指令给不出建议"
+            ));
+        } else {
+            lines.push(format!(
+                "          max_memory 无实测：memory_bytes 全 0（未配 max_memory 引擎不记账 / stats 族规则）——先设宽上限重跑再收紧"
+            ));
+        }
+    } else {
+        let scaled = (est.peak_memory_bytes as f64 * headroom).round() as u64;
+        lines.push(format!(
+            "          max_memory = {}B × {headroom:.1} = {}B → 向上取整到 {} → {}B（{}）",
+            fmt_thousands(est.peak_memory_bytes),
+            fmt_thousands(scaled),
+            est.memory_granularity,
+            fmt_thousands(est.suggested_max_memory_bytes),
+            fmt_bytes(est.suggested_max_memory_bytes),
+        ));
+    }
+    lines
+}
+
 /// 过滤 + 估算 + 全零提示（纯函数，可单测）。`filter=None` = 全部规则。
+/// `stats` = stats 族标记集，用于区分全零成因（重跑有效 vs 无效）。
 fn assess(
     rows: Vec<(String, u64, u64)>,
     filter: Option<&str>,
     headroom: f64,
+    stats: &HashSet<String>,
 ) -> (Vec<RuleLimitEst>, Option<String>) {
     let mut rules = Vec::new();
     for (rule, inst, mem) in rows {
@@ -140,25 +236,45 @@ fn assess(
         rules.push(estimate(&rule, inst, mem, headroom));
     }
     let note = if !rules.is_empty() && rules.iter().all(|e| e.peak_memory_bytes == 0) {
-        Some(ZERO_NOTE.to_string())
+        if rules.iter().all(|e| stats.contains(&e.rule)) {
+            Some(STATS_NOTE.to_string())
+        } else {
+            Some(ZERO_NOTE.to_string())
+        }
     } else {
         None
     };
     (rules, note)
 }
 
-/// 建议值向上取整到整洁粒度：≥1GiB 取 GiB、≥1MiB 取 MiB、≥1KiB 取 KiB，否则
-/// 原字节——可写回 `limits { max_memory = "19MB" }`（向上取保守侧）。
-fn round_bytes(v: f64) -> u64 {
-    if v >= 1073741824.0 {
-        (v / 1073741824.0).ceil() as u64 * 1073741824
-    } else if v >= 1048576.0 {
-        (v / 1048576.0).ceil() as u64 * 1048576
-    } else if v >= 1024.0 {
-        (v / 1024.0).ceil() as u64 * 1024
+/// 建议值向上取整到整洁粒度（≥1GiB 取 GiB、≥1MiB 取 MiB、≥1KiB 取 KiB，否则原字节）
+/// 并返回档位——档位供推导输出/JSON 复核（取整单位与取值同源，避免只给值推不出单位）。
+fn round_bytes_unit(v: f64) -> (u64, &'static str) {
+    const GIB: f64 = 1073741824.0;
+    const MIB: f64 = 1048576.0;
+    const KIB: f64 = 1024.0;
+    if v >= GIB {
+        ((v / GIB).ceil() as u64 * GIB as u64, "GiB")
+    } else if v >= MIB {
+        ((v / MIB).ceil() as u64 * MIB as u64, "MiB")
+    } else if v >= KIB {
+        ((v / KIB).ceil() as u64 * KIB as u64, "KiB")
     } else {
-        v.ceil() as u64
+        (v.ceil() as u64, "B")
     }
+}
+
+/// 千分位（8,848,081）——推导输出里原字节数可复核。
+fn fmt_thousands(v: u64) -> String {
+    let s = v.to_string();
+    let mut out = String::with_capacity(s.len() + s.len() / 3);
+    for (i, ch) in s.chars().enumerate() {
+        if i > 0 && (s.len() - i) % 3 == 0 {
+            out.push(',');
+        }
+        out.push(ch);
+    }
+    out
 }
 
 fn fmt_bytes(v: u64) -> String {
@@ -203,7 +319,8 @@ pub fn run(
     rows.sort_by(|a, b| a.0.cmp(&b.0));
     // 可用规则名先收集（rows 随后被 assess 消费）。
     let avail: Vec<String> = rows.iter().map(|(r, _, _)| r.clone()).collect();
-    let (rules, note) = assess(rows, rule_filter.as_deref(), headroom);
+    let stats = collect_stats_labels(&content);
+    let (rules, note) = assess(rows, rule_filter.as_deref(), headroom, &stats);
     if rules.is_empty() {
         return error::fail(
             WflReason::Validation,
@@ -246,9 +363,15 @@ pub fn run(
                 r.suggested_max_instances,
             );
         }
+        println!("\n推导（headroom={headroom:.1}）:");
+        for r in &rules {
+            for line in derivation_lines(r, headroom, &stats) {
+                println!("{line}");
+            }
+        }
         println!(
-            "\n建议 = 实测峰值 × {headroom:.1} 余量（保险丝，非工作带）；先配宽上限跑最坏负载、\
-             收紧后跑 oracle 对拍防静默丢（memory-limits.md §4–5）"
+            "\n口径：建议 = 实测峰值 × headroom（内存再向上取整到整洁档位）；上限是保险丝非工作带——\
+             先设宽跑最坏负载、收紧后 oracle 对拍防静默丢（memory-limits.md §4–5）"
         );
     }
     Ok(())
@@ -268,9 +391,10 @@ mod tests {
             r#"{"stage":"rule","name":"memory_bytes","label":"r_heavy","value":"9500000"}"#,
             r#"{"stage":"rule","name":"instances","label":"r_heavy","value":"0"}"#,
             r#"{"stage":"rule","name":"memory_bytes","label":"r_heavy","value":"0"}"#,
-            // 第二规则：有实例无内存（stats 族/未配 max_memory → 恒 0）。
+            // 第二规则：有实例无内存——stats 族标记（stats_over_limit_total）应被识别。
             r#"{"stage":"rule","name":"instances","label":"r_stats","value":"88"}"#,
             r#"{"stage":"rule","name":"memory_bytes","label":"r_stats","value":"0"}"#,
+            r#"{"stage":"rule","name":"stats_over_limit_total","label":"r_stats","value":"3"}"#,
             // 噪声行（非 rule / 其它指标 / 坏 JSON）应跳过。
             r#"{"stage":"window","name":"rows","label":"w1","value":"99"}"#,
             r#"{"stage":"rule","name":"events_total","label":"r_heavy","value":"42"}"#,
@@ -327,19 +451,49 @@ mod tests {
 
     #[test]
     fn assess_filters_and_note_only_when_all_zero() {
-        // 全 0 → note；带过滤。
-        let (rules, note) = assess(peak_per_rule(&sample_metrics()), Some("r_stats"), 2.0);
+        let stats = collect_stats_labels(&sample_metrics());
+        // 全 0 → note；带过滤（r_stats 是 stats 族 → STATS_NOTE 而非通用 ZERO_NOTE）。
+        let (rules, note) = assess(
+            peak_per_rule(&sample_metrics()),
+            Some("r_stats"),
+            2.0,
+            &stats,
+        );
         assert_eq!(rules.len(), 1);
         assert_eq!(rules[0].rule, "r_stats");
-        assert!(note.is_some());
+        let n = note.expect("all-zero 应有 note");
+        assert!(n.contains("stats_over_limit_total"), "{n}");
         // 非全 0（heavy 参与）→ 无 note。
-        let (rules, note) = assess(peak_per_rule(&sample_metrics()), None, 2.0);
+        let (rules, note) = assess(peak_per_rule(&sample_metrics()), None, 2.0, &stats);
         assert_eq!(rules.len(), 2);
         assert!(note.is_none());
         // 过滤未命中 → 空 + 无 note。
-        let (rules, note) = assess(peak_per_rule(&sample_metrics()), Some("nope"), 2.0);
+        let (rules, note) = assess(peak_per_rule(&sample_metrics()), Some("nope"), 2.0, &stats);
         assert!(rules.is_empty());
         assert!(note.is_none());
+        // 未配 max_memory 的全零规则（metrics 无 stats 标记）→ 通用 ZERO_NOTE（重跑有效）。
+        let txt = concat!(
+            r#"{"stage":"rule","name":"instances","label":"r_unset","value":"0"}"#,
+            "\n",
+            r#"{"stage":"rule","name":"memory_bytes","label":"r_unset","value":"0"}"#,
+            "\n",
+        );
+        let (rules, note) = assess(peak_per_rule(txt), None, 2.0, &collect_stats_labels(txt));
+        assert_eq!(rules.len(), 1);
+        let n = note.expect("全零未标记应有 ZERO_NOTE");
+        assert!(
+            n.contains("max_memory") && !n.contains("stats_over_limit_total"),
+            "{n}"
+        );
+    }
+
+    #[test]
+    fn collect_stats_labels_finds_stats_family_rules() {
+        let stats = collect_stats_labels(&sample_metrics());
+        assert!(stats.contains("r_stats"));
+        assert!(!stats.contains("r_heavy")); // 非 stats 族不带标记
+        // 无 stats 计数 → 空集。
+        assert!(collect_stats_labels("{\"stage\":\"window\"}\n").is_empty());
     }
 
     #[test]
@@ -367,11 +521,93 @@ mod tests {
 
     #[test]
     fn round_bytes_picks_readable_granularity() {
-        assert_eq!(round_bytes(19_000_000.0), 19 * 1048576); // → 19 MiB
-        assert_eq!(round_bytes(60_000.0), 59 * 1024); // 58.6 KiB → 59 KiB
-        assert_eq!(round_bytes(500.0), 500); // B
+        assert_eq!(round_bytes_unit(19_000_000.0), (19 * 1048576, "MiB")); // → 19 MiB
+        assert_eq!(round_bytes_unit(60_000.0), (59 * 1024, "KiB")); // 58.6 KiB → 59 KiB
+        assert_eq!(round_bytes_unit(500.0), (500, "B")); // B
         // GB 档：15 GiB 级规则（q18 画像）向上取整到 GiB。
-        assert_eq!(round_bytes(15.0 * 1073741824.0 + 1.0), 16 * 1073741824);
+        assert_eq!(
+            round_bytes_unit(15.0 * 1073741824.0 + 1.0),
+            (16 * 1073741824, "GiB")
+        );
+    }
+
+    #[test]
+    fn estimate_records_memory_granularity_tier() {
+        // 档位随缩放后量级走：MiB / KiB / B / GiB。
+        let heavy = estimate("h", 10, 9_500_000, 2.0); // 19MiB 级
+        assert_eq!(heavy.memory_granularity, "MiB");
+        assert_eq!(heavy.suggested_max_memory_bytes, 19 * 1048576);
+        let small = estimate("s", 1, 500, 2.0); // 1000B → B 档
+        assert_eq!(small.memory_granularity, "B");
+        assert_eq!(small.suggested_max_memory_bytes, 1000);
+        let big = estimate("g", 1, 8 * 1073741824, 2.0); // 16GiB 级
+        assert_eq!(big.memory_granularity, "GiB");
+        assert_eq!(big.suggested_max_memory_bytes, 16 * 1073741824);
+    }
+
+    #[test]
+    fn derivation_lines_replay_arithmetic_per_shape() {
+        let no_stats = HashSet::new();
+        // 正常形态：实例与内存推导行都能手算复核。
+        let est = estimate("r_heavy", 2841, 9_500_000, 2.0);
+        let lines = derivation_lines(&est, 2.0, &no_stats);
+        assert_eq!(lines.len(), 2);
+        assert!(
+            lines[0].contains("max_instances = round(2841 × 2.0) = 5682"),
+            "{}",
+            lines[0]
+        );
+        assert!(
+            lines[1].contains("max_memory = 9,500,000B × 2.0 = 19,000,000B")
+                && lines[1].contains("向上取整到 MiB")
+                && lines[1].contains("19,922,944B（19.0MB）"),
+            "{}",
+            lines[1]
+        );
+        // stats 族（有 stats_over_limit_total 标记）：明示执行器边界，不误导重跑。
+        let mut stats = HashSet::new();
+        stats.insert("r_stats".to_string());
+        let est = estimate("r_stats", 88, 0, 2.0);
+        let lines = derivation_lines(&est, 2.0, &stats);
+        assert!(lines[1].contains("stats 族"), "{}", lines[1]);
+        assert!(!lines[1].contains("先设宽上限重跑"), "{}", lines[1]);
+        // 两指标均 0 且非 stats 标记（未配 max_memory 但引擎确实没记账）。
+        let est = estimate("r_none", 0, 0, 2.0);
+        let lines = derivation_lines(&est, 2.0, &no_stats);
+        assert_eq!(lines.len(), 1);
+        assert!(lines[0].contains("两指标记账值均 0"), "{}", lines[0]);
+    }
+
+    #[test]
+    fn derivation_lines_flag_both_zero_stats_rule() {
+        // 用户实跑的 q18 形态：stats 族 + instances/memory 双 0 → 直接指向 §3 边界。
+        let mut stats = HashSet::new();
+        stats.insert("q18_last_bid_stats".to_string());
+        let est = estimate("q18_last_bid_stats", 0, 0, 2.0);
+        let lines = derivation_lines(&est, 2.0, &stats);
+        assert_eq!(lines.len(), 1);
+        assert!(lines[0].contains("stats 族规则"), "{}", lines[0]);
+        assert!(lines[0].contains("memory-limits.md §3"), "{}", lines[0]);
+    }
+
+    #[test]
+    fn derivation_shows_which_suggestion_lacks_basis() {
+        let no_stats = HashSet::new();
+        // mem-only（instances 缺采样）：内存可估、实例数无基准——必须明示，防抄错。
+        let est = estimate("mem_only", 0, 7_000, 2.0);
+        let lines = derivation_lines(&est, 2.0, &no_stats);
+        assert!(lines[0].contains("无 instances 采样"), "{}", lines[0]);
+        assert!(lines[1].contains("max_memory = 7,000B"), "{}", lines[1]);
+        assert_eq!(est.suggested_max_instances, 0);
+    }
+
+    #[test]
+    fn fmt_thousands_groups_digits() {
+        assert_eq!(fmt_thousands(8_848_081), "8,848,081");
+        assert_eq!(fmt_thousands(19_922_944), "19,922,944");
+        assert_eq!(fmt_thousands(500), "500");
+        assert_eq!(fmt_thousands(1_000), "1,000");
+        assert_eq!(fmt_thousands(0), "0");
     }
 
     #[test]

@@ -173,4 +173,5 @@ max_regression_pct = 20
 
 - 契约测试语法（input/expect 权威）：wp-reactor [rule-writing.md](../../../wp-reactor/docs/user-guide/rule-writing.md)
 - 规则/配置语言：[rules.md](rules.md) · [schema.md](config/schema.md)
+- 规则内存上限校准（limits.max_memory 怎么定）：[memory-limits.md](memory-limits.md)
 - 性能口径（忙墙/等墙、墙梯）：wp-reactor perf-diag 设计（L4 门禁与其逐行同口径）

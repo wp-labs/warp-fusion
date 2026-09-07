@@ -1321,7 +1321,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -1936,7 +1936,7 @@ dependencies = [
  "libc",
  "percent-encoding",
  "pin-project-lite",
- "socket2 0.5.10",
+ "socket2 0.6.5",
  "system-configuration",
  "tokio",
  "tower-service",
@@ -3326,7 +3326,7 @@ dependencies = [
  "quinn-udp",
  "rustc-hash",
  "rustls",
- "socket2 0.5.10",
+ "socket2 0.6.5",
  "thiserror 2.0.20",
  "tokio",
  "tracing",
@@ -3365,9 +3365,9 @@ dependencies = [
  "cfg_aliases",
  "libc",
  "once_cell",
- "socket2 0.5.10",
+ "socket2 0.6.5",
  "tracing",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -3800,7 +3800,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -3859,7 +3859,7 @@ dependencies = [
  "security-framework",
  "security-framework-sys",
  "webpki-root-certs",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -4784,7 +4784,7 @@ dependencies = [
  "getrandom 0.4.3",
  "once_cell",
  "rustix",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -5545,7 +5545,7 @@ dependencies = [
  "sha1 0.11.0",
  "sha2 0.11.0",
  "smol_str",
- "wf-lang",
+ "wf-lang 2.0.21",
 ]
 
 [[package]]
@@ -5560,7 +5560,7 @@ dependencies = [
  "serde",
  "serde_json",
  "toml",
- "wf-lang",
+ "wf-lang 2.0.21",
  "wildmatch",
  "wp-connector-api",
 ]
@@ -5613,10 +5613,21 @@ dependencies = [
  "tokio-util",
  "wf-cep",
  "wf-config",
- "wf-lang",
+ "wf-lang 2.0.21",
  "wildmatch",
  "wp-connector-api",
  "wp-model-core",
+]
+
+[[package]]
+name = "wf-lang"
+version = "2.0.17"
+source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v2.0.17#af58c2ca583478c6721c9e9e096e78ce9dd30a72"
+dependencies = [
+ "moju-derive",
+ "orion-error",
+ "regex-syntax",
+ "winnow",
 ]
 
 [[package]]
@@ -5674,7 +5685,7 @@ dependencies = [
  "wf-connector-api",
  "wf-data",
  "wf-engine",
- "wf-lang",
+ "wf-lang 2.0.21",
  "wp-arrow",
  "wp-connector-api",
  "wp-core-connectors",
@@ -5684,7 +5695,7 @@ dependencies = [
 
 [[package]]
 name = "wfadm"
-version = "0.5.9"
+version = "0.5.10"
 dependencies = [
  "clap",
  "comfy-table",
@@ -5696,7 +5707,7 @@ dependencies = [
  "tracing",
  "ureq",
  "wf-config",
- "wf-lang",
+ "wf-lang 2.0.17",
  "wf-project-remote",
  "wp-connector-api",
  "wp-connectors",
@@ -5706,7 +5717,7 @@ dependencies = [
 
 [[package]]
 name = "wfgen"
-version = "0.5.9"
+version = "0.5.10"
 dependencies = [
  "arrow",
  "chrono",
@@ -5726,7 +5737,7 @@ dependencies = [
  "tracing-subscriber",
  "wf-config",
  "wf-engine",
- "wf-lang",
+ "wf-lang 2.0.17",
  "wf-runtime",
  "winnow",
  "wp-arrow",
@@ -5736,7 +5747,7 @@ dependencies = [
 
 [[package]]
 name = "wfl"
-version = "0.5.9"
+version = "0.5.10"
 dependencies = [
  "chrono",
  "clap",
@@ -5749,13 +5760,13 @@ dependencies = [
  "wf-config",
  "wf-data",
  "wf-engine",
- "wf-lang",
+ "wf-lang 2.0.17",
  "wfgen",
 ]
 
 [[package]]
 name = "wfusion"
-version = "0.5.9"
+version = "0.5.10"
 dependencies = [
  "chrono",
  "clap",
@@ -5822,7 +5833,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.48.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

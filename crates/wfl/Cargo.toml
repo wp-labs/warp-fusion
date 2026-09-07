@@ -18,7 +18,7 @@ wf-data.workspace = true
 wf-lang.workspace = true
 wf-engine.workspace = true
 wfgen = { path = "../wfgen" }
-tree-sitter = "0.26"
+tree-sitter = "0.27"
 tree-sitter-wfl = { git = "https://github.com/wp-labs/tree-sitter-wfl.git", branch = "main" }
 orion-error = { workspace = true }
 clap = { workspace = true }

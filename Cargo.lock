@@ -5507,7 +5507,24 @@ dependencies = [
  "sha1 0.11.0",
  "sha2 0.11.0",
  "smol_str",
- "wf-lang",
+ "wf-lang 2.1.0",
+]
+
+[[package]]
+name = "wf-config"
+version = "2.0.23"
+source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v2.0.23#56e68716c86f1788b8aceae1efb9157e3a354e63"
+dependencies = [
+ "chrono",
+ "glob",
+ "jumo-derive",
+ "orion-error",
+ "serde",
+ "serde_json",
+ "toml",
+ "wf-lang 2.0.23",
+ "wildmatch",
+ "wp-connector-api",
 ]
 
 [[package]]
@@ -5522,7 +5539,7 @@ dependencies = [
  "serde",
  "serde_json",
  "toml",
- "wf-lang",
+ "wf-lang 2.1.0",
  "wildmatch",
  "wp-connector-api",
 ]
@@ -5574,11 +5591,22 @@ dependencies = [
  "tokio",
  "tokio-util",
  "wf-cep",
- "wf-config",
- "wf-lang",
+ "wf-config 2.1.0",
+ "wf-lang 2.1.0",
  "wildmatch",
  "wp-connector-api",
  "wp-model-core",
+]
+
+[[package]]
+name = "wf-lang"
+version = "2.0.23"
+source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v2.0.23#56e68716c86f1788b8aceae1efb9157e3a354e63"
+dependencies = [
+ "jumo-derive",
+ "orion-error",
+ "regex-syntax",
+ "winnow",
 ]
 
 [[package]]
@@ -5604,7 +5632,7 @@ dependencies = [
  "tempfile",
  "tracing",
  "walkdir",
- "wf-config",
+ "wf-config 2.0.23",
 ]
 
 [[package]]
@@ -5632,11 +5660,11 @@ dependencies = [
  "tracing",
  "tracing-appender",
  "tracing-subscriber",
- "wf-config",
+ "wf-config 2.1.0",
  "wf-connector-api",
  "wf-data",
  "wf-engine",
- "wf-lang",
+ "wf-lang 2.1.0",
  "wp-arrow",
  "wp-connector-api",
  "wp-core-connectors",
@@ -5657,8 +5685,8 @@ dependencies = [
  "toml",
  "tracing",
  "ureq",
- "wf-config",
- "wf-lang",
+ "wf-config 2.0.23",
+ "wf-lang 2.1.0",
  "wf-project-remote",
  "wfgen",
  "wp-connector-api",
@@ -5687,9 +5715,9 @@ dependencies = [
  "toml",
  "tracing-appender",
  "tracing-subscriber",
- "wf-config",
+ "wf-config 2.0.23",
  "wf-engine",
- "wf-lang",
+ "wf-lang 2.1.0",
  "wf-runtime",
  "winnow",
  "wp-arrow",
@@ -5709,10 +5737,10 @@ dependencies = [
  "smol_str",
  "tree-sitter",
  "tree-sitter-wfl",
- "wf-config",
+ "wf-config 2.0.23",
  "wf-data",
  "wf-engine",
- "wf-lang",
+ "wf-lang 2.1.0",
  "wfgen",
 ]
 
@@ -5739,7 +5767,7 @@ dependencies = [
  "tokio-util",
  "tracing",
  "uuid",
- "wf-config",
+ "wf-config 2.0.23",
  "wf-project-remote",
  "wf-runtime",
  "wp-connectors",

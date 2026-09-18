@@ -5540,6 +5540,15 @@ dependencies = [
 
 [[package]]
 name = "wf-data"
+version = "2.0.23"
+source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v2.0.23#56e68716c86f1788b8aceae1efb9157e3a354e63"
+dependencies = [
+ "chrono",
+ "serde_json",
+]
+
+[[package]]
+name = "wf-data"
 version = "2.1.0"
 source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v2.1.0#d9e45254e524fbf205b9b80e957a1c85afd1e4d3"
 dependencies = [
@@ -5634,7 +5643,7 @@ dependencies = [
  "tracing-subscriber",
  "wf-config",
  "wf-connector-api",
- "wf-data",
+ "wf-data 2.1.0",
  "wf-engine",
  "wf-lang",
  "wp-arrow",
@@ -5710,7 +5719,7 @@ dependencies = [
  "tree-sitter",
  "tree-sitter-wfl",
  "wf-config",
- "wf-data",
+ "wf-data 2.0.23",
  "wf-engine",
  "wf-lang",
  "wfgen",

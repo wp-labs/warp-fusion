@@ -5517,7 +5517,7 @@ dependencies = [
  "sha1 0.11.0",
  "sha2 0.11.0",
  "smol_str",
- "wf-data",
+ "wf-data 2.3.0",
  "wf-lang",
 ]
 
@@ -5547,6 +5547,15 @@ dependencies = [
  "arrow",
  "async-trait",
  "orion-error",
+]
+
+[[package]]
+name = "wf-data"
+version = "2.1.0"
+source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v2.1.0#d9e45254e524fbf205b9b80e957a1c85afd1e4d3"
+dependencies = [
+ "chrono",
+ "serde_json",
 ]
 
 [[package]]
@@ -5645,7 +5654,7 @@ dependencies = [
  "tracing-subscriber",
  "wf-config",
  "wf-connector-api",
- "wf-data",
+ "wf-data 2.3.0",
  "wf-engine",
  "wf-lang",
  "wp-arrow",
@@ -5722,7 +5731,7 @@ dependencies = [
  "tree-sitter",
  "tree-sitter-wfl",
  "wf-config",
- "wf-data",
+ "wf-data 2.1.0",
  "wf-engine",
  "wf-lang",
  "wfgen",

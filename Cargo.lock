@@ -289,23 +289,58 @@ dependencies = [
 
 [[package]]
 name = "arrow"
+version = "59.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7c14b3d39f306bc28fd639d59f06e17a0f377d0021e1b7e9054e4d6fedc98774"
+dependencies = [
+ "arrow-arith 59.3.0",
+ "arrow-array 59.3.0",
+ "arrow-buffer 59.3.0",
+ "arrow-cast 59.3.0",
+ "arrow-csv 59.3.0",
+ "arrow-data 59.3.0",
+ "arrow-ipc 59.3.0",
+ "arrow-json 59.3.0",
+ "arrow-ord 59.3.0",
+ "arrow-row 59.3.0",
+ "arrow-schema 59.3.0",
+ "arrow-select 59.3.0",
+ "arrow-string 59.3.0",
+]
+
+[[package]]
+name = "arrow"
 version = "60.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "234ce58e76c04e8162c2e4bc3fe53fa7c2418ef5fba7bb2838b8531b7d4fbf14"
 dependencies = [
- "arrow-arith",
- "arrow-array",
- "arrow-buffer",
- "arrow-cast",
- "arrow-csv",
- "arrow-data",
- "arrow-ipc",
- "arrow-json",
- "arrow-ord",
- "arrow-row",
- "arrow-schema",
- "arrow-select",
- "arrow-string",
+ "arrow-arith 60.0.0",
+ "arrow-array 60.0.0",
+ "arrow-buffer 60.0.0",
+ "arrow-cast 60.0.0",
+ "arrow-csv 60.0.0",
+ "arrow-data 60.0.0",
+ "arrow-ipc 60.0.0",
+ "arrow-json 60.0.0",
+ "arrow-ord 60.0.0",
+ "arrow-row 60.0.0",
+ "arrow-schema 60.0.0",
+ "arrow-select 60.0.0",
+ "arrow-string 60.0.0",
+]
+
+[[package]]
+name = "arrow-arith"
+version = "59.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ce2961626677665b2195eb59242af4c7befe7b8737ca2050295389362380104e"
+dependencies = [
+ "arrow-array 59.3.0",
+ "arrow-buffer 59.3.0",
+ "arrow-data 59.3.0",
+ "arrow-schema 59.3.0",
+ "chrono",
+ "num-traits",
 ]
 
 [[package]]
@@ -314,11 +349,29 @@ version = "60.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2303ebedb1071f4f72d71171e383859a9a285c94d99e4892685a96fca9890720"
 dependencies = [
- "arrow-array",
- "arrow-buffer",
- "arrow-data",
- "arrow-schema",
+ "arrow-array 60.0.0",
+ "arrow-buffer 60.0.0",
+ "arrow-data 60.0.0",
+ "arrow-schema 60.0.0",
  "chrono",
+ "num-traits",
+]
+
+[[package]]
+name = "arrow-array"
+version = "59.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1e5f6adeffdf587d7a31db5d2266189624b526730cd3627f9ff9fedae97ad584"
+dependencies = [
+ "ahash",
+ "arrow-buffer 59.3.0",
+ "arrow-data 59.3.0",
+ "arrow-schema 59.3.0",
+ "chrono",
+ "half",
+ "hashbrown 0.17.1",
+ "num-complex",
+ "num-integer",
  "num-traits",
 ]
 
@@ -329,14 +382,26 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "51dff6e4b9f158864a0aeb6a131ad53858ecbae7a2fc8989307b9b3c6b2f122e"
 dependencies = [
  "ahash",
- "arrow-buffer",
- "arrow-data",
- "arrow-schema",
+ "arrow-buffer 60.0.0",
+ "arrow-data 60.0.0",
+ "arrow-schema 60.0.0",
  "chrono",
  "half",
  "hashbrown 0.17.1",
  "num-complex",
  "num-integer",
+ "num-traits",
+]
+
+[[package]]
+name = "arrow-buffer"
+version = "59.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "097d193003ce7995d5d087089069ec2a6e0187faf5a6f8c9f38af2645d987182"
+dependencies = [
+ "bytes",
+ "half",
+ "num-bigint 0.5.1",
  "num-traits",
 ]
 
@@ -354,16 +419,37 @@ dependencies = [
 
 [[package]]
 name = "arrow-cast"
+version = "59.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "635c9c635668ad26adf76cce8fb276c4be7cf06e63bd516de7da514f9680ee53"
+dependencies = [
+ "arrow-array 59.3.0",
+ "arrow-buffer 59.3.0",
+ "arrow-data 59.3.0",
+ "arrow-ord 59.3.0",
+ "arrow-schema 59.3.0",
+ "arrow-select 59.3.0",
+ "atoi 2.0.0",
+ "base64 0.23.1",
+ "chrono",
+ "half",
+ "lexical-core",
+ "num-traits",
+ "ryu",
+]
+
+[[package]]
+name = "arrow-cast"
 version = "60.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d52cf840f0c34aeeb7e8b05aba72d66878e6c001827f423331f0b260209e7b7e"
 dependencies = [
- "arrow-array",
- "arrow-buffer",
- "arrow-data",
- "arrow-ord",
- "arrow-schema",
- "arrow-select",
+ "arrow-array 60.0.0",
+ "arrow-buffer 60.0.0",
+ "arrow-data 60.0.0",
+ "arrow-ord 60.0.0",
+ "arrow-schema 60.0.0",
+ "arrow-select 60.0.0",
  "atoi 3.1.0",
  "base64 0.23.1",
  "chrono",
@@ -379,9 +465,24 @@ version = "60.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "73a0e9adb28d95739fabcdae637261a2c14e618caf58ba1b88857120f9ee2687"
 dependencies = [
- "arrow-array",
- "arrow-buffer",
- "arrow-schema",
+ "arrow-array 60.0.0",
+ "arrow-buffer 60.0.0",
+ "arrow-schema 60.0.0",
+]
+
+[[package]]
+name = "arrow-csv"
+version = "59.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4c2ebf8d631e79b02c16cf5ae860561272c26024ec88fce389a56aaddd558e86"
+dependencies = [
+ "arrow-array 59.3.0",
+ "arrow-cast 59.3.0",
+ "arrow-schema 59.3.0",
+ "chrono",
+ "csv",
+ "csv-core",
+ "regex",
 ]
 
 [[package]]
@@ -390,9 +491,9 @@ version = "60.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2ad83176cc677f996096d694a3cccd7310069faeee4b3df9e2dabf92fdcf8b4b"
 dependencies = [
- "arrow-array",
- "arrow-cast",
- "arrow-schema",
+ "arrow-array 60.0.0",
+ "arrow-cast 60.0.0",
+ "arrow-schema 60.0.0",
  "chrono",
  "csv",
  "csv-core",
@@ -401,15 +502,42 @@ dependencies = [
 
 [[package]]
 name = "arrow-data"
+version = "59.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9ba2f832eaeca24b8f26143dba750e42ee4ab51cf7d65e701ca9607cfda9f358"
+dependencies = [
+ "arrow-buffer 59.3.0",
+ "arrow-schema 59.3.0",
+ "half",
+ "num-integer",
+ "num-traits",
+]
+
+[[package]]
+name = "arrow-data"
 version = "60.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5aa06d5e22786c4966ffc4d2f171d0cb65d95f6bdea108a14e8c335e9faa437f"
 dependencies = [
- "arrow-buffer",
- "arrow-schema",
+ "arrow-buffer 60.0.0",
+ "arrow-schema 60.0.0",
  "half",
  "num-integer",
  "num-traits",
+]
+
+[[package]]
+name = "arrow-ipc"
+version = "59.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dcc41681ea80f521df14c36725b74d4c60702c47f0793af2be469c04527e2599"
+dependencies = [
+ "arrow-array 59.3.0",
+ "arrow-buffer 59.3.0",
+ "arrow-data 59.3.0",
+ "arrow-schema 59.3.0",
+ "arrow-select 59.3.0",
+ "flatbuffers",
 ]
 
 [[package]]
@@ -418,12 +546,37 @@ version = "60.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "86c523472d22e31f984df7a44fc36e6323d3c9b05ffe53d267ee4c3aa7c128d2"
 dependencies = [
- "arrow-array",
- "arrow-buffer",
- "arrow-data",
- "arrow-schema",
- "arrow-select",
+ "arrow-array 60.0.0",
+ "arrow-buffer 60.0.0",
+ "arrow-data 60.0.0",
+ "arrow-schema 60.0.0",
+ "arrow-select 60.0.0",
  "flatbuffers",
+]
+
+[[package]]
+name = "arrow-json"
+version = "59.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a2f57d7a81969f24ccf80809587b76c09897e6f829d2d65a5976bfb3218851f1"
+dependencies = [
+ "arrow-array 59.3.0",
+ "arrow-buffer 59.3.0",
+ "arrow-cast 59.3.0",
+ "arrow-ord 59.3.0",
+ "arrow-schema 59.3.0",
+ "arrow-select 59.3.0",
+ "chrono",
+ "half",
+ "indexmap",
+ "itoa",
+ "lexical-core",
+ "memchr",
+ "num-traits",
+ "ryu",
+ "serde_core",
+ "serde_json",
+ "simdutf8",
 ]
 
 [[package]]
@@ -432,12 +585,12 @@ version = "60.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "342fc6600a93a48038d853431803c941436b7b51f756763e76cad9784b7e3718"
 dependencies = [
- "arrow-array",
- "arrow-buffer",
- "arrow-cast",
- "arrow-ord",
- "arrow-schema",
- "arrow-select",
+ "arrow-array 60.0.0",
+ "arrow-buffer 60.0.0",
+ "arrow-cast 60.0.0",
+ "arrow-ord 60.0.0",
+ "arrow-schema 60.0.0",
+ "arrow-select 60.0.0",
  "chrono",
  "half",
  "indexmap",
@@ -453,16 +606,42 @@ dependencies = [
 
 [[package]]
 name = "arrow-ord"
+version = "59.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2c900759f3bd8354fd4196bc4403eee846894dc2adf66b4225472006a0bf18c5"
+dependencies = [
+ "arrow-array 59.3.0",
+ "arrow-buffer 59.3.0",
+ "arrow-data 59.3.0",
+ "arrow-schema 59.3.0",
+ "arrow-select 59.3.0",
+]
+
+[[package]]
+name = "arrow-ord"
 version = "60.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5a7ac2c6a9cdc782fa9548d3763461eaec8c93347e297fddbaa44807e70a3698"
 dependencies = [
- "arrow-array",
- "arrow-buffer",
+ "arrow-array 60.0.0",
+ "arrow-buffer 60.0.0",
  "arrow-cmp",
- "arrow-data",
- "arrow-schema",
- "arrow-select",
+ "arrow-data 60.0.0",
+ "arrow-schema 60.0.0",
+ "arrow-select 60.0.0",
+]
+
+[[package]]
+name = "arrow-row"
+version = "59.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f4c6425032e28266e3fc4ff680805e57e670d6ea92473043f3e65b7ed6ac79f2"
+dependencies = [
+ "arrow-array 59.3.0",
+ "arrow-buffer 59.3.0",
+ "arrow-data 59.3.0",
+ "arrow-schema 59.3.0",
+ "half",
 ]
 
 [[package]]
@@ -471,12 +650,18 @@ version = "60.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "758b87e9648d80001e0916c083334ed93074c677a81a96144d5c84bd2d8eab2a"
 dependencies = [
- "arrow-array",
- "arrow-buffer",
- "arrow-data",
- "arrow-schema",
+ "arrow-array 60.0.0",
+ "arrow-buffer 60.0.0",
+ "arrow-data 60.0.0",
+ "arrow-schema 60.0.0",
  "half",
 ]
+
+[[package]]
+name = "arrow-schema"
+version = "59.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "10fab8d4563491417ba801fab29d205104d20d4bdf37bda6cd1cf425cff598cd"
 
 [[package]]
 name = "arrow-schema"
@@ -486,17 +671,48 @@ checksum = "f85a9a58cd03560526b0066487574aacb9008e413504fa0ee23d61141e96c338"
 
 [[package]]
 name = "arrow-select"
+version = "59.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fc58569193c2525915f3cc6310edba3792f1200f65d6e9ed330aa33e691493b8"
+dependencies = [
+ "ahash",
+ "arrow-array 59.3.0",
+ "arrow-buffer 59.3.0",
+ "arrow-data 59.3.0",
+ "arrow-schema 59.3.0",
+ "num-traits",
+]
+
+[[package]]
+name = "arrow-select"
 version = "60.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ba3482b7d03bf4a3bf0b195f08a7f2b071595ccd54897e35b975ac63d3104977"
 dependencies = [
  "ahash",
- "arrow-array",
- "arrow-buffer",
+ "arrow-array 60.0.0",
+ "arrow-buffer 60.0.0",
  "arrow-cmp",
- "arrow-data",
- "arrow-schema",
+ "arrow-data 60.0.0",
+ "arrow-schema 60.0.0",
  "num-traits",
+]
+
+[[package]]
+name = "arrow-string"
+version = "59.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2e0813f3c35c1cfea65e14c20a953440f7783c088b7ad2d0db162ccdeefcec14"
+dependencies = [
+ "arrow-array 59.3.0",
+ "arrow-buffer 59.3.0",
+ "arrow-data 59.3.0",
+ "arrow-schema 59.3.0",
+ "arrow-select 59.3.0",
+ "memchr",
+ "num-traits",
+ "regex",
+ "regex-syntax",
 ]
 
 [[package]]
@@ -505,11 +721,11 @@ version = "60.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f300b4400b1e7cd58f7cbbd5dd2a0072cc59e73bfaee2a152b3ac660e46d9dd1"
 dependencies = [
- "arrow-array",
- "arrow-buffer",
- "arrow-data",
- "arrow-schema",
- "arrow-select",
+ "arrow-array 60.0.0",
+ "arrow-buffer 60.0.0",
+ "arrow-data 60.0.0",
+ "arrow-schema 60.0.0",
+ "arrow-select 60.0.0",
  "memchr",
  "num-traits",
  "regex",
@@ -5502,10 +5718,10 @@ dependencies = [
 
 [[package]]
 name = "wf-cep"
-version = "2.3.0"
-source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v2.3.0#d460273d2167688b6a655fbf81523af099e6a72c"
+version = "2.1.0"
+source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v2.1.0#d9e45254e524fbf205b9b80e957a1c85afd1e4d3"
 dependencies = [
- "arrow",
+ "arrow 59.3.0",
  "chrono",
  "foldhash 0.2.0",
  "hex",
@@ -5517,8 +5733,45 @@ dependencies = [
  "sha1 0.11.0",
  "sha2 0.11.0",
  "smol_str",
- "wf-data",
- "wf-lang",
+ "wf-lang 2.1.0",
+]
+
+[[package]]
+name = "wf-cep"
+version = "2.3.0"
+source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v2.3.0#d460273d2167688b6a655fbf81523af099e6a72c"
+dependencies = [
+ "arrow 60.0.0",
+ "chrono",
+ "foldhash 0.2.0",
+ "hex",
+ "jumo-derive",
+ "md-5 0.10.6",
+ "orion-error",
+ "regex",
+ "serde_json",
+ "sha1 0.11.0",
+ "sha2 0.11.0",
+ "smol_str",
+ "wf-data 2.3.0",
+ "wf-lang 2.3.0",
+]
+
+[[package]]
+name = "wf-config"
+version = "2.1.0"
+source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v2.1.0#d9e45254e524fbf205b9b80e957a1c85afd1e4d3"
+dependencies = [
+ "chrono",
+ "glob",
+ "jumo-derive",
+ "orion-error",
+ "serde",
+ "serde_json",
+ "toml",
+ "wf-lang 2.1.0",
+ "wildmatch",
+ "wp-connector-api 0.12.0",
 ]
 
 [[package]]
@@ -5533,9 +5786,20 @@ dependencies = [
  "serde",
  "serde_json",
  "toml",
- "wf-lang",
+ "wf-lang 2.3.0",
  "wildmatch",
- "wp-connector-api",
+ "wp-connector-api 0.13.0",
+]
+
+[[package]]
+name = "wf-connector-api"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "24d3514f6060253fe1db956f4641abd27f4f2c040a36aeba296bdb88af658917"
+dependencies = [
+ "arrow 59.3.0",
+ "async-trait",
+ "orion-error",
 ]
 
 [[package]]
@@ -5544,9 +5808,18 @@ version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3924c0a7d344eaab30f3a76578dc259255ca9cab76f49fe18baaa70a624d1079"
 dependencies = [
- "arrow",
+ "arrow 60.0.0",
  "async-trait",
  "orion-error",
+]
+
+[[package]]
+name = "wf-data"
+version = "2.1.0"
+source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v2.1.0#d9e45254e524fbf205b9b80e957a1c85afd1e4d3"
+dependencies = [
+ "chrono",
+ "serde_json",
 ]
 
 [[package]]
@@ -5560,10 +5833,10 @@ dependencies = [
 
 [[package]]
 name = "wf-engine"
-version = "2.3.0"
-source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v2.3.0#d460273d2167688b6a655fbf81523af099e6a72c"
+version = "2.1.0"
+source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v2.1.0#d9e45254e524fbf205b9b80e957a1c85afd1e4d3"
 dependencies = [
- "arrow",
+ "arrow 59.3.0",
  "async-trait",
  "chrono",
  "derive_more",
@@ -5584,12 +5857,57 @@ dependencies = [
  "thiserror 2.0.20",
  "tokio",
  "tokio-util",
- "wf-cep",
- "wf-config",
- "wf-lang",
+ "wf-cep 2.1.0",
+ "wf-config 2.1.0",
+ "wf-lang 2.1.0",
  "wildmatch",
- "wp-connector-api",
- "wp-model-core",
+ "wp-connector-api 0.12.0",
+ "wp-model-core 0.9.0",
+]
+
+[[package]]
+name = "wf-engine"
+version = "2.3.0"
+source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v2.3.0#d460273d2167688b6a655fbf81523af099e6a72c"
+dependencies = [
+ "arrow 60.0.0",
+ "async-trait",
+ "chrono",
+ "derive_more",
+ "foldhash 0.2.0",
+ "hex",
+ "jumo-derive",
+ "log",
+ "md-5 0.10.6",
+ "orion-error",
+ "parking_lot",
+ "redb",
+ "regex",
+ "serde",
+ "serde_json",
+ "sha1 0.11.0",
+ "sha2 0.11.0",
+ "smol_str",
+ "thiserror 2.0.20",
+ "tokio",
+ "tokio-util",
+ "wf-cep 2.3.0",
+ "wf-config 2.3.0",
+ "wf-lang 2.3.0",
+ "wildmatch",
+ "wp-connector-api 0.13.0",
+ "wp-model-core 0.10.1",
+]
+
+[[package]]
+name = "wf-lang"
+version = "2.1.0"
+source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v2.1.0#d9e45254e524fbf205b9b80e957a1c85afd1e4d3"
+dependencies = [
+ "jumo-derive",
+ "orion-error",
+ "regex-syntax",
+ "winnow",
 ]
 
 [[package]]
@@ -5615,15 +5933,15 @@ dependencies = [
  "tempfile",
  "tracing",
  "walkdir",
- "wf-config",
+ "wf-config 2.3.0",
 ]
 
 [[package]]
 name = "wf-runtime"
-version = "2.3.0"
-source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v2.3.0#d460273d2167688b6a655fbf81523af099e6a72c"
+version = "2.1.0"
+source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v2.1.0#d9e45254e524fbf205b9b80e957a1c85afd1e4d3"
 dependencies = [
- "arrow",
+ "arrow 59.3.0",
  "async-broadcast",
  "async-trait",
  "chrono",
@@ -5643,17 +5961,16 @@ dependencies = [
  "tracing",
  "tracing-appender",
  "tracing-subscriber",
- "wf-config",
- "wf-connector-api",
- "wf-data",
- "wf-engine",
- "wf-lang",
- "wp-arrow",
- "wp-connector-api",
- "wp-connector-utils",
- "wp-core-connectors",
+ "wf-config 2.1.0",
+ "wf-connector-api 0.2.0",
+ "wf-data 2.1.0",
+ "wf-engine 2.1.0",
+ "wf-lang 2.1.0",
+ "wp-arrow 0.3.1",
+ "wp-connector-api 0.12.0",
+ "wp-core-connectors 0.8.4",
  "wp-knowledge",
- "wp-model-core",
+ "wp-model-core 0.9.0",
 ]
 
 [[package]]
@@ -5669,13 +5986,13 @@ dependencies = [
  "toml",
  "tracing",
  "ureq",
- "wf-config",
- "wf-lang",
+ "wf-config 2.3.0",
+ "wf-lang 2.3.0",
  "wf-project-remote",
  "wfgen",
- "wp-connector-api",
+ "wp-connector-api 0.13.0",
  "wp-connectors",
- "wp-core-connectors",
+ "wp-core-connectors 0.9.0",
  "wp-self-update",
 ]
 
@@ -5683,7 +6000,7 @@ dependencies = [
 name = "wfgen"
 version = "0.7.0"
 dependencies = [
- "arrow",
+ "arrow 60.0.0",
  "chrono",
  "clap",
  "md-5 0.11.0",
@@ -5699,14 +6016,14 @@ dependencies = [
  "toml",
  "tracing-appender",
  "tracing-subscriber",
- "wf-config",
- "wf-engine",
- "wf-lang",
+ "wf-config 2.3.0",
+ "wf-engine 2.3.0",
+ "wf-lang 2.3.0",
  "wf-runtime",
  "winnow",
- "wp-arrow",
- "wp-connector-api",
- "wp-core-connectors",
+ "wp-arrow 0.4.2",
+ "wp-connector-api 0.13.0",
+ "wp-core-connectors 0.9.0",
 ]
 
 [[package]]
@@ -5721,10 +6038,10 @@ dependencies = [
  "smol_str",
  "tree-sitter",
  "tree-sitter-wfl",
- "wf-config",
- "wf-data",
- "wf-engine",
- "wf-lang",
+ "wf-config 2.3.0",
+ "wf-data 2.3.0",
+ "wf-engine 2.3.0",
+ "wf-lang 2.3.0",
  "wfgen",
 ]
 
@@ -5751,11 +6068,11 @@ dependencies = [
  "tokio-util",
  "tracing",
  "uuid",
- "wf-config",
+ "wf-config 2.3.0",
  "wf-project-remote",
  "wf-runtime",
  "wp-connectors",
- "wp-core-connectors",
+ "wp-core-connectors 0.9.0",
 ]
 
 [[package]]
@@ -6091,15 +6408,46 @@ checksum = "1ebf944e87a7c253233ad6766e082e3cd714b5d03812acc24c318f549614536e"
 
 [[package]]
 name = "wp-arrow"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "270eccebb38d8d03d09237d2f141da0d40d2b8a5de7c56d548eac43a5c5c2481"
+dependencies = [
+ "arrow 59.3.0",
+ "chrono",
+ "num-bigint 0.4.8",
+ "wp-model-core 0.9.0",
+]
+
+[[package]]
+name = "wp-arrow"
 version = "0.4.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5823185ff74770013d8b161cd720bbf190bba995f949b579bff988a5432be377"
 dependencies = [
- "arrow",
+ "arrow 60.0.0",
  "chrono",
  "num-bigint 0.4.8",
  "serde_json",
- "wp-model-core",
+ "wp-model-core 0.10.1",
+]
+
+[[package]]
+name = "wp-conf-base"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "653c2f81c9b95a23d9e1c830f4b7df6c3722ef2b26a100de2fbd24b269cc4534"
+dependencies = [
+ "anyhow",
+ "derive_more",
+ "log",
+ "orion-error",
+ "orion-variate",
+ "orion_conf",
+ "serde",
+ "toml",
+ "winnow",
+ "wp-connector-api 0.12.0",
+ "wp-model-core 0.9.0",
 ]
 
 [[package]]
@@ -6117,8 +6465,28 @@ dependencies = [
  "serde",
  "toml",
  "winnow",
- "wp-connector-api",
- "wp-model-core",
+ "wp-connector-api 0.13.0",
+ "wp-model-core 0.10.1",
+]
+
+[[package]]
+name = "wp-connector-api"
+version = "0.12.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a94ae81dc317e2579d79021c6b3d26449c2aba54c93356cb02b05de35535758e"
+dependencies = [
+ "async-broadcast",
+ "async-trait",
+ "derive_more",
+ "orion-error",
+ "serde",
+ "serde_derive",
+ "serde_json",
+ "smallvec",
+ "smol_str",
+ "toml",
+ "wp-model-core 0.9.0",
+ "wp-source-types 0.2.0",
 ]
 
 [[package]]
@@ -6137,8 +6505,22 @@ dependencies = [
  "smallvec",
  "smol_str",
  "toml",
- "wp-model-core",
- "wp-source-types",
+ "wp-model-core 0.10.1",
+ "wp-source-types 0.3.0",
+]
+
+[[package]]
+name = "wp-connector-utils"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7f3ac77087964a6f0fdb19734d04467bd41c6a8ecd1896d8adb68e48e200990c"
+dependencies = [
+ "arrow 59.3.0",
+ "chrono",
+ "orion-error",
+ "serde_json",
+ "wp-connector-api 0.12.0",
+ "wp-model-core 0.9.0",
 ]
 
 [[package]]
@@ -6147,13 +6529,13 @@ version = "0.3.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4850bafae46de662dff23f73a89bebc8b02bf412deda1f37e2a745e95fd644ef"
 dependencies = [
- "arrow",
+ "arrow 60.0.0",
  "chrono",
  "orion-error",
  "serde_json",
- "wp-arrow",
- "wp-connector-api",
- "wp-model-core",
+ "wp-arrow 0.4.2",
+ "wp-connector-api 0.13.0",
+ "wp-model-core 0.10.1",
 ]
 
 [[package]]
@@ -6163,7 +6545,7 @@ source = "git+https://github.com/wp-labs/wp-connectors.git?tag=v0.21.0#94f863ea0
 dependencies = [
  "actix-web",
  "anyhow",
- "arrow",
+ "arrow 60.0.0",
  "async-trait",
  "base64 0.22.1",
  "bytes",
@@ -6191,17 +6573,52 @@ dependencies = [
  "tokio",
  "toml",
  "uuid",
- "wf-connector-api",
+ "wf-connector-api 0.3.0",
  "winnow",
- "wp-conf-base",
- "wp-connector-api",
- "wp-connector-utils",
- "wp-data-fmt",
+ "wp-conf-base 0.6.1",
+ "wp-connector-api 0.13.0",
+ "wp-connector-utils 0.3.5",
+ "wp-data-fmt 0.10.0",
  "wp-error",
  "wp-log",
- "wp-model-core",
+ "wp-model-core 0.10.1",
  "wp-parse-api",
  "wp-specs",
+]
+
+[[package]]
+name = "wp-core-connectors"
+version = "0.8.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "84a3c5f7b559b4c995dffcd3df834c93ba9c56c5069bd5ab8b5e85f1f3cddc34"
+dependencies = [
+ "anyhow",
+ "arrow 59.3.0",
+ "async-trait",
+ "base64 0.22.1",
+ "bytes",
+ "chrono",
+ "glob",
+ "hex",
+ "hostname",
+ "libc",
+ "log",
+ "memchr",
+ "once_cell",
+ "orion-error",
+ "orion_conf",
+ "serde_json",
+ "socket2 0.6.5",
+ "thiserror 2.0.20",
+ "tokio",
+ "toml",
+ "wf-connector-api 0.2.0",
+ "wp-conf-base 0.5.0",
+ "wp-connector-api 0.12.0",
+ "wp-connector-utils 0.2.1",
+ "wp-data-fmt 0.9.0",
+ "wp-log",
+ "wp-model-core 0.9.0",
 ]
 
 [[package]]
@@ -6211,7 +6628,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ae3a5e02c527250d23705e632316d6621f6f48ccc9e67860ecf4eceb00791de0"
 dependencies = [
  "anyhow",
- "arrow",
+ "arrow 60.0.0",
  "async-trait",
  "base64 0.23.1",
  "bytes",
@@ -6230,13 +6647,26 @@ dependencies = [
  "thiserror 2.0.20",
  "tokio",
  "toml",
- "wf-connector-api",
- "wp-conf-base",
- "wp-connector-api",
- "wp-connector-utils",
- "wp-data-fmt",
+ "wf-connector-api 0.3.0",
+ "wp-conf-base 0.6.1",
+ "wp-connector-api 0.13.0",
+ "wp-connector-utils 0.3.5",
+ "wp-data-fmt 0.10.0",
  "wp-log",
- "wp-model-core",
+ "wp-model-core 0.10.1",
+]
+
+[[package]]
+name = "wp-data-fmt"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "146341a23f0a86795bda12c40386f5036e7785aa4435ed45dedc07733746ed67"
+dependencies = [
+ "chrono",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.20",
+ "wp-model-core 0.9.0",
 ]
 
 [[package]]
@@ -6249,7 +6679,7 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror 2.0.20",
- "wp-model-core",
+ "wp-model-core 0.10.1",
 ]
 
 [[package]]
@@ -6266,15 +6696,15 @@ dependencies = [
  "serde_json",
  "thiserror 2.0.20",
  "unicode-segmentation",
- "wp-connector-api",
+ "wp-connector-api 0.13.0",
  "wp-log",
 ]
 
 [[package]]
 name = "wp-knowledge"
-version = "0.18.0"
+version = "0.17.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d42ee3e71b03ec511539f2f4fdfe5ad4dbd5d1afee77da0f821bfce4109ac0fc"
+checksum = "10ec71abc9ed0fbcf049865d372c51c7af2716c42f23c96808faeec93963f660"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -6302,7 +6732,7 @@ dependencies = [
  "tokio",
  "toml",
  "wp-log",
- "wp-model-core",
+ "wp-model-core 0.9.0",
 ]
 
 [[package]]
@@ -6326,6 +6756,21 @@ dependencies = [
  "thiserror 2.0.20",
  "toml",
  "unicode-segmentation",
+]
+
+[[package]]
+name = "wp-model-core"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "33dfbf7eff94eb2db465f98b19b2da8789909c1272f3f7f84761bd3be7ca21f3"
+dependencies = [
+ "bytes",
+ "chrono",
+ "num-bigint 0.4.8",
+ "serde",
+ "serde_derive",
+ "smol_str",
+ "thiserror 2.0.20",
 ]
 
 [[package]]
@@ -6355,7 +6800,7 @@ dependencies = [
  "serde",
  "serde_derive",
  "thiserror 2.0.20",
- "wp-model-core",
+ "wp-model-core 0.10.1",
 ]
 
 [[package]]
@@ -6383,6 +6828,18 @@ dependencies = [
 
 [[package]]
 name = "wp-source-types"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ef24e9ee86b676f26d5c91c3cd384b0dcd1ce5b9291e0333af7859d3017b5946"
+dependencies = [
+ "serde",
+ "smallvec",
+ "smol_str",
+ "wp-model-core 0.9.0",
+]
+
+[[package]]
+name = "wp-source-types"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4afda3c5898b731981a4e62934c13f43042505def3f5da1991eed904e46ecc59"
@@ -6390,7 +6847,7 @@ dependencies = [
  "serde",
  "smallvec",
  "smol_str",
- "wp-model-core",
+ "wp-model-core 0.10.1",
 ]
 
 [[package]]
@@ -6401,7 +6858,7 @@ checksum = "0efd5d222936e0a3c5d3ab2ea4e83c013dc739dcf92129729c8dc9e15c188131"
 dependencies = [
  "serde",
  "wildmatch",
- "wp-connector-api",
+ "wp-connector-api 0.13.0",
 ]
 
 [[package]]

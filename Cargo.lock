@@ -5518,7 +5518,24 @@ dependencies = [
  "sha2 0.11.0",
  "smol_str",
  "wf-data",
- "wf-lang",
+ "wf-lang 2.3.0",
+]
+
+[[package]]
+name = "wf-config"
+version = "2.1.0"
+source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v2.1.0#d9e45254e524fbf205b9b80e957a1c85afd1e4d3"
+dependencies = [
+ "chrono",
+ "glob",
+ "jumo-derive",
+ "orion-error",
+ "serde",
+ "serde_json",
+ "toml",
+ "wf-lang 2.1.0",
+ "wildmatch",
+ "wp-connector-api 0.12.0",
 ]
 
 [[package]]
@@ -5533,9 +5550,9 @@ dependencies = [
  "serde",
  "serde_json",
  "toml",
- "wf-lang",
+ "wf-lang 2.3.0",
  "wildmatch",
- "wp-connector-api",
+ "wp-connector-api 0.13.0",
 ]
 
 [[package]]
@@ -5585,11 +5602,22 @@ dependencies = [
  "tokio",
  "tokio-util",
  "wf-cep",
- "wf-config",
- "wf-lang",
+ "wf-config 2.3.0",
+ "wf-lang 2.3.0",
  "wildmatch",
- "wp-connector-api",
- "wp-model-core",
+ "wp-connector-api 0.13.0",
+ "wp-model-core 0.10.1",
+]
+
+[[package]]
+name = "wf-lang"
+version = "2.1.0"
+source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v2.1.0#d9e45254e524fbf205b9b80e957a1c85afd1e4d3"
+dependencies = [
+ "jumo-derive",
+ "orion-error",
+ "regex-syntax",
+ "winnow",
 ]
 
 [[package]]
@@ -5615,7 +5643,7 @@ dependencies = [
  "tempfile",
  "tracing",
  "walkdir",
- "wf-config",
+ "wf-config 2.1.0",
 ]
 
 [[package]]
@@ -5643,17 +5671,17 @@ dependencies = [
  "tracing",
  "tracing-appender",
  "tracing-subscriber",
- "wf-config",
+ "wf-config 2.3.0",
  "wf-connector-api",
  "wf-data",
  "wf-engine",
- "wf-lang",
+ "wf-lang 2.3.0",
  "wp-arrow",
- "wp-connector-api",
+ "wp-connector-api 0.13.0",
  "wp-connector-utils",
  "wp-core-connectors",
  "wp-knowledge",
- "wp-model-core",
+ "wp-model-core 0.10.1",
 ]
 
 [[package]]
@@ -5669,11 +5697,11 @@ dependencies = [
  "toml",
  "tracing",
  "ureq",
- "wf-config",
- "wf-lang",
+ "wf-config 2.1.0",
+ "wf-lang 2.3.0",
  "wf-project-remote",
  "wfgen",
- "wp-connector-api",
+ "wp-connector-api 0.13.0",
  "wp-connectors",
  "wp-core-connectors",
  "wp-self-update",
@@ -5699,13 +5727,13 @@ dependencies = [
  "toml",
  "tracing-appender",
  "tracing-subscriber",
- "wf-config",
+ "wf-config 2.1.0",
  "wf-engine",
- "wf-lang",
+ "wf-lang 2.3.0",
  "wf-runtime",
  "winnow",
  "wp-arrow",
- "wp-connector-api",
+ "wp-connector-api 0.13.0",
  "wp-core-connectors",
 ]
 
@@ -5721,10 +5749,10 @@ dependencies = [
  "smol_str",
  "tree-sitter",
  "tree-sitter-wfl",
- "wf-config",
+ "wf-config 2.1.0",
  "wf-data",
  "wf-engine",
- "wf-lang",
+ "wf-lang 2.3.0",
  "wfgen",
 ]
 
@@ -5751,7 +5779,7 @@ dependencies = [
  "tokio-util",
  "tracing",
  "uuid",
- "wf-config",
+ "wf-config 2.1.0",
  "wf-project-remote",
  "wf-runtime",
  "wp-connectors",
@@ -6099,7 +6127,7 @@ dependencies = [
  "chrono",
  "num-bigint 0.4.8",
  "serde_json",
- "wp-model-core",
+ "wp-model-core 0.10.1",
 ]
 
 [[package]]
@@ -6117,8 +6145,28 @@ dependencies = [
  "serde",
  "toml",
  "winnow",
- "wp-connector-api",
- "wp-model-core",
+ "wp-connector-api 0.13.0",
+ "wp-model-core 0.10.1",
+]
+
+[[package]]
+name = "wp-connector-api"
+version = "0.12.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a94ae81dc317e2579d79021c6b3d26449c2aba54c93356cb02b05de35535758e"
+dependencies = [
+ "async-broadcast",
+ "async-trait",
+ "derive_more",
+ "orion-error",
+ "serde",
+ "serde_derive",
+ "serde_json",
+ "smallvec",
+ "smol_str",
+ "toml",
+ "wp-model-core 0.9.0",
+ "wp-source-types 0.2.0",
 ]
 
 [[package]]
@@ -6137,8 +6185,8 @@ dependencies = [
  "smallvec",
  "smol_str",
  "toml",
- "wp-model-core",
- "wp-source-types",
+ "wp-model-core 0.10.1",
+ "wp-source-types 0.3.0",
 ]
 
 [[package]]
@@ -6152,8 +6200,8 @@ dependencies = [
  "orion-error",
  "serde_json",
  "wp-arrow",
- "wp-connector-api",
- "wp-model-core",
+ "wp-connector-api 0.13.0",
+ "wp-model-core 0.10.1",
 ]
 
 [[package]]
@@ -6194,12 +6242,12 @@ dependencies = [
  "wf-connector-api",
  "winnow",
  "wp-conf-base",
- "wp-connector-api",
+ "wp-connector-api 0.13.0",
  "wp-connector-utils",
  "wp-data-fmt",
  "wp-error",
  "wp-log",
- "wp-model-core",
+ "wp-model-core 0.10.1",
  "wp-parse-api",
  "wp-specs",
 ]
@@ -6232,11 +6280,11 @@ dependencies = [
  "toml",
  "wf-connector-api",
  "wp-conf-base",
- "wp-connector-api",
+ "wp-connector-api 0.13.0",
  "wp-connector-utils",
  "wp-data-fmt",
  "wp-log",
- "wp-model-core",
+ "wp-model-core 0.10.1",
 ]
 
 [[package]]
@@ -6249,7 +6297,7 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror 2.0.20",
- "wp-model-core",
+ "wp-model-core 0.10.1",
 ]
 
 [[package]]
@@ -6266,7 +6314,7 @@ dependencies = [
  "serde_json",
  "thiserror 2.0.20",
  "unicode-segmentation",
- "wp-connector-api",
+ "wp-connector-api 0.13.0",
  "wp-log",
 ]
 
@@ -6302,7 +6350,7 @@ dependencies = [
  "tokio",
  "toml",
  "wp-log",
- "wp-model-core",
+ "wp-model-core 0.10.1",
 ]
 
 [[package]]
@@ -6326,6 +6374,21 @@ dependencies = [
  "thiserror 2.0.20",
  "toml",
  "unicode-segmentation",
+]
+
+[[package]]
+name = "wp-model-core"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "33dfbf7eff94eb2db465f98b19b2da8789909c1272f3f7f84761bd3be7ca21f3"
+dependencies = [
+ "bytes",
+ "chrono",
+ "num-bigint 0.4.8",
+ "serde",
+ "serde_derive",
+ "smol_str",
+ "thiserror 2.0.20",
 ]
 
 [[package]]
@@ -6355,7 +6418,7 @@ dependencies = [
  "serde",
  "serde_derive",
  "thiserror 2.0.20",
- "wp-model-core",
+ "wp-model-core 0.10.1",
 ]
 
 [[package]]
@@ -6383,6 +6446,18 @@ dependencies = [
 
 [[package]]
 name = "wp-source-types"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ef24e9ee86b676f26d5c91c3cd384b0dcd1ce5b9291e0333af7859d3017b5946"
+dependencies = [
+ "serde",
+ "smallvec",
+ "smol_str",
+ "wp-model-core 0.9.0",
+]
+
+[[package]]
+name = "wp-source-types"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4afda3c5898b731981a4e62934c13f43042505def3f5da1991eed904e46ecc59"
@@ -6390,7 +6465,7 @@ dependencies = [
  "serde",
  "smallvec",
  "smol_str",
- "wp-model-core",
+ "wp-model-core 0.10.1",
 ]
 
 [[package]]
@@ -6401,7 +6476,7 @@ checksum = "0efd5d222936e0a3c5d3ab2ea4e83c013dc739dcf92129729c8dc9e15c188131"
 dependencies = [
  "serde",
  "wildmatch",
- "wp-connector-api",
+ "wp-connector-api 0.13.0",
 ]
 
 [[package]]

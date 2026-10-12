@@ -2,6 +2,13 @@
 
 本文件记录 `wfusion` / `wfl` / `wfgen` / `wfadm` 面向使用者的变更。内部实现细节、依赖版本对齐和测试计数不在此展开。
 
+## [0.9.0-alpha] — 2026-10-12
+
+### 引擎（对齐 wp-reactor 2.5.1）
+
+- 引擎对齐 wp-reactor 2.4.0 → 2.5.1；整条依赖链升级到 **orion-error 0.9**（`orion-variate` 0.14 / `orion_conf` 0.8），并同步连接器依赖到 0.9 世代：`wp-connector-api` 0.14、`wp-connector-utils` 0.5、`wp-core-connectors` 0.10.1、`wp-connectors` v0.23.1、`wf-connector-api` 0.4、`wp-self-update` 0.4、`wp-knowledge` 0.19。
+- 目的：依赖图中不再同时出现 orion-error 0.8 与 0.9 两个互不互通的 `StructError`。无源码改动，行为不变。
+
 ## [0.8.0-alpha] — 2026-10-12
 
 ### 新增

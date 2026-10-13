@@ -1986,7 +1986,7 @@ dependencies = [
  "libc",
  "percent-encoding",
  "pin-project-lite",
- "socket2 0.5.10",
+ "socket2 0.6.5",
  "system-configuration",
  "tokio",
  "tower-service",
@@ -3368,7 +3368,7 @@ dependencies = [
  "quinn-udp",
  "rustc-hash",
  "rustls",
- "socket2 0.5.10",
+ "socket2 0.6.5",
  "thiserror 2.0.20",
  "tokio",
  "tracing",
@@ -3407,7 +3407,7 @@ dependencies = [
  "cfg_aliases",
  "libc",
  "once_cell",
- "socket2 0.5.10",
+ "socket2 0.6.5",
  "tracing",
  "windows-sys 0.61.2",
 ]
@@ -5596,7 +5596,7 @@ dependencies = [
  "sha1 0.11.0",
  "sha2 0.11.0",
  "smol_str",
- "wf-data",
+ "wf-data 2.6.0",
  "wf-lang",
 ]
 
@@ -5626,6 +5626,15 @@ dependencies = [
  "arrow",
  "async-trait",
  "orion-error",
+]
+
+[[package]]
+name = "wf-data"
+version = "2.3.0"
+source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v2.3.0#d460273d2167688b6a655fbf81523af099e6a72c"
+dependencies = [
+ "chrono",
+ "serde_json",
 ]
 
 [[package]]
@@ -5724,7 +5733,7 @@ dependencies = [
  "tracing-subscriber",
  "wf-config",
  "wf-connector-api",
- "wf-data",
+ "wf-data 2.6.0",
  "wf-engine",
  "wf-lang",
  "wildmatch",
@@ -5802,7 +5811,7 @@ dependencies = [
  "tree-sitter",
  "tree-sitter-wfl",
  "wf-config",
- "wf-data",
+ "wf-data 2.3.0",
  "wf-engine",
  "wf-lang",
  "wfgen",
@@ -5876,7 +5885,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.48.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

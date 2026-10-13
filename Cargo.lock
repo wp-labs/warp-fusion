@@ -5581,8 +5581,8 @@ dependencies = [
 
 [[package]]
 name = "wf-cep"
-version = "2.5.1"
-source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v2.5.1#e93c95a80ffafe6bf904bacd19ea312b2edaf0d8"
+version = "2.6.0"
+source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v2.6.0#8a82c88ef9883724be87cda4ffd843bf82d5b3bc"
 dependencies = [
  "arrow",
  "chrono",
@@ -5602,8 +5602,8 @@ dependencies = [
 
 [[package]]
 name = "wf-config"
-version = "2.5.1"
-source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v2.5.1#e93c95a80ffafe6bf904bacd19ea312b2edaf0d8"
+version = "2.6.0"
+source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v2.6.0#8a82c88ef9883724be87cda4ffd843bf82d5b3bc"
 dependencies = [
  "chrono",
  "glob",
@@ -5630,8 +5630,8 @@ dependencies = [
 
 [[package]]
 name = "wf-data"
-version = "2.5.1"
-source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v2.5.1#e93c95a80ffafe6bf904bacd19ea312b2edaf0d8"
+version = "2.6.0"
+source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v2.6.0#8a82c88ef9883724be87cda4ffd843bf82d5b3bc"
 dependencies = [
  "chrono",
  "serde_json",
@@ -5639,8 +5639,8 @@ dependencies = [
 
 [[package]]
 name = "wf-engine"
-version = "2.5.1"
-source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v2.5.1#e93c95a80ffafe6bf904bacd19ea312b2edaf0d8"
+version = "2.6.0"
+source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v2.6.0#8a82c88ef9883724be87cda4ffd843bf82d5b3bc"
 dependencies = [
  "arrow",
  "async-trait",
@@ -5673,8 +5673,8 @@ dependencies = [
 
 [[package]]
 name = "wf-lang"
-version = "2.5.1"
-source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v2.5.1#e93c95a80ffafe6bf904bacd19ea312b2edaf0d8"
+version = "2.6.0"
+source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v2.6.0#8a82c88ef9883724be87cda4ffd843bf82d5b3bc"
 dependencies = [
  "jumo-derive",
  "orion-error",
@@ -5699,8 +5699,8 @@ dependencies = [
 
 [[package]]
 name = "wf-runtime"
-version = "2.5.1"
-source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v2.5.1#e93c95a80ffafe6bf904bacd19ea312b2edaf0d8"
+version = "2.6.0"
+source = "git+https://github.com/wp-labs/wp-reactor.git?tag=v2.6.0#8a82c88ef9883724be87cda4ffd843bf82d5b3bc"
 dependencies = [
  "arrow",
  "async-broadcast",
@@ -5738,7 +5738,7 @@ dependencies = [
 
 [[package]]
 name = "wfadm"
-version = "0.8.0"
+version = "0.10.0"
 dependencies = [
  "clap",
  "comfy-table",
@@ -5761,7 +5761,7 @@ dependencies = [
 
 [[package]]
 name = "wfgen"
-version = "0.8.0"
+version = "0.10.0"
 dependencies = [
  "arrow",
  "chrono",
@@ -5791,7 +5791,7 @@ dependencies = [
 
 [[package]]
 name = "wfl"
-version = "0.8.0"
+version = "0.10.0"
 dependencies = [
  "chrono",
  "clap",
@@ -5810,7 +5810,7 @@ dependencies = [
 
 [[package]]
 name = "wfusion"
-version = "0.8.0"
+version = "0.10.0"
 dependencies = [
  "chrono",
  "clap",

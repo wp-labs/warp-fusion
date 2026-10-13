@@ -2,6 +2,20 @@
 
 本文件记录 `wfusion` / `wfl` / `wfgen` / `wfadm` 面向使用者的变更。内部实现细节、依赖版本对齐和测试计数不在此展开。
 
+## [0.10.0-alpha] — 2026-10-13
+
+### 新增
+
+- **WFL 新增 `to_int(x)`**：把数字字符串字段（如 `"6"`、`"1036"`）转成整数，可直接用于数值比较（`to_int(s.count) >= 3`），无需再用 `regex_match` 模拟数值范围；空串 / 非数字 / 非整值（`"6.5"`）/ 缺失得到 null（条件不成立）。
+
+### 修复
+
+- **WFL `case` 的 subject 缺失或为 `null` 时改走 `_` 默认分支**：`case e.severity { "high" => "HIGH", ..., _ => "UNKNOWN" }` 在 severity 字段缺失或为 null 时得到 `"UNKNOWN"`，而非空值；未写 `_` 时仍得 null。
+
+### 引擎（对齐 wp-reactor 2.6.0）
+
+- 引擎对齐 wp-reactor 2.5.1 → 2.6.0：带入上述 WFL `to_int` 与 `case` null 语义修复。无其他源码改动。
+
 ## [0.9.0-alpha] — 2026-10-12
 
 ### 引擎（对齐 wp-reactor 2.5.1）

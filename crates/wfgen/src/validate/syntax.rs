@@ -1024,7 +1024,7 @@ fn is_join_then_key(field: &str, rule: &RuleDecl, schemas: &[WindowSchema]) -> b
     let has_field = |schema: &WindowSchema| schema.fields.iter().any(|f| f.name == field);
 
     for decl in &rule.events.decls {
-        if schema_of(&decl.window).is_some_and(&has_field) {
+        if schema_of(&decl.window).is_some_and(has_field) {
             return false;
         }
     }
@@ -1032,7 +1032,7 @@ fn is_join_then_key(field: &str, rule: &RuleDecl, schemas: &[WindowSchema]) -> b
         .joins
         .iter()
         .filter(|join| matches!(join.mode, JoinMode::Snapshot))
-        .filter(|join| schema_of(&join.target_window).is_some_and(&has_field))
+        .filter(|join| schema_of(&join.target_window).is_some_and(has_field))
         .count();
     providers == 1
 }

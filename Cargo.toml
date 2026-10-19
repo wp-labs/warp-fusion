@@ -51,4 +51,4 @@ walkdir = "2"
 git2 = { version = "0.21", default-features = false, features = ["vendored-libgit2", "https"] }
 semver = "1"
 libc = "0.2"
-wp-self-update = "0.4"
+wp-self-update = "0.5"

@@ -2,6 +2,16 @@
 
 本文件记录 `wfusion` / `wfl` / `wfgen` / `wfadm` 面向使用者的变更。内部实现细节、依赖版本对齐和测试计数不在此展开。
 
+## [0.11.0-alpha] — 2026-11-05
+
+### 新增
+
+- **文件 sink 支持容量滚动与历史归档压缩**（warp-fusion#127）：connector 新增三个参数——`max_size`（单文件字节上限，支持 `10MB` / `1GiB` 写法，`0` 表示不滚动）、`max_rolls`（保留的历史文件个数，默认 `3`）、`roll_compress`（`none` / `gzip` / `zip`，默认 `none`）。达到上限时先滚动再写，历史文件依次为 `out.dat.1` / `.2` / …，最旧的超出保留个数后自动删除；开启压缩后归档名为 `out.dat.1.gz` / `out.dat.1.zip`，每个归档可独立解压。仅支持文本协议（`protocol = "txt"`）。配置说明见 [`docs/useage/config/sink.md`](docs/useage/config/sink.md)。
+
+### 连接器
+
+- `wp-core-connectors` 0.10 → 0.11（引擎 wp-reactor 2.6.0 → 2.6.1）：带入文件 sink 滚动/归档能力，并升级 `zip` 9.x / `zstd` 0.14（修复对应 RUSTSEC 公告）。内置 `file_*_sink` 定义的 `allow_override` 增加 `max_size` / `max_rolls` / `roll_compress`。
+
 ## [0.10.1-alpha] — 2026-10-13
 
 ### 维护

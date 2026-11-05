@@ -1,5 +1,5 @@
 [[connectors]]
-allow_override = ["base", "file", "sync", "protocol"]
+allow_override = ["base", "file", "sync", "max_size", "max_rolls", "roll_compress", "protocol", "compression", "encryption"]
 id = "file_kv_sink"
 type = "file"
 

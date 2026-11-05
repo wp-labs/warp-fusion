@@ -44,6 +44,46 @@ file = "alerts.ndjson"
 | `name` | sink 实例名 |
 | `params` | connector 特定参数 |
 
+## 文件 sink 滚动与归档
+
+`kind = "file"` 的 sink 可以按容量滚动、限制历史文件个数，并把历史文件压缩归档。
+仅支持文本协议（`protocol = "txt"`，默认值；内置的 `file_json_sink` /
+`file_proto_sink` / `file_proto_text_sink` / `file_kv_sink` / `file_raw_sink`
+都属于这一类）。
+
+```toml
+# sinks/connectors/sink.d/01-file.toml
+[[connectors]]
+id = "file_rolling"
+type = "file"
+allow_override = ["base", "file", "max_size", "max_rolls", "roll_compress"]
+
+[connectors.params]
+base = "./data/out_dat"
+file = "alerts.ndjson"
+fmt = "json"
+max_size = "10MB"
+max_rolls = 3
+roll_compress = "gzip"
+```
+
+| 参数 | 说明 | 默认 |
+|------|------|------|
+| `max_size` | 单文件容量上限；支持 `10MB` / `512k` / `1GiB` 这类写法（也接受整数字节数），`0` 表示不限制 | `0`（不滚动） |
+| `max_rolls` | 保留的历史文件个数，上限 `1024`；`0` 表示滚动时直接丢弃旧文件 | `3` |
+| `roll_compress` | 历史文件压缩格式：`none` / `gzip` / `zip`（`true` 等价 `gzip`） | `none` |
+
+行为：
+
+- 写入前检查容量：本次写入会超过 `max_size` 时，先把当前文件滚动出去，再写入新文件。
+- 历史文件按新到旧编号：`alerts.ndjson.1`（最新）、`.2`、…；超出 `max_rolls` 的最旧文件自动删除。
+- 开启压缩后归档名为 `alerts.ndjson.1.gz` / `alerts.ndjson.1.zip`；每个归档都是独立完整的压缩流，可单独解压。
+- 滚动检查发生在每次落盘之前；如果单个写入批次本身就大于 `max_size`，该文件会先超过上限一次，下一批次写入时再滚动。
+- 压缩失败不丢数据：回退为不压缩的 `alerts.ndjson.1` 归档。
+- 只支持 `protocol = "txt"`；`protocol = "arrow"` 搭配滚动参数会在启动校验时报错。
+- 在 `[sink_group.sinks.params]` 里覆盖这些参数时，connector 的 `allow_override`
+  必须包含对应字段（内置 `file_*_sink` 定义已包含 `max_size` / `max_rolls` / `roll_compress`）。
+
 ## 禁用 wfusion 元字段输出
 
 规则告警输出会附带 wfusion 管理的元字段，字段名前缀为 `__wfu_`，例如：

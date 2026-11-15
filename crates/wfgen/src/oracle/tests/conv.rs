@@ -88,6 +88,7 @@ fn conv_top_filters_non_qualifying() {
             tracked_bind_aliases: std::collections::HashSet::new(),
             tracked_bind_fields: std::collections::HashMap::new(),
             tracked_plain_fields: std::collections::HashSet::new(),
+            field_modes: Default::default(),
             needs_field_history: true,
             trigger_event_needed: true,
         },

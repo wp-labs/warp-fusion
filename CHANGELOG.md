@@ -2,6 +2,14 @@
 
 本文件记录 `wfusion` / `wfl` / `wfgen` / `wfadm` 面向使用者的变更。内部实现细节、依赖版本对齐和测试计数不在此展开。
 
+## [0.11.1-alpha] — 2026-11-15
+
+### 维护
+
+- **引擎升级 wp-reactor 2.6.1 → 2.7.0（CEP 实例内存大幅下降）**：实例内每个被引用字段原本都建一条 1024 条上限的值序列——包拑 `s.http_url` 这类只读末值的普通投影、`first(b.body)` 这类只要首值的引用。现按用途分类存储，普通投影 / `last` / `first` 只占 1 个槽，仅 `collect_*` / `stddev` / `percentile` 等真正需要历史的函数保留有界序列；同时字段序列与 L3 收集值新增 64 KiB 字节上限。线上规则实测单实例 59.4 KB，预估降至 8–12 KB 量级，语义不变（裁剪后首值仍被钉扎）。
+- **新增指标 `rule.instances_rejected_total`**：被 `limits.max_instances` / `limits.max_memory` 拒收的新 key 累计数。此前上限生效后是静默丢检测，无任何信号可告警。
+- **`rule.memory_bytes` 恒有值**：不再需要为规则配 `limits.max_memory` 才会记账；依赖「未配 limits 时该指标为 0」做判定的告警 / 看板需相应调整。
+
 ## [0.11.0-alpha] — 2026-11-05
 
 ### 新增

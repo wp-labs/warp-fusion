@@ -49,6 +49,7 @@ fn make_simple_rule_plan() -> RulePlan {
             tracked_bind_aliases: std::collections::HashSet::new(),
             tracked_bind_fields: std::collections::HashMap::new(),
             tracked_plain_fields: std::collections::HashSet::new(),
+            field_modes: Default::default(),
             needs_field_history: false,
             trigger_event_needed: false,
         },

@@ -1986,7 +1986,7 @@ dependencies = [
  "libc",
  "percent-encoding",
  "pin-project-lite",
- "socket2 0.5.10",
+ "socket2 0.6.5",
  "system-configuration",
  "tokio",
  "tower-service",
@@ -3368,7 +3368,7 @@ dependencies = [
  "quinn-udp",
  "rustc-hash",
  "rustls",
- "socket2 0.5.10",
+ "socket2 0.6.5",
  "thiserror 2.0.20",
  "tokio",
  "tracing",
@@ -3407,7 +3407,7 @@ dependencies = [
  "cfg_aliases",
  "libc",
  "once_cell",
- "socket2 0.5.10",
+ "socket2 0.6.5",
  "tracing",
  "windows-sys 0.61.2",
 ]
@@ -5744,7 +5744,7 @@ dependencies = [
 
 [[package]]
 name = "wfadm"
-version = "0.11.0"
+version = "0.11.1"
 dependencies = [
  "clap",
  "comfy-table",
@@ -5767,7 +5767,7 @@ dependencies = [
 
 [[package]]
 name = "wfgen"
-version = "0.11.0"
+version = "0.11.1"
 dependencies = [
  "arrow",
  "chrono",
@@ -5797,7 +5797,7 @@ dependencies = [
 
 [[package]]
 name = "wfl"
-version = "0.11.0"
+version = "0.11.1"
 dependencies = [
  "chrono",
  "clap",
@@ -5816,7 +5816,7 @@ dependencies = [
 
 [[package]]
 name = "wfusion"
-version = "0.11.0"
+version = "0.11.1"
 dependencies = [
  "chrono",
  "clap",
@@ -5882,7 +5882,7 @@ version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
 dependencies = [
- "windows-sys 0.48.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -6248,8 +6248,8 @@ dependencies = [
 
 [[package]]
 name = "wp-connectors"
-version = "0.23.1"
-source = "git+https://github.com/wp-labs/wp-connectors.git?tag=v0.23.1#64bc7bb58443ad8e24c610912c7307ad1bf93ccd"
+version = "0.24.0"
+source = "git+https://github.com/wp-labs/wp-connectors.git?tag=v0.24.0#7a62dba5cac50188b1f79fbfb7d59013c4860a35"
 dependencies = [
  "actix-web",
  "anyhow",

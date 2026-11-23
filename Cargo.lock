@@ -5744,7 +5744,7 @@ dependencies = [
 
 [[package]]
 name = "wfadm"
-version = "0.11.0"
+version = "0.11.1"
 dependencies = [
  "clap",
  "comfy-table",
@@ -5767,7 +5767,7 @@ dependencies = [
 
 [[package]]
 name = "wfgen"
-version = "0.11.0"
+version = "0.11.1"
 dependencies = [
  "arrow",
  "chrono",
@@ -5797,7 +5797,7 @@ dependencies = [
 
 [[package]]
 name = "wfl"
-version = "0.11.0"
+version = "0.11.1"
 dependencies = [
  "chrono",
  "clap",
@@ -5816,7 +5816,7 @@ dependencies = [
 
 [[package]]
 name = "wfusion"
-version = "0.11.0"
+version = "0.11.1"
 dependencies = [
  "chrono",
  "clap",
@@ -6296,9 +6296,9 @@ dependencies = [
 
 [[package]]
 name = "wp-core-connectors"
-version = "0.11.3"
+version = "0.11.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7952d83cbe4669fc3589c2b8608c64a6c62e6c9d730c15571f8b6833827d617e"
+checksum = "db7267413e5034e34c243c1f3f60e0ec7d62221ed41b6a410ad4d1bbb21caf79"
 dependencies = [
  "anyhow",
  "arrow",
